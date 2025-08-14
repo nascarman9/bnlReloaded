@@ -5,5 +5,5 @@ public enum PlayerRole
     User = 1,
     Moderator = 2,
     Admin = 3,
-    Core = 4,
+    Core = 4
 }

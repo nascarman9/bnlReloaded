@@ -1,8 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿namespace BNLReloadedServer.BaseTypes;
 
-namespace BNLReloadedServer.BaseTypes;
-
-[JsonConverter(typeof(JsonStringEnumConverter<Locale>))]
 public enum Locale
 {
     en = 1,
@@ -10,5 +7,5 @@ public enum Locale
     ru = 3,
     de = 4,
     fr = 5,
-    pt = 6,
+    pt = 6
 }

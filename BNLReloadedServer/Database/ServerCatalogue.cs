@@ -7,6 +7,15 @@ public class ServerCatalogue : Catalogue
 {
     private readonly Dictionary<Key, Card> _db = new(KeyEqualityComparer.Instance);
 
+    public ServerCatalogue()
+    {
+        var cards = CatalogueCache.UpdateCatalogue(CatalogueCache.Load());
+        foreach (var card in cards)
+        {
+            card.Key = Key(card.Id!);
+            _db.Add(card.Key, card);
+        }
+    }
     public override Card GetCard(Key key)
     {
         if (_db.TryGetValue(key, out var card))

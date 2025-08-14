@@ -49,6 +49,10 @@ namespace BNLReloadedServer.Servers
             {
                 Console.WriteLine("Region server received packet with incorrect length");
             }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
             
         }
 

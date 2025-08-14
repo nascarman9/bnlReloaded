@@ -28,8 +28,8 @@ public abstract class Scene
         return type switch
         {
             SceneType.MainMenu => new SceneMainMenu(),
-            //SceneType.Lobby => new SceneLobby(),
-            //SceneType.Zone => new SceneZone(),
+            SceneType.Lobby => new SceneLobby(),
+            SceneType.Zone => new SceneZone(),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Invalid variant tag")
         };
     }

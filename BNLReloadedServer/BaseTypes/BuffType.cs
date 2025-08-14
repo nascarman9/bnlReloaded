@@ -1,0 +1,61 @@
+﻿namespace BNLReloadedServer.BaseTypes;
+
+public enum BuffType
+{
+    ResourceProduction = 1,
+    ResourceBonus = 2,
+    KillResourceBonus = 3,
+    KillByTeamResourceBonus = 4,
+    SupplyResourceBonus = 5,
+    ObjectiveResourceBonus = 6,
+    MiningBonus = 7,
+    HealthCap = 8,
+    HealthRegen = 9,
+    ForcefieldCap = 10, // 0x0000000A
+    ForcefieldRegen = 11, // 0x0000000B
+    AmmoRegen = 12, // 0x0000000C
+    AmmoDrain = 13, // 0x0000000D
+    Bleeding = 14, // 0x0000000E
+    Burning = 15, // 0x0000000F
+    Poisoned = 16, // 0x00000010
+    Decay = 17, // 0x00000011
+    Shield = 18, // 0x00000012
+    VisionMark = 19, // 0x00000013
+    WallClimb = 20, // 0x00000014
+    Invulnerability = 21, // 0x00000015
+    PlayerDamage = 22, // 0x00000016
+    WorldDamage = 23, // 0x00000017
+    ObjectiveDamage = 24, // 0x00000018
+    BuildSpeed = 25, // 0x00000019
+    BuildCostReduction = 26, // 0x0000001A
+    WeaponMagazine = 27, // 0x0000001B
+    WeaponPool = 28, // 0x0000001C
+    WeaponReload = 29, // 0x0000001D
+    WeaponSwitch = 30, // 0x0000001E
+    RunSpeed = 31, // 0x0000001F
+    SprintSpeed = 32, // 0x00000020
+    JumpHeight = 33, // 0x00000021
+    FallDamageReduction = 34, // 0x00000022
+    MiningAmmoRefill = 35, // 0x00000023
+    MiningHealthRefill = 36, // 0x00000024
+    SupplyForcefield = 37, // 0x00000025
+    SupplyAmmo = 38, // 0x00000026
+    SupplyHealth = 39, // 0x00000027
+    Sway = 40, // 0x00000028
+    CofBonus = 41, // 0x00000029
+    Root = 42, // 0x0000002A
+    Disarm = 43, // 0x0000002B
+    AbilityCooldownReduction = 44, // 0x0000002C
+    Confusion = 45, // 0x0000002D
+    Disabled = 46, // 0x0000002E
+    HealthGain = 47, // 0x0000002F
+    AmmoGain = 48, // 0x00000030
+    SplashDamageReduction = 49, // 0x00000031
+    InfiniteAmmo = 50, // 0x00000032
+    SlipperyImmunity = 51, // 0x00000033
+    DashTime = 52, // 0x00000034
+    DashDistance = 53, // 0x00000035
+    KnockbackIgnore = 54, // 0x00000036
+    SwimSpeed = 55, // 0x00000037
+    ToolWorldDamage = 56 // 0x00000038
+}
