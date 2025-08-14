@@ -28,7 +28,7 @@ namespace BNLReloadedServer.Servers
             
             var memStream = new MemoryStream(buffer, (int)offset, (int)size);
             using var reader = new BinaryReader(memStream);
-            
+
             try
             {
                 while (reader.BaseStream.Position < reader.BaseStream.Length)
@@ -48,6 +48,10 @@ namespace BNLReloadedServer.Servers
             catch (EndOfStreamException)
             {
                 Console.WriteLine("Master server received packet with incorrect length");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
             }
         }
 

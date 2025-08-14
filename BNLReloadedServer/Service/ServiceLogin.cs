@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using BNLReloadedServer.BaseTypes;
+﻿using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
@@ -257,9 +256,7 @@ public class ServiceLogin(ISender sender) : IServiceLogin
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageCatalogue);
-        writer.Write(cards != null);
-        if (cards != null)
-            writer.WriteList(cards, Card.WriteVariant);
+        writer.WriteOption(cards, item => writer.WriteList(item, Card.WriteVariant));
         sender.SendToSession(writer);
     }
 

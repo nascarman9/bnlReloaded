@@ -42,5 +42,5 @@ public enum CardCategory
     Reward = 38, // 0x00000026
     Rubble = 39, // 0x00000027
     LootCrate = 40, // 0x00000028
-    Strings = 41, // 0x00000029
+    Strings = 41 // 0x00000029
 }
