@@ -35,6 +35,7 @@ namespace BNLReloadedServer.Servers
                 {
                     // The first part of every packet is an 7 bit encoded int of its length.
                     var packetLength = reader.Read7BitEncodedInt();
+                    var currentPosition = reader.BaseStream.Position;
                     if (reader.BaseStream.Position + packetLength <= reader.BaseStream.Length)
                     {
                         Console.WriteLine($"Packet length: {packetLength}");
@@ -43,6 +44,11 @@ namespace BNLReloadedServer.Servers
                     }
                     else
                         break;
+                    
+                    if (reader.BaseStream.Position < currentPosition + packetLength)
+                    {
+                        reader.ReadBytes((int) (currentPosition + packetLength - reader.BaseStream.Position));
+                    }
                 }
             }
             catch (EndOfStreamException)
