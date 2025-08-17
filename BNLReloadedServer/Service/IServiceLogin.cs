@@ -15,4 +15,5 @@ public interface IServiceLogin : IService
     public void SendWait(float waitTime);
     public void SendLoggedIn();
     public void SendCatalogue(ICollection<Card>? cards);
+    public void SendLoginInstance(ushort rpcId, EAuthFailed? authFailed, string? error = null);
 }

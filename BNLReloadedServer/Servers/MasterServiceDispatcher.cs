@@ -1,9 +1,9 @@
 ﻿using BNLReloadedServer.Service;
 
 namespace BNLReloadedServer.Servers;
-public class MasterServiceDispatcher(ISender sender) : IServiceDispatcher
+public class MasterServiceDispatcher(ISender sender, Guid sessionId) : IServiceDispatcher
 {
-    private readonly ServiceLogin _serviceLogin = new(sender);
+    private readonly ServiceLogin _serviceLogin = new(sender, sessionId);
 
     public void Dispatch(BinaryReader reader)
     {

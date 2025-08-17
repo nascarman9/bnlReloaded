@@ -26,7 +26,7 @@ public class ServiceScene(ISender sender) : IServiceScene
         using var writer = CreateWriter();
         writer.Write((byte)ServiceSceneId.MessageChangeScene);
         Scene.WriteVariant(writer, scene);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     private void ReceiveEnterScene(BinaryReader reader)
@@ -41,7 +41,7 @@ public class ServiceScene(ISender sender) : IServiceScene
         writer.Write(host);
         writer.Write(port);
         writer.Write(auth);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendServerUpdate(ServerUpdate update)
@@ -49,7 +49,7 @@ public class ServiceScene(ISender sender) : IServiceScene
         using var writer = CreateWriter();
         writer.Write((byte)ServiceSceneId.MessageServerUpdate);
         ServerUpdate.WriteRecord(writer, update);
-        sender.SendToSessionSync(writer);
+        sender.SendSync(writer);
     }
     
     public void Receive(BinaryReader reader)

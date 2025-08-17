@@ -23,7 +23,7 @@ public class ServiceTime(ISender sender) : IServiceTime
         using var writer = CreateWriter();
         writer.Write((byte)ServiceTimeId.MessageSetOrigin);
         writer.Write(time);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendSync(ushort rpcId, long? time, string? error = null)
@@ -41,7 +41,7 @@ public class ServiceTime(ISender sender) : IServiceTime
             writer.Write(byte.MaxValue);
             writer.Write(error!);
         }
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     private void ReceiveSync(BinaryReader reader)

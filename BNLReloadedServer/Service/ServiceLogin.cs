@@ -4,7 +4,7 @@ using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 
 namespace BNLReloadedServer.Service;
-public class ServiceLogin(ISender sender) : IServiceLogin
+public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
 {
     private enum ServiceLoginId : byte
     {
@@ -32,9 +32,8 @@ public class ServiceLogin(ISender sender) : IServiceLogin
     private const string LoginToken = "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwtest";
     
     private readonly IPlayerDatabase _playerDatabase = Databases.PlayerDatabase;
-    private readonly IServerDatabase _serverDatabase = Databases.ServerDatabase;
-
-    private uint PlayerId { get; set; }
+    private readonly IMasterServerDatabase _masterServerDatabase = Databases.MasterServerDatabase;
+    private readonly IRegionServerDatabase _regionServerDatabase = Databases.RegionServerDatabase;
 
     private static BinaryWriter CreateWriter()
     {
@@ -62,7 +61,7 @@ public class ServiceLogin(ISender sender) : IServiceLogin
             writer.Write(byte.MaxValue);
             writer.Write(error!);
         }
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
     
     private void ReceiveCheckVersion(BinaryReader reader)
@@ -112,7 +111,7 @@ public class ServiceLogin(ISender sender) : IServiceLogin
     {
         using var writer = CreateWriter();    
         writer.Write((byte)ServiceLoginId.MessagePong);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendLoginMasterSuccess(ushort rpcId, bool? serverMaintenance, bool? steamToken)
@@ -127,7 +126,7 @@ public class ServiceLogin(ISender sender) : IServiceLogin
             writer.Write(serverMaintenance.Value);
         if (steamToken != null)
             writer.Write(steamToken.Value);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendLoginMasterError(ushort rpcId, string error)
@@ -137,7 +136,7 @@ public class ServiceLogin(ISender sender) : IServiceLogin
         writer.Write(rpcId);
         writer.Write(byte.MaxValue);
         writer.Write(error);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     private void ReceiveLoginMaster(BinaryReader reader)
@@ -169,16 +168,16 @@ public class ServiceLogin(ISender sender) : IServiceLogin
             writer.Write(byte.MaxValue);
             writer.Write(error!);
         }
-        sender.SendToSessionSync(writer);
-        SendRegions(_serverDatabase.GetRegionServers());
+        sender.SendSync(writer);
+        SendRegions(_masterServerDatabase.GetRegionServers());
     }
 
     private void ReceiveLoginMasterSteam(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
         var loginInfo = SteamLoginInfo.ReadRecord(reader);
-        PlayerId = _playerDatabase.GetPlayerId(loginInfo.SteamId);
-        SendLoginMasterSteam(rpcId, PlayerId);
+        sender.AssociatedPlayerId = _playerDatabase.GetPlayerId(loginInfo.SteamId);
+        SendLoginMasterSteam(rpcId, sender.AssociatedPlayerId);
     }
     
     public void SendRegions(List<RegionInfo> regions, string? selected = null)
@@ -187,14 +186,14 @@ public class ServiceLogin(ISender sender) : IServiceLogin
         writer.Write((byte)ServiceLoginId.MessageNeedRegion);
         writer.WriteList(regions, RegionInfo.WriteRecord);
         writer.Write(selected ?? string.Empty);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     private void ReceiveSelectRegion(BinaryReader reader)
     {
         var region = reader.ReadString();
         var remember = reader.ReadBoolean();
-        var regionToEnter = _serverDatabase.GetRegionServer(region);
+        var regionToEnter = _masterServerDatabase.GetRegionServer(region);
         if (regionToEnter != null)
             SendEnterRegion(regionToEnter);
     }
@@ -205,8 +204,8 @@ public class ServiceLogin(ISender sender) : IServiceLogin
         writer.Write((byte)ServiceLoginId.MessageEnterRegion);
         writer.Write(region.Host!);
         writer.Write(region.Port);
-        writer.Write(_playerDatabase.GetAuthTokenForPlayer(PlayerId));
-        sender.SendToSession(writer);
+        writer.Write(_playerDatabase.GetAuthTokenForPlayer(sender.AssociatedPlayerId!.Value));
+        sender.Send(writer);
     }
 
     public void SendLoginRegion(ushort rpcId, PlayerRole? role, string? error = null)
@@ -224,14 +223,16 @@ public class ServiceLogin(ISender sender) : IServiceLogin
             writer.Write(byte.MaxValue);
             writer.Write(error!);
         }
-        sender.SendToSessionSync(writer);
+        sender.SendSync(writer);
     }
 
     private void ReceiveLoginRegion(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
-        var auth = reader.ReadString();
+        sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthToken(reader.ReadString());
         var catalogueHash = reader.ReadUInt32();
+        if (sender.AssociatedPlayerId == null) return;
+        _regionServerDatabase.AddUser(sender.AssociatedPlayerId.Value, sessionId);
         SendLoginRegion(rpcId, PlayerRole.Admin);
         SendLoggedIn();
         SendCatalogue(null);
@@ -242,14 +243,14 @@ public class ServiceLogin(ISender sender) : IServiceLogin
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageWait);
         writer.Write(waitTime);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
     
     public void SendLoggedIn()
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageLoggedIn);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendCatalogue(ICollection<Card>? cards)
@@ -257,7 +258,36 @@ public class ServiceLogin(ISender sender) : IServiceLogin
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageCatalogue);
         writer.WriteOption(cards, item => writer.WriteList(item, Card.WriteVariant));
-        sender.SendToSession(writer);
+        sender.Send(writer);
+    }
+
+    public void SendLoginInstance(ushort rpcId, EAuthFailed? authFailed, string? error = null)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceLoginId.MessageLoginInstance);
+        writer.Write(rpcId);
+        if (authFailed == null && error == null)
+        {
+            writer.Write((byte)0);
+        }
+        else if (authFailed != null)
+        {
+            writer.Write((byte)1);
+            EAuthFailed.WriteRecord(writer, authFailed);
+        }
+        else
+        {
+            writer.Write(byte.MaxValue);
+            writer.Write(error!);
+        }
+        sender.Send(writer);
+    }
+
+    private void ReceiveLoginInstance(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var auth = reader.ReadString();
+        
     }
 
     public void Receive(BinaryReader reader)

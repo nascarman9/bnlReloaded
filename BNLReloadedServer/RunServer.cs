@@ -57,6 +57,7 @@ if (runServer)
     }
 
     var regionServer = new RegionServer(IPAddress.Parse("127.0.0.1"), 28101);
+    Databases.RegionServerDatabase = new RegionServerDatabase(regionServer);
 
     Console.Write("Region server starting...");
     regionServer.Start();

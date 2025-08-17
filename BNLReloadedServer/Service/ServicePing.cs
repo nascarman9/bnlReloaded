@@ -24,7 +24,7 @@ public class ServicePing(ISender sender) : IServicePing
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServicePingId.MessageServerPing);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     private void ReceiveServerPong(BinaryReader reader)
@@ -41,7 +41,7 @@ public class ServicePing(ISender sender) : IServicePing
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServicePingId.MessageClientPong);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
     
     public void Receive(BinaryReader reader)
