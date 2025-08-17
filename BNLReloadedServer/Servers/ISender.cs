@@ -2,8 +2,9 @@
 
 public interface ISender
 {
-    public void SendToSession(BinaryWriter writer);
-    public void SendToSessionSync(BinaryWriter writer);
-    public void SendToSessions(BinaryWriter writer, Guid[] sessionIds);
-    public void SendToAllSessions(BinaryWriter writer);
+    public uint? AssociatedPlayerId { get; set; }
+    public void Send(BinaryWriter writer);
+    public void Send(byte[] buffer);
+    public void SendSync(BinaryWriter writer);
+    public void SendSync(byte[] buffer);
 }

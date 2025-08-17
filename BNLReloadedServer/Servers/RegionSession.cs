@@ -1,15 +1,18 @@
 ﻿using System.Net.Sockets;
+using BNLReloadedServer.Database;
 using NetCoreServer;
 
 namespace BNLReloadedServer.Servers
 {
-    class RegionSession : TcpSession
+    internal class RegionSession : TcpSession
     {
         private readonly RegionServiceDispatcher _serviceDispatcher;
+        private readonly ISender _sender;
 
         public RegionSession(TcpServer server) : base(server)
         {
-            _serviceDispatcher = new RegionServiceDispatcher(new SessionSender(server, this));
+            _sender = new SessionSender(this);
+            _serviceDispatcher = new RegionServiceDispatcher(_sender, Id);
         }
 
         protected override void OnConnected()
@@ -19,6 +22,9 @@ namespace BNLReloadedServer.Servers
 
         protected override void OnDisconnected()
         {
+            if (_sender.AssociatedPlayerId != null)
+                Databases.RegionServerDatabase.RemoveUser(_sender.AssociatedPlayerId.Value);
+            Databases.RegionServerDatabase.RemoveServices(Id);
             Console.WriteLine($"Region TCP session with Id {Id} disconnected!");
         }
 

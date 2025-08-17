@@ -3,13 +3,15 @@ using NetCoreServer;
 
 namespace BNLReloadedServer.Servers
 {
-    class MasterSession : TcpSession
+    internal class MasterSession : TcpSession
     {
         private readonly MasterServiceDispatcher _serviceDispatcher;
+        private readonly ISender _sender;
 
         public MasterSession(TcpServer server) : base(server)
         {
-            _serviceDispatcher = new MasterServiceDispatcher(new SessionSender(server, this));
+            _sender = new SessionSender(this);
+            _serviceDispatcher = new MasterServiceDispatcher(_sender, Id);
         }
 
         protected override void OnConnected()

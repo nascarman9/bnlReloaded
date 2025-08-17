@@ -26,7 +26,7 @@ public class ServiceCatalogue(ISender sender) : IServiceCatalogue
         using var writer = CreateWriter();
         writer.Write((byte)ServiceCatalogueId.MessageReplicate);
         writer.WriteList(cards, Card.WriteVariant);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendUpdateCard(Card card)
@@ -34,7 +34,7 @@ public class ServiceCatalogue(ISender sender) : IServiceCatalogue
         using var writer = CreateWriter();
         writer.Write((byte)ServiceCatalogueId.MessageUpdateCard);
         Card.WriteVariant(writer, card);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
 
     public void SendRemoveCard(string cardId)
@@ -42,7 +42,7 @@ public class ServiceCatalogue(ISender sender) : IServiceCatalogue
         using var writer = CreateWriter();
         writer.Write((byte)ServiceCatalogueId.MessageRemoveCard);
         writer.Write(cardId);
-        sender.SendToSession(writer);
+        sender.Send(writer);
     }
     
     public void Receive(BinaryReader reader)

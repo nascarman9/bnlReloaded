@@ -2,14 +2,13 @@
 
 namespace BNLReloadedServer.Database;
 
-public class DummyServerDatabase :  IServerDatabase
+public class MasterServerDatabase : IMasterServerDatabase
 {
-    private List<RegionInfo>? _regionServers;
+    private readonly List<RegionInfo> _regionServers = [];
     
     public List<RegionInfo> GetRegionServers()
     {
-        if (_regionServers != null) return _regionServers;
-        _regionServers = [];
+        if (_regionServers.Count > 0) return _regionServers;
         var region1 = new RegionInfo
         {
             Host = "127.0.0.1",
@@ -62,7 +61,8 @@ public class DummyServerDatabase :  IServerDatabase
 
     public RegionInfo? GetRegionServer(string id)
     {
-        _regionServers ??= GetRegionServers();
+        if(_regionServers.Count == 0)
+            GetRegionServers();
         return _regionServers.FirstOrDefault(x => x.Id == id);
     }
 }

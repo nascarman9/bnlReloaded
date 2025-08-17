@@ -18,9 +18,7 @@ public class ServerCatalogue : Catalogue
     }
     public override Card GetCard(Key key)
     {
-        if (_db.TryGetValue(key, out var card))
-            return card;
-        throw new Exception("Invalid card id " + key);
+        return _db.TryGetValue(key, out var card) ? card : throw new Exception("Invalid card id " + key);
     }
 
     public override IEnumerable<Card> All => _db.Values;
