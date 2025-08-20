@@ -47,13 +47,18 @@ public class ServicePing(ISender sender) : IServicePing
     public void Receive(BinaryReader reader)
     {
         var servicePingId = reader.ReadByte();
-        Console.WriteLine($"ServicePingId: {servicePingId}");
-        switch (servicePingId)
+        ServicePingId? pingEnum = null;
+        if (Enum.IsDefined(typeof(ServicePingId), servicePingId))
         {
-            case (byte)ServicePingId.MessageServerPong:
+            pingEnum = (ServicePingId)servicePingId;
+        }
+        Console.WriteLine($"ServicePingId: {pingEnum.ToString()}");
+        switch (pingEnum)
+        {
+            case ServicePingId.MessageServerPong:
                 ReceiveServerPong(reader);
                 break;
-            case (byte)ServicePingId.MessageClientPing:
+            case ServicePingId.MessageClientPing:
                 ReceiveClientPing(reader);
                 break;
             default:

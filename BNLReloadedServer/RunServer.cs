@@ -12,33 +12,35 @@ const bool toJson = false;
 const bool fromJson = false;
 const bool runServer = true;
 
-var serializedPath = Path.Combine(Directory.GetParent(CatalogueCache.CachePath).FullName, "currCdb.json");
-var deserializedPath = Path.Combine(Directory.GetParent(CatalogueCache.CachePath).FullName, "currCdbCompressed");
-
-if (toJson)
+if (toJson || fromJson)
 {
-    var cards = Databases.Catalogue.All;
-    using (var fs = new StreamWriter(File.Create(serializedPath)))
+    var serializedPath = Path.Combine(Directory.GetParent(CatalogueCache.CachePath).FullName, "currCdb.json");
+    var deserializedPath = Path.Combine(Directory.GetParent(CatalogueCache.CachePath).FullName, "currCdbCompressed");
+    if (toJson)
     {
-        fs.Write(JsonSerializer.Serialize(cards, JsonHelper.DefaultSerializerSettings).Replace("\\u00A0", "\u00A0"));
+        var cards = Databases.Catalogue.All;
+        using (var fs = new StreamWriter(File.Create(serializedPath)))
+        {
+            fs.Write(JsonSerializer.Serialize(cards, JsonHelper.DefaultSerializerSettings).Replace("\\u00A0", "\u00A0"));
+        }
     }
-}
-if (fromJson)
-{
-    using var fs = new StreamReader(File.OpenRead(serializedPath));
-    var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
-    for (var i = 0; i < deserializedCards.Count; i++)
+    if (fromJson)
     {
-        deserializedCards[i].Key = Catalogue.Key(deserializedCards[i].Id);
+        using var fs = new StreamReader(File.OpenRead(serializedPath));
+        var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
+        for (var i = 0; i < deserializedCards.Count; i++)
+        {
+            deserializedCards[i].Key = Catalogue.Key(deserializedCards[i].Id);
+        }
+        var memStream = new MemoryStream();
+        var writer = new BinaryWriter(memStream);
+        using var fs2 = File.Create(deserializedPath);
+        writer.Write((byte)0);
+        writer.WriteList(deserializedCards, Card.WriteVariant);
+        var zipped = (writer.BaseStream as MemoryStream).GetBuffer().Zip(0);
+        zipped.CopyTo(fs2);
+        zipped.Close();
     }
-    var memStream = new MemoryStream();
-    var writer = new BinaryWriter(memStream);
-    using var fs2 = File.Create(deserializedPath);
-    writer.Write((byte)0);
-    writer.WriteList(deserializedCards, Card.WriteVariant);
-    var zipped = (writer.BaseStream as MemoryStream).GetBuffer().Zip(0);
-    zipped.CopyTo(fs2);
-    zipped.Close();
 }
 
 if (runServer)

@@ -55,10 +55,15 @@ public class ServiceScene(ISender sender) : IServiceScene
     public void Receive(BinaryReader reader)
     {
         var serviceSceneId = reader.ReadByte();
-        Console.WriteLine($"ServiceSceneId: {serviceSceneId}");
-        switch (serviceSceneId)
+        ServiceSceneId? sceneEnum = null;
+        if (Enum.IsDefined(typeof(ServiceSceneId), serviceSceneId))
         {
-            case (byte)ServiceSceneId.MessageEnterScene:
+            sceneEnum = (ServiceSceneId)serviceSceneId;
+        }
+        Console.WriteLine($"ServiceSceneId: {sceneEnum.ToString()}");
+        switch (sceneEnum)
+        {
+            case ServiceSceneId.MessageEnterScene:
                 ReceiveEnterScene(reader);
                 break;
             default:

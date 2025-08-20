@@ -1,27 +1,27 @@
 ﻿using System.Net.Sockets;
 using NetCoreServer;
 
-namespace BNLReloadedServer.Servers
-{
-    internal class MasterSession : TcpSession
+namespace BNLReloadedServer.Servers;
+
+public class MatchSession : TcpSession
     {
-        private readonly MasterServiceDispatcher _serviceDispatcher;
+        private readonly MatchServiceDispatcher _serviceDispatcher;
         private readonly SessionSender _sender;
 
-        public MasterSession(TcpServer server) : base(server)
+        public MatchSession(TcpServer server) : base(server)
         {
             _sender = new SessionSender(this);
-            _serviceDispatcher = new MasterServiceDispatcher(_sender, Id);
+            _serviceDispatcher = new MatchServiceDispatcher(_sender, Id);
         }
 
         protected override void OnConnected()
         {
-            Console.WriteLine($"Master TCP session with Id {Id} connected!");
+            Console.WriteLine($"Match TCP session with Id {Id} connected!");
         }
 
         protected override void OnDisconnected()
         {
-            Console.WriteLine($"Master TCP session with Id {Id} disconnected!");
+            Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
         }
 
         protected override void OnReceived(byte[] buffer, long offset, long size)
@@ -46,7 +46,7 @@ namespace BNLReloadedServer.Servers
                     }
                     else
                         break;
-                    
+
                     if (reader.BaseStream.Position < currentPosition + packetLength)
                     {
                         reader.ReadBytes((int) (currentPosition + packetLength - reader.BaseStream.Position));
@@ -55,17 +55,17 @@ namespace BNLReloadedServer.Servers
             }
             catch (EndOfStreamException)
             {
-                Console.WriteLine("Master server received packet with incorrect length");
+                Console.WriteLine("Match server received packet with incorrect length");
             }
             catch (Exception e)
             {
                 Console.WriteLine(e);
             }
+            
         }
 
         protected override void OnError(SocketError error)
         {
-            Console.WriteLine($"Master TCP session caught an error with code {error}");
+            Console.WriteLine($"Match TCP session caught an error with code {error}");
         }
-    }
 }

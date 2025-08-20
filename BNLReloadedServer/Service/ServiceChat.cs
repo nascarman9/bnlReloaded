@@ -113,16 +113,21 @@ public class ServiceChat(ISender sender) : IServiceChat
     public void Receive(BinaryReader reader)
     {
         var serviceChatId = reader.ReadByte();
-        Console.WriteLine($"ServiceChatId: {serviceChatId}");
-        switch (serviceChatId)
+        ServiceChatId? chatEnum = null;
+        if (Enum.IsDefined(typeof(ServiceChatId), serviceChatId))
         {
-            case (byte)ServiceChatId.MessageIgnore:
+            chatEnum = (ServiceChatId)serviceChatId;
+        }
+        Console.WriteLine($"ServiceChatId: {chatEnum.ToString()}");
+        switch (chatEnum)
+        {
+            case ServiceChatId.MessageIgnore:
                 ReceiveIgnore(reader);
                 break;
-            case (byte)ServiceChatId.MessageReceivePrivateMessage:
+            case ServiceChatId.MessageReceivePrivateMessage:
                 ReceivePrivateMessage(reader);
                 break;
-            case (byte)ServiceChatId.MessageReceiveRoomMessage:
+            case ServiceChatId.MessageReceiveRoomMessage:
                 ReceiveRoomMessage(reader);
                 break;
             default:

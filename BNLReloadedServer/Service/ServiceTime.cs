@@ -53,10 +53,15 @@ public class ServiceTime(ISender sender) : IServiceTime
     public void Receive(BinaryReader reader)
     {
         var serviceTimeId = reader.ReadByte();
-        Console.WriteLine($"ServiceTimeId: {serviceTimeId}");
-        switch (serviceTimeId)
+        ServiceTimeId? timeEnum = null;
+        if (Enum.IsDefined(typeof(ServiceTimeId), serviceTimeId))
         {
-            case (byte)ServiceTimeId.MessageSync:
+            timeEnum = (ServiceTimeId)serviceTimeId;
+        }
+        Console.WriteLine($"ServiceTimeId: {timeEnum.ToString()}");
+        switch (timeEnum)
+        {
+            case ServiceTimeId.MessageSync:
                 ReceiveSync(reader);
                 break;
             default:

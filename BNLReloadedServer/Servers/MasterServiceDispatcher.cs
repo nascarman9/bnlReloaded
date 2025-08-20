@@ -8,13 +8,17 @@ public class MasterServiceDispatcher(ISender sender, Guid sessionId) : IServiceD
     public void Dispatch(BinaryReader reader)
     {
         var serviceId = reader.ReadByte();
-        Console.WriteLine($"Service ID: {serviceId}");
-        switch (serviceId)
+        ServiceId? serviceEnum = null;
+        if (Enum.IsDefined(typeof(ServiceId), serviceId))
         {
-            case (byte)ServiceId.ServiceLogin: 
+            serviceEnum = (ServiceId)serviceId;
+        }
+        Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
+        switch (serviceEnum)
+        {
+            case ServiceId.ServiceLogin: 
                 _serviceLogin.Receive(reader);
                 break;
-            
             default: 
                 Console.WriteLine($"Master TCP session received unsupported serviceId: {serviceId}");
                 break;

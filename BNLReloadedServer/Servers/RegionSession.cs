@@ -7,7 +7,7 @@ namespace BNLReloadedServer.Servers
     internal class RegionSession : TcpSession
     {
         private readonly RegionServiceDispatcher _serviceDispatcher;
-        private readonly ISender _sender;
+        private readonly SessionSender _sender;
 
         public RegionSession(TcpServer server) : base(server)
         {

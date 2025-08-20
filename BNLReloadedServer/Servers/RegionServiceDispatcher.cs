@@ -11,7 +11,11 @@ public class RegionServiceDispatcher : IServiceDispatcher
     private readonly ServiceCatalogue _serviceCatalogue;
     private readonly ServicePlayer _servicePlayer;
     private readonly ServiceChat _serviceChat;
+    private readonly ServiceDebug _serviceDebug;
+    private readonly ServiceMapEditor _serviceMapEditor;
     private readonly ServiceMatchmaker _serviceMatchmaker;
+    private readonly ServiceLeaderboard _serviceLeaderboard;
+    private readonly ServicePing _servicePing;
 
     public RegionServiceDispatcher(ISender sender, Guid sessionId)
     {
@@ -21,7 +25,11 @@ public class RegionServiceDispatcher : IServiceDispatcher
         _serviceCatalogue = new ServiceCatalogue(sender);
         _servicePlayer = new ServicePlayer(sender, _serviceScene, _serviceTime);
         _serviceChat = new ServiceChat(sender);
+        _serviceDebug = new ServiceDebug(sender);
+        _serviceMapEditor = new ServiceMapEditor(sender);
         _serviceMatchmaker = new ServiceMatchmaker(sender);
+        _serviceLeaderboard = new ServiceLeaderboard(sender);
+        _servicePing = new ServicePing(sender);
         
         Databases.RegionServerDatabase.RegisterService(sessionId, _serviceLogin, ServiceId.ServiceLogin);
         Databases.RegionServerDatabase.RegisterService(sessionId, _serviceScene, ServiceId.ServiceScene);
@@ -29,35 +37,56 @@ public class RegionServiceDispatcher : IServiceDispatcher
         Databases.RegionServerDatabase.RegisterService(sessionId, _serviceCatalogue, ServiceId.ServiceCatalogue);
         Databases.RegionServerDatabase.RegisterService(sessionId, _servicePlayer, ServiceId.ServicePlayer);
         Databases.RegionServerDatabase.RegisterService(sessionId, _serviceChat, ServiceId.ServiceChat);
+        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceDebug, ServiceId.ServiceDebug);
+        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceMapEditor, ServiceId.ServiceMapEditor);
         Databases.RegionServerDatabase.RegisterService(sessionId, _serviceMatchmaker, ServiceId.ServiceMatchmaker);
+        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceLeaderboard, ServiceId.ServiceLeaderboard);
+        Databases.RegionServerDatabase.RegisterService(sessionId, _servicePing, ServiceId.ServicePing);
     }
 
     public void Dispatch(BinaryReader reader)
     {
         var serviceId = reader.ReadByte();
-        Console.WriteLine($"Service ID: {serviceId}");
-        switch (serviceId)
+        ServiceId? serviceEnum = null;
+        if (Enum.IsDefined(typeof(ServiceId), serviceId))
         {
-            case (byte)ServiceId.ServiceLogin: 
+            serviceEnum = (ServiceId)serviceId;
+        }
+        Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
+        switch (serviceEnum)
+        {
+            case ServiceId.ServiceLogin: 
                 _serviceLogin.Receive(reader);
                 break;
-            case (byte)ServiceId.ServiceScene:
+            case ServiceId.ServiceScene:
                 _serviceScene.Receive(reader);
                 break;
-            case (byte)ServiceId.ServiceTime:
+            case ServiceId.ServiceTime:
                 _serviceTime.Receive(reader);
                 break;
-            case (byte)ServiceId.ServiceCatalogue:
+            case ServiceId.ServiceCatalogue:
                 _serviceCatalogue.Receive(reader);
                 break;
-            case (byte)ServiceId.ServicePlayer:
+            case ServiceId.ServicePlayer:
                 _servicePlayer.Receive(reader);
                 break;
-            case (byte)ServiceId.ServiceChat:
+            case ServiceId.ServiceChat:
                 _serviceChat.Receive(reader);
                 break;
-            case (byte)ServiceId.ServiceMatchmaker:
+            case ServiceId.ServiceDebug:
+                _serviceDebug.Receive(reader);
+                break;
+            case ServiceId.ServiceMapEditor:
+                _serviceMapEditor.Receive(reader);
+                break;
+            case ServiceId.ServiceMatchmaker:
                 _serviceMatchmaker.Receive(reader);
+                break;
+            case ServiceId.ServiceLeaderboard:
+                _serviceLeaderboard.Receive(reader);
+                break;
+            case ServiceId.ServicePing:
+                _servicePing.Receive(reader);
                 break;
             default: 
                 Console.WriteLine($"Region TCP session received unsupported serviceId: {serviceId}");

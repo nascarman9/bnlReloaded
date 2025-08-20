@@ -274,64 +274,69 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
     public void Receive(BinaryReader reader)
     {
         var serviceMatchmakerId = reader.ReadByte();
-        Console.WriteLine($"ServiceMatchmakerId: {serviceMatchmakerId}");
-        switch (serviceMatchmakerId)
+        ServiceMatchmakerId? matchEnum = null;
+        if (Enum.IsDefined(typeof(ServiceMatchmakerId), serviceMatchmakerId))
         {
-            case (byte)ServiceMatchmakerId.MessageEnterQueue:
+            matchEnum = (ServiceMatchmakerId)serviceMatchmakerId;
+        }
+        Console.WriteLine($"ServiceMatchmakerId: {matchEnum.ToString()}");
+        switch (matchEnum)
+        {
+            case ServiceMatchmakerId.MessageEnterQueue:
                 ReceiveEnterQueue(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageLeaveQueue:
+            case ServiceMatchmakerId.MessageLeaveQueue:
                 ReceiveLeaveQueue(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageEnableBackfilling:
+            case ServiceMatchmakerId.MessageEnableBackfilling:
                 ReceiveEnableBackfilling(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageEnableNewHeroLeagueProtection:
+            case ServiceMatchmakerId.MessageEnableNewHeroLeagueProtection:
                 ReceiveEnableNewHeroLeagueProtection(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageConfirmMatch:
+            case ServiceMatchmakerId.MessageConfirmMatch:
                 ReceiveConfirmMatch(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageGetCustomGamesList:
+            case ServiceMatchmakerId.MessageGetCustomGamesList:
                 ReceiveCustomGamesList(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageJoinCustomGame:
+            case ServiceMatchmakerId.MessageJoinCustomGame:
                 ReceiveJoinCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageSpectateCustomGame:
+            case ServiceMatchmakerId.MessageSpectateCustomGame:
                 ReceiveSpectateCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageCreateCustomGame:
+            case ServiceMatchmakerId.MessageCreateCustomGame:
                 ReceiveCreateCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageStartCustomGame:
+            case ServiceMatchmakerId.MessageStartCustomGame:
                 ReceiveStartCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageBackfillCustomGame:
+            case ServiceMatchmakerId.MessageBackfillCustomGame:
                 ReceiveBackfillCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageLeaveCustomGame:
+            case ServiceMatchmakerId.MessageLeaveCustomGame:
                 ReceiveLeaveCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageApplyCustomGameSettings:
+            case ServiceMatchmakerId.MessageApplyCustomGameSettings:
                 ReceiveApplyCustomGameSettings(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageSwitchTeam:
+            case ServiceMatchmakerId.MessageSwitchTeam:
                 ReceiveSwitchTeam(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageKickPlayer:
+            case ServiceMatchmakerId.MessageKickPlayer:
                 ReceiveKickPlayer(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageStartTimeTrial:
+            case ServiceMatchmakerId.MessageStartTimeTrial:
                 ReceiveStartTimeTrial(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageRestartTimeTrial:
+            case ServiceMatchmakerId.MessageRestartTimeTrial:
                 ReceiveRestartTimeTrial(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageRegisterCustomGame:
+            case ServiceMatchmakerId.MessageRegisterCustomGame:
                 ReceiveRegisterCustomGame(reader);
                 break;
-            case (byte)ServiceMatchmakerId.MessageJoinCustomGameBySteam:
+            case ServiceMatchmakerId.MessageJoinCustomGameBySteam:
                 ReceiveJoinCustomGameBySteam(reader);
                 break;
             default:
