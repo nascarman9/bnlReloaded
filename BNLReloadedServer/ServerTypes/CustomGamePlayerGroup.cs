@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Service;
@@ -26,14 +27,15 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
     }
 
     public List<CustomGamePlayer> Players { get; } = [];
-    
-    public int Spectators { get; private set; }
-    
-    private Queue<CustomGamePlayer> ChangeTeamRequestsTeam1 { get; } = new();
-    private Queue<CustomGamePlayer> ChangeTeamRequestsTeam2 { get; } = new();
+
+    public int Spectators => _spectators;
+
+    private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam1 { get; } = new();
+    private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam2 { get; } = new();
 
     private readonly CustomGameLogic _customLogic = CatalogueHelper.GlobalLogic.CustomGame!;
-    
+    private int _spectators;
+
     private TeamType GetBalancedTeam()
     {
         var team1Count = Players.Select(p => p.Team).Count(p => p == TeamType.Team1);
@@ -101,17 +103,24 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
         switch (player.Team)
         {
             case TeamType.Team1:
-                if (ChangeTeamRequestsTeam2.Count > 0)
+                if (!ChangeTeamRequestsTeam2.IsEmpty)
                 {
-                    SwapTeam(ChangeTeamRequestsTeam2.Dequeue().Id);
-                    return true;
+                    if (ChangeTeamRequestsTeam2.TryDequeue(out var swapPlayer))
+                    {
+                        SwapTeam(swapPlayer.Id);
+                        return true;
+                    }
+                        
                 } 
                 break;
             case TeamType.Team2:
-                if (ChangeTeamRequestsTeam1.Count > 0)
+                if (!ChangeTeamRequestsTeam1.IsEmpty)
                 {
-                    SwapTeam(ChangeTeamRequestsTeam1.Dequeue().Id);
-                    return true;
+                    if (ChangeTeamRequestsTeam1.TryDequeue(out var swapPlayer))
+                    {
+                        SwapTeam(swapPlayer.Id);
+                        return true;
+                    }
                 }
                 break;
         }
@@ -126,12 +135,19 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
         if (player == null)
             return false;
 
-        var swapPlayer = player.Team switch
+        CustomGamePlayer? swapPlayer = null;
+        switch (player.Team)
         {
-            TeamType.Team1 => ChangeTeamRequestsTeam2.Count > 0 ? ChangeTeamRequestsTeam2.Dequeue() : null,
-            TeamType.Team2 => ChangeTeamRequestsTeam1.Count > 0 ? ChangeTeamRequestsTeam1.Dequeue() : null,
-            _ => null
-        };
+            case TeamType.Team1:
+                if(!ChangeTeamRequestsTeam2.IsEmpty) ChangeTeamRequestsTeam2.TryDequeue(out swapPlayer);
+                break;
+            case TeamType.Team2:
+                if(!ChangeTeamRequestsTeam1.IsEmpty) ChangeTeamRequestsTeam1.TryDequeue(out swapPlayer);
+                break;
+            default:
+                swapPlayer = null;
+                break;
+        }
 
         if (swapPlayer != null)
         {
@@ -223,7 +239,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
     {
         if (Spectators >= _customLogic.MaxSpectatorsPerMatch)
             return false;
-        Spectators++;
+        Interlocked.Increment(ref _spectators);
         return true;
     }
 

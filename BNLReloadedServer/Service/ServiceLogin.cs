@@ -114,6 +114,35 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.Send(writer);
     }
 
+    public void SendLoginDebug(ushort rpcId, string? node, EAuthFailed? authFailed = null, string? error = null)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceLoginId.MessageLoginDebug);
+        writer.Write(rpcId);
+        if (node != null)
+        {
+            writer.Write((byte) 0);
+            writer.Write(node);
+        }
+        else if (authFailed != null)
+        {
+            writer.Write((byte) 1);
+            EAuthFailed.WriteRecord(writer, authFailed);
+        }
+        else
+        {
+            writer.Write(byte.MaxValue);
+            writer.Write(error!);
+        }
+        sender.Send(writer);
+    }
+
+    private void ReceiveLoginDebug(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var token = reader.ReadString();
+    }
+
     public void SendLoginMasterSuccess(ushort rpcId, bool? serverMaintenance, bool? steamToken)
     {
         using var writer = CreateWriter();
@@ -153,7 +182,37 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         }
     }
     
-    public void SendLoginMasterSteam(ushort rpcId, uint? playerId, string? error = null)
+    public void SendLoginMasterDebug(ushort rpcId, uint? id2, EAuthFailed? authFailed = null, string? error = null)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceLoginId.MessageLoginMasterDebug);
+        writer.Write(rpcId);
+        if (id2.HasValue)
+        {
+            writer.Write((byte) 0);
+            writer.Write(id2.Value);
+        }
+        else if (authFailed != null)
+        {
+            writer.Write((byte) 1);
+            EAuthFailed.WriteRecord(writer, authFailed);
+        }
+        else
+        {
+            writer.Write(byte.MaxValue);
+            writer.Write(error!);
+        }
+        sender.Send(writer);
+    }
+
+    private void ReceiveLoginMasterDebug(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var name = reader.ReadString();
+        var token = reader.ReadString();
+    }
+    
+    public void SendLoginMasterSteam(ushort rpcId, uint? playerId, EAuthFailed? authFailed = null, EContentAuthFailed? contentAuthFailed = null, string? error = null)
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageLoginMasterSteam);
@@ -163,6 +222,16 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
             writer.Write((byte) 0);
             writer.Write(playerId.Value);
         }
+        else if (authFailed != null)
+        {
+            writer.Write((byte) 1);
+            EAuthFailed.WriteRecord(writer, authFailed);
+        }
+        else if (contentAuthFailed != null)
+        {
+            writer.Write((byte) 2);
+            EContentAuthFailed.WriteRecord(writer, contentAuthFailed);
+        }
         else
         {
             writer.Write(byte.MaxValue);
@@ -171,13 +240,73 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.SendSync(writer);
         SendRegions(_masterServerDatabase.GetRegionServers());
     }
-
+    
     private void ReceiveLoginMasterSteam(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
         var loginInfo = SteamLoginInfo.ReadRecord(reader);
         sender.AssociatedPlayerId = _playerDatabase.GetPlayerId(loginInfo.SteamId);
         SendLoginMasterSteam(rpcId, sender.AssociatedPlayerId);
+    }
+    
+    public void SendLoginMasterXxx(ushort rpcId, uint? id2, EAuthFailed? authFailed = null, string? error = null)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceLoginId.MessageLoginMasterXxx);
+        writer.Write(rpcId);
+        if (id2.HasValue)
+        {
+            writer.Write((byte) 0);
+            writer.Write(id2.Value);
+        }
+        else if (authFailed != null)
+        {
+            writer.Write((byte) 1);
+            EAuthFailed.WriteRecord(writer, authFailed);
+        }
+        else
+        {
+            writer.Write(byte.MaxValue);
+            writer.Write(error!);
+        }
+        sender.Send(writer);
+    }
+
+    private void ReceiveLoginMasterXxx(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var id = reader.ReadString();
+        var token = reader.ReadString();
+    }
+    
+    public void SendLoginMasterPpp(ushort rpcId, uint? id2, EAuthFailed? authFailed = null, string? error = null)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceLoginId.MessageLoginMasterPpp);
+        writer.Write(rpcId);
+        if (id2.HasValue)
+        {
+            writer.Write((byte) 0);
+            writer.Write(id2.Value);
+        }
+        else if (authFailed != null)
+        {
+            writer.Write((byte) 1);
+            EAuthFailed.WriteRecord(writer, authFailed);
+        }
+        else
+        {
+            writer.Write(byte.MaxValue);
+            writer.Write(error!);
+        }
+        sender.Send(writer);
+    }
+    
+    private void ReceiveLoginMasterPpp(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var id = reader.ReadBinary();
+        var token = reader.ReadString();
     }
     
     public void SendRegions(List<RegionInfo> regions, string? selected = null)
@@ -261,7 +390,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.Send(writer);
     }
 
-    public void SendLoginInstance(ushort rpcId, EAuthFailed? authFailed, string? error = null)
+    public void SendLoginInstance(ushort rpcId, EAuthFailed? authFailed = null, string? error = null)
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageLoginInstance);
@@ -293,26 +422,46 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
     public void Receive(BinaryReader reader)
     {
         var serviceLoginId = reader.ReadByte();
-        Console.WriteLine($"Service Login ID: {serviceLoginId}");
-        switch (serviceLoginId)
+        ServiceLoginId? loginEnum = null;
+        if (Enum.IsDefined(typeof(ServiceLoginId), serviceLoginId))
         {
-            case (byte)ServiceLoginId.MessageCheckVersion: 
+            loginEnum = (ServiceLoginId)serviceLoginId;
+        }
+        Console.WriteLine($"Service Login ID: {loginEnum.ToString()}");
+        switch (loginEnum)
+        {
+            case ServiceLoginId.MessageCheckVersion: 
                 ReceiveCheckVersion(reader);
                 break;
-            case (byte)ServiceLoginId.MessagePing:
+            case ServiceLoginId.MessagePing:
                 ReceivePing();
                 break;
-            case (byte)ServiceLoginId.MessageLoginMaster:
+            case ServiceLoginId.MessageLoginDebug:
+                ReceiveLoginDebug(reader);
+                break;
+            case ServiceLoginId.MessageLoginMaster:
                 ReceiveLoginMaster(reader);
                 break;
-            case (byte)ServiceLoginId.MessageLoginMasterSteam:
-                ReceiveLoginMasterSteam(reader);
+            case ServiceLoginId.MessageLoginMasterDebug:
+                ReceiveLoginMasterDebug(reader);
                 break;
-            case (byte)ServiceLoginId.MessageSelectRegion:
+            case ServiceLoginId.MessageLoginMasterSteam:
+                ReceiveLoginMasterSteam(reader);
+                break;            
+            case ServiceLoginId.MessageLoginMasterXxx:
+                ReceiveLoginMasterXxx(reader);
+                break;
+            case ServiceLoginId.MessageLoginMasterPpp:
+                ReceiveLoginMasterPpp(reader);
+                break;
+            case ServiceLoginId.MessageSelectRegion:
                 ReceiveSelectRegion(reader);
                 break;
-            case (byte)ServiceLoginId.MessageLoginRegion:
+            case ServiceLoginId.MessageLoginRegion:
                 ReceiveLoginRegion(reader);
+                break;
+            case ServiceLoginId.MessageLoginInstance:
+                ReceiveLoginInstance(reader);
                 break;
             default:
                 Console.WriteLine($"Login service received unsupported serviceId: {serviceLoginId}");

@@ -12,7 +12,7 @@ public static class CatalogueFactory
         var maps = CatalogueHelper.MapList.Custom!;
         return new CustomGameInfo
         {
-            Id = _nextGameId++,
+            Id = Interlocked.Increment(ref _nextGameId),
             GameName = name,
             StarterNickname = playerName,
             Players = 0,
