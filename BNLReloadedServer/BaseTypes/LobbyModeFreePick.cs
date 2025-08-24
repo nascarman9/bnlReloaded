@@ -4,7 +4,7 @@ namespace BNLReloadedServer.BaseTypes;
 
 public class LobbyModeFreePick : LobbyMode
 {
-  public override LobbyModeType Type => LobbyModeType.FreePick;
+    public override LobbyModeType Type => LobbyModeType.FreePick;
 
     public float SelectionTime { get; set; } = 60f;
 

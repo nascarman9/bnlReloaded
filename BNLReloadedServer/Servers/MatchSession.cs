@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using BNLReloadedServer.Database;
 using NetCoreServer;
 
 namespace BNLReloadedServer.Servers;
@@ -10,7 +11,7 @@ public class MatchSession : TcpSession
 
         public MatchSession(TcpServer server) : base(server)
         {
-            _sender = new SessionSender(this);
+            _sender = new SessionSender(Id, this);
             _serviceDispatcher = new MatchServiceDispatcher(_sender, Id);
         }
 
@@ -21,6 +22,7 @@ public class MatchSession : TcpSession
 
         protected override void OnDisconnected()
         {
+            Databases.RegionServerDatabase.RemoveMatchServices(Id);
             Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
         }
 

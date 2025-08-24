@@ -14,7 +14,7 @@ public abstract class Catalogue
 
     public T? GetCard<T>(string name) where T : class
     {
-        return (object) GetCard(Key(name)) as T;
+        return (object)GetCard(Key(name)) as T;
     }
 
     public T? GetCard<T>(Key key) where T : class => (object) GetCard(key) as T;

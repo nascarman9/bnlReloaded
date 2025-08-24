@@ -1,4 +1,5 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 
@@ -30,6 +31,8 @@ public class ServiceLobby(ISender sender) : IServiceLobby
         MessageExitToMenuAsSquad = 19
     }
     
+    private IGameInstance? GameInstance => Databases.RegionServerDatabase.GetGameInstance(sender.AssociatedPlayerId);
+    
     private static BinaryWriter CreateWriter()
     {
         var memStream = new MemoryStream();
@@ -56,63 +59,85 @@ public class ServiceLobby(ISender sender) : IServiceLobby
     private void ReceiveSwitchHero(BinaryReader reader)
     {
         var heroKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.SwapHero(sender.AssociatedPlayerId.Value, heroKey);
     }
 
     private void ReceiveAddDevice(BinaryReader reader)
     {
         var deviceKey = Key.ReadRecord(reader);
         var slot = reader.ReadInt32();
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.UpdateDeviceSlot(sender.AssociatedPlayerId.Value, slot, deviceKey);
     }
 
     private void ReceiveRemoveDevice(BinaryReader reader)
     {
         var slot = reader.ReadInt32();
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.UpdateDeviceSlot(sender.AssociatedPlayerId.Value, slot, null);
     }
 
     private void ReceiveSwitchDevice(BinaryReader reader)
     {
         var slot1 = reader.ReadInt32();
         var slot2 = reader.ReadInt32();
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.SwapDevices(sender.AssociatedPlayerId.Value, slot1, slot2);
     }
 
     private void ReceiveSetDefaultDevices(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.ResetToDefaultDevices(sender.AssociatedPlayerId.Value);
     }
 
     private void ReceiveSelectPerk(BinaryReader reader)
     {
         var perkKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.SelectPerk(sender.AssociatedPlayerId.Value, perkKey);
     }
 
     private void ReceiveDeselectPerk(BinaryReader reader)
     {
         var perkKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.DeselectPerk(sender.AssociatedPlayerId.Value, perkKey);
     }
 
     private void ReceiveSelectSkin(BinaryReader reader)
     {
         var skinKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.SelectSkin(sender.AssociatedPlayerId.Value, skinKey);
     }
 
     private void ReceiveSelectRole(BinaryReader reader)
     {
         var role = reader.ReadByteEnum<PlayerRoleType>();
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.SelectRole(sender.AssociatedPlayerId.Value, role);
     }
 
     private void ReceiveVoteMap(BinaryReader reader)
     {
         var mapKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.VoteForMap(sender.AssociatedPlayerId.Value, mapKey);
     }
 
     private void ReceivePlayerReady(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.PlayerReady(sender.AssociatedPlayerId.Value);
     }
     
     private void ReceiveMatchLoadingProgress(BinaryReader reader)
     {
         var progress = reader.ReadSingle();
+        if (sender.AssociatedPlayerId == null) return;
+        GameInstance?.LoadProgressUpdate(sender.AssociatedPlayerId.Value, progress);
     }
 
     public void SendMatchLoadingProgress(Dictionary<uint, float> playersProgress)
