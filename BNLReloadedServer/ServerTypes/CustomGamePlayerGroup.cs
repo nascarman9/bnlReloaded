@@ -6,10 +6,9 @@ using BNLReloadedServer.Service;
 
 namespace BNLReloadedServer.ServerTypes;
 
-public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
+public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, IGameInitiator
 {
     private readonly CustomGameInfo _gameInfo;
-
     public required string Password { get; init; }
     public required CustomGameInfo GameInfo
     {
@@ -29,6 +28,8 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
     public List<CustomGamePlayer> Players { get; } = [];
 
     public int Spectators => _spectators;
+    
+    public string? GameInstanceId { get; set; }
 
     private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam1 { get; } = new();
     private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam2 { get; } = new();
@@ -38,8 +39,9 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
 
     private TeamType GetBalancedTeam()
     {
-        var team1Count = Players.Select(p => p.Team).Count(p => p == TeamType.Team1);
-        var team2Count = Players.Select(p => p.Team).Count(p => p == TeamType.Team2);
+        var playerArray = Players.ToArray();
+        var team1Count = playerArray.Select(p => p.Team).Count(p => p == TeamType.Team1);
+        var team2Count = playerArray.Select(p => p.Team).Count(p => p == TeamType.Team2);
 
         return team1Count <= team2Count ? TeamType.Team1 : TeamType.Team2;
     }
@@ -50,20 +52,23 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
         {
             return false;
         }
-
-        Players.Add(new CustomGamePlayer 
-            {
-                Id = playerId,
-                SteamId = player.SteamId,
-                Nickname = player.Nickname,
-                PlayerLevel = player.Progression!.PlayerProgress.Level,
-                SelectedBadges = player.SelectedBadges,
-                Owner = isOwner,
-                Team = GetBalancedTeam(),
-                SwitchTeamRequest = false
-            });
-        GameInfo.Players++;
-        CustomGameUpdate(players: Players);
+        EnqueueAction(() =>
+        {
+            Players.Add(new CustomGamePlayer 
+                {
+                    Id = playerId,
+                    SteamId = player.SteamId,
+                    Nickname = player.Nickname,
+                    PlayerLevel = player.Progression!.PlayerProgress.Level,
+                    SelectedBadges = player.SelectedBadges,
+                    Owner = isOwner,
+                    Team = GetBalancedTeam(),
+                    SwitchTeamRequest = false
+                });
+            GameInfo.Players++;
+                    
+            CustomGameUpdate(players: Players);
+        });
         return true;
     }
 
@@ -71,12 +76,13 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
     {
         var kicker = Players.FirstOrDefault(p => p.Id == kickerId);
         if (kicker == null) return false;
-        if (kicker.Owner && RemovePlayer(playerId))
+        if (!kicker.Owner) return false;
+        RemovePlayer(playerId);
+        EnqueueAction(() =>
         {
             matchService.SendCustomGamePlayerKicked(playerId);
-            return true;
-        }
-        return false;
+        });
+        return true;
     }
 
     public bool RemovePlayer(uint playerId)
@@ -84,56 +90,60 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
         var player = Players.FirstOrDefault(p => p.Id == playerId);
         if (player == null)
             return false;
-        
-        if (!Players.Remove(player))
-            return false;
-        
-        GameInfo.Players--;
 
-        if (Players.Count == 0)
+        EnqueueAction(() =>
         {
-            return Databases.RegionServerDatabase.RemoveCustomGame(GameInfo.Id);
-        }
-        
-        if (player.Owner)
-        {
-            Players[0].Owner = true;
-        }
+            Players.Remove(player);
+            GameInfo.Players--;
+            
+            if (Players.Count <= 0)
+            {
+                Databases.RegionServerDatabase.RemoveCustomGame(GameInfo.Id);
+                return;
+            }
+            
+            if (player.Owner)
+            {
+                Players[0].Owner = true;
+            }
 
-        switch (player.Team)
-        {
-            case TeamType.Team1:
-                if (!ChangeTeamRequestsTeam2.IsEmpty)
-                {
-                    if (ChangeTeamRequestsTeam2.TryDequeue(out var swapPlayer))
+            switch (player.Team)
+            {
+                case TeamType.Team1:
+                    if (!ChangeTeamRequestsTeam2.IsEmpty)
                     {
-                        SwapTeam(swapPlayer.Id);
-                        return true;
-                    }
-                        
-                } 
-                break;
-            case TeamType.Team2:
-                if (!ChangeTeamRequestsTeam1.IsEmpty)
-                {
-                    if (ChangeTeamRequestsTeam1.TryDequeue(out var swapPlayer))
+                        if (ChangeTeamRequestsTeam2.TryDequeue(out var swapPlayer))
+                        {
+                            SwapTeam(swapPlayer.Id);
+                            return;
+                        }
+                            
+                    } 
+                    break;
+                case TeamType.Team2:
+                    if (!ChangeTeamRequestsTeam1.IsEmpty)
                     {
-                        SwapTeam(swapPlayer.Id);
-                        return true;
+                        if (ChangeTeamRequestsTeam1.TryDequeue(out var swapPlayer))
+                        {
+                            SwapTeam(swapPlayer.Id);
+                            return;
+                        }
                     }
-                }
-                break;
-        }
-        
-        CustomGameUpdate(players: Players);
+                    break;
+            }
+            
+            CustomGameUpdate(players: Players);
+        });
         return true;
     }
 
-    public bool SwapTeam(uint playerId)
+    public void SwapTeam(uint playerId)
     {
-        var player = Players.FirstOrDefault(p => p.Id == playerId);
+        var playerArray = Players.ToArray();
+        var player = playerArray.FirstOrDefault(p => p.Id == playerId);
+
         if (player == null)
-            return false;
+            return;
 
         CustomGamePlayer? swapPlayer = null;
         switch (player.Team)
@@ -144,6 +154,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
             case TeamType.Team2:
                 if(!ChangeTeamRequestsTeam1.IsEmpty) ChangeTeamRequestsTeam1.TryDequeue(out swapPlayer);
                 break;
+            case TeamType.Neutral:
             default:
                 swapPlayer = null;
                 break;
@@ -160,7 +171,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
         }
         else
         {
-            var enemyTeamCount = Players.Select(p => p.Team).Count(p => p != player.Team);
+            var enemyTeamCount = playerArray.Select(p => p.Team).Count(p => p != player.Team);
             if (enemyTeamCount >= GameInfo.MaxPlayers / 2)
             {
                 player.SwitchTeamRequest = true;
@@ -181,7 +192,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
                 switch (player.Team)
                 {
                     case TeamType.Neutral:
-                        return false;
+                        return;
                     case TeamType.Team1:
                         player.Team = TeamType.Team2;
                         player.SwitchTeamRequest = false;
@@ -194,16 +205,15 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
             }
         }
         CustomGameUpdate(players: Players);
-        return true;
     }
 
-    public bool UpdateSettings(uint playerId, CustomGameSettings settings)
+    public void UpdateSettings(uint playerId, CustomGameSettings settings)
     {
-        var player = Players.FirstOrDefault(p => p.Id == playerId);
+        var player = Players.ToArray().FirstOrDefault(p => p.Id == playerId);
         if (player == null)
-            return false;
+            return;
 
-        if (!player.Owner) return false;
+        if (!player.Owner) return;
 
         if (settings.BuildTime.HasValue)
             settings.BuildTime = float.Clamp(settings.BuildTime.Value, _customLogic.MinBuildTime, _customLogic.MaxBuildTime);
@@ -232,15 +242,61 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
         CustomGameUpdate(mapInfo: settings.MapInfo, buildTime: settings.BuildTime, respawnMod: settings.RespawnTimeMod,
             heroSwitch: settings.HeroSwitch, superSupply: settings.SuperSupply, allowBackfilling: settings.AllowBackfilling, 
             resourceCap: settings.ResourceCap, initResources: settings.InitResource);
-        return true;
     }
 
-    public bool AddSpectator()
+    public void AddSpectator()
     {
         if (Spectators >= _customLogic.MaxSpectatorsPerMatch)
-            return false;
+            return;
         Interlocked.Increment(ref _spectators);
+    }
+
+    public bool StartIntoLobby(uint playerId)
+    {
+        var player = Players.ToArray().FirstOrDefault(p => p.Id == playerId);
+        if (player == null) return false;
+        if (!player.Owner) return false;
+        GameInfo.Status = CustomGameStatus.Lobby;
+        
+        CustomGameUpdate(status: GameInfo.Status);
         return true;
+    }
+    
+    public void StartIntoMatch()
+    {
+        GameInfo.Status = CustomGameStatus.Match;
+        CustomGameUpdate(status: GameInfo.Status);
+    }
+
+    public TeamType GetTeamForPlayer(uint playerId)
+    {
+        var playerArray = Players.ToArray();
+        var player = playerArray.FirstOrDefault(p => p.Id == playerId);
+        return player?.Team ?? TeamType.Team1; 
+    }
+
+    public CustomGameUpdate GetCustomGameUpdate()
+    {
+        var settings = new CustomGameSettings
+        {
+            MapInfo = GameInfo.MapInfo,
+            BuildTime = GameInfo.BuildTime,
+            RespawnTimeMod = GameInfo.RespawnTimeMod,
+            HeroSwitch = GameInfo.HeroSwitch,
+            SuperSupply = GameInfo.SuperSupply,
+            AllowBackfilling = GameInfo.AllowBackfilling,
+            ResourceCap = GameInfo.ResourceCap,
+            InitResource = GameInfo.InitResource
+        };
+        
+        return new CustomGameUpdate
+        {
+            GameName = GameInfo.GameName,
+            Password = Password,
+            Settings = settings,
+            Players = Players,
+            Status = GameInfo.Status
+        };
     }
 
     private void CustomGameUpdate(string? gameName = null, string? pass = null,
@@ -273,4 +329,6 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService)
                 Status = status
             });
     }
+
+    
 }

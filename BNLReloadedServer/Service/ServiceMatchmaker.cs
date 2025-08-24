@@ -133,9 +133,13 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
         var rpcId = reader.ReadUInt16();
         var gameId = reader.ReadUInt64();
         var password = reader.ReadString();
-        if (sender.AssociatedPlayerId == null) return;
+        if (!sender.AssociatedPlayerId.HasValue) return;
         var enterStatus = _serverDatabase.AddToCustomGame(sender.AssociatedPlayerId.Value, gameId, password);
         SendJoinCustomGame(rpcId, enterStatus);
+        if (enterStatus != CustomGameJoinResult.Accepted) return;
+        var update = _serverDatabase.GetFullCustomGameUpdate(sender.AssociatedPlayerId.Value);
+        if (update != null)
+            SendUpdateCustomGame(update);
     }
 
     public void SendSpectateCustomGame(ushort rpcId, CustomGameSpectateResult result, string? error = null)
@@ -174,6 +178,8 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
     private void ReceiveStartCustomGame(BinaryReader reader)
     {
         var signedMap = reader.ReadOption(reader.ReadString);
+        if (sender.AssociatedPlayerId == null) return;
+        _serverDatabase.StartCustomGame(sender.AssociatedPlayerId.Value, signedMap);
     }
 
     private void ReceiveBackfillCustomGame(BinaryReader reader)

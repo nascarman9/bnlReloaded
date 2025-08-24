@@ -50,7 +50,7 @@ if (runServer)
     {
         // Create a new TCP server
         server = new MasterServer(IPAddress.Parse("127.0.0.1"), 28100);
-
+        
         // Start the server
         Console.Write("Server starting...");
         server.Start();
@@ -59,34 +59,52 @@ if (runServer)
     }
 
     var regionServer = new RegionServer(IPAddress.Parse("127.0.0.1"), 28101);
-    Databases.RegionServerDatabase = new RegionServerDatabase(regionServer);
+    regionServer.OptionNoDelay = true;
+    regionServer.OptionReceiveBufferSize = 10000000;
+    regionServer.OptionSendBufferSize = 10000000;
+    var matchServer = new MatchServer(IPAddress.Parse("127.0.0.1"), 28102);
+    matchServer.OptionNoDelay = true;
+    matchServer.OptionReceiveBufferSize = 10000000;
+    matchServer.OptionSendBufferSize = 10000000;
+    Databases.RegionServerDatabase = new RegionServerDatabase(regionServer, matchServer);
 
     Console.Write("Region server starting...");
     regionServer.Start();
     Console.WriteLine("Done!");
+    
+    Console.Write("Match server starting...");
+    matchServer.Start();
+    Console.WriteLine("Done!");
 
-    // Perform text input
-    for (;;)
+    try 
     {
-        var line = Console.ReadLine();
-        if (string.IsNullOrEmpty(line))
-            break;
-
-        // Restart the server
-        if (line == "!")
+        // Perform text input
+        for (;;)
         {
-            Console.Write("Server restarting...");
-            if (masterMode)
-                server.Restart();
-            regionServer.Restart();
-            Console.WriteLine("Done!");
+            var line = Console.ReadLine();
+            if (string.IsNullOrEmpty(line))
+                break;
+
+            // Restart the server
+            if (line == "!")
+            {
+                Console.Write("Server restarting...");
+                if (masterMode)
+                    server.Restart();
+                regionServer.Restart();
+                matchServer.Restart();
+                Console.WriteLine("Done!");
+            }
         }
     }
-
-    // Stop the server
-    Console.Write("Server stopping...");
-    if (masterMode)
-        server.Stop();
-    regionServer.Stop();
-    Console.WriteLine("Done!");
+    finally
+    {
+        // Stop the server
+        Console.Write("Server stopping...");
+        if (masterMode)
+            server.Stop();
+        regionServer.Stop();
+        matchServer.Stop();
+        Console.WriteLine("Done!");
+    }
 }

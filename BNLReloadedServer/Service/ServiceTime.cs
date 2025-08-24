@@ -47,7 +47,7 @@ public class ServiceTime(ISender sender) : IServiceTime
     private void ReceiveSync(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
-        SendSync(rpcId, DateTime.Now.ToBinary());
+        SendSync(rpcId, DateTimeOffset.Now.ToUnixTimeMilliseconds());
     }
     
     public void Receive(BinaryReader reader)

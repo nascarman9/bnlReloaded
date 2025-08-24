@@ -7,6 +7,11 @@ namespace BNLReloadedServer.BaseTypes;
 [JsonConverter(typeof(JsonFactoryJsonConverter<Tool>))]
 public abstract class Tool : IJsonFactory<Tool>
 {
+    public ToolLogic CreateToolLogic(GearData toolData, byte index)
+    {
+        return new ToolLogic(toolData, index);
+    }
+    
     public abstract ToolType Type { get; }
 
     public ToolAmmo? Ammo { get; set; }

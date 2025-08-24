@@ -2,38 +2,38 @@
 
 namespace BNLReloadedServer.Servers;
 
-public class SessionSender(List<TcpSession> callingSession) : ISender
+public class SessionSender(IDictionary<Guid, TcpSession> callingSession) : ISender
 {
-    // For senders that apply to only one session, this will house the playerId and sessionId
+    // For senders that apply to only one session, this will house the playerId
     public uint? AssociatedPlayerId { get; set; }
 
-    public SessionSender(TcpSession callingSession) : this([callingSession])
+    public SessionSender(Guid guid, TcpSession callingSession) : this( new Dictionary<Guid, TcpSession> {{guid, callingSession}} )
     {
     }
 
     public void Send(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);
-        foreach (var session in callingSession)
+        foreach (var session in callingSession.Values)
             session.SendAsync(message);
     }
 
     public void Send(byte[] buffer)
     {
-        foreach (var session in callingSession)
+        foreach (var session in callingSession.Values)
             session.SendAsync(buffer);
     }
 
     public void SendSync(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);
-        foreach (var session in callingSession)
+        foreach (var session in callingSession.Values)
             session.Send(message);
     }
 
     public void SendSync(byte[] buffer)
     {
-        foreach (var session in callingSession)
+        foreach (var session in callingSession.Values)
             session.Send(buffer);
     }
 

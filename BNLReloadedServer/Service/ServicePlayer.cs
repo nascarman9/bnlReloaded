@@ -77,7 +77,7 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     private void ReceiveUpdateSteamInfo(BinaryReader reader)
     {
         var playerSteamInfo = PlayerSteamInfo.ReadRecord(reader);
-        serviceTime.SendSetOrigin(DateTime.Now.ToBinary());
+        serviceTime.SendSetOrigin(DateTimeOffset.Now.ToUnixTimeMilliseconds());
         serviceScene.SendServerUpdate(new ServerUpdate
         {
             BuyPlatinumEnabled = false,
@@ -90,7 +90,10 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
             ShopEnabled = true,
             TimeAssaultEnabled = true
         });
-        serviceScene.SendChangeScene(Scene.Create(SceneType.MainMenu));
+        if (!sender.AssociatedPlayerId.HasValue) return;
+        var scene = _serverDatabase.GetLastScene(sender.AssociatedPlayerId.Value);
+        _serverDatabase.UpdateScene(sender.AssociatedPlayerId.Value, scene, serviceScene);
+        SendPlayerUpdate(_playerDatabase.GetFullPlayerUpdate(sender.AssociatedPlayerId.Value));
     }
 
     public void SendPlayerUpdate(PlayerUpdate playerUpdate)
@@ -345,6 +348,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var rpcId = reader.ReadUInt16();
         var hero = Key.ReadRecord(reader);
+        if (!sender.AssociatedPlayerId.HasValue) return;
+        SendGetLoadout(rpcId, _playerDatabase.GetLoadoutForHero(sender.AssociatedPlayerId.Value, hero));
     }
 
     private void ReceiveSetLoadout(BinaryReader reader)

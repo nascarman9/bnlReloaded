@@ -337,7 +337,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.Send(writer);
     }
 
-    public void SendLoginRegion(ushort rpcId, PlayerRole? role, string? error = null)
+    public void SendLoginRegion(ushort rpcId, PlayerRole? role, EAuthFailed? authFailed = null, string? error = null)
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageLoginRegion);
@@ -346,6 +346,11 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         {
             writer.Write((byte) 0);
             writer.WriteByteEnum(role.Value);
+        }
+        else if (authFailed != null)
+        {
+            writer.Write((byte)1);
+            EAuthFailed.WriteRecord(writer, authFailed);
         }
         else
         {
@@ -360,7 +365,11 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         var rpcId = reader.ReadUInt16();
         sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthToken(reader.ReadString());
         var catalogueHash = reader.ReadUInt32();
-        if (sender.AssociatedPlayerId == null) return;
+        if (sender.AssociatedPlayerId == null)
+        {
+            SendLoginRegion(rpcId, null, new EAuthFailed());
+            return;
+        }
         _regionServerDatabase.AddUser(sender.AssociatedPlayerId.Value, sessionId);
         SendLoginRegion(rpcId, PlayerRole.Admin);
         SendLoggedIn();
@@ -416,7 +425,16 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
     {
         var rpcId = reader.ReadUInt16();
         var auth = reader.ReadString();
-        
+        sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthToken(auth);
+        if (sender.AssociatedPlayerId == null)
+        {
+            SendLoginInstance(rpcId, new EAuthFailed());
+        }
+        else
+        {
+            SendLoginInstance(rpcId);
+            _regionServerDatabase.LinkMatchSessionGuidToUser(sender.AssociatedPlayerId.Value, sessionId);
+        }
     }
 
     public void Receive(BinaryReader reader)

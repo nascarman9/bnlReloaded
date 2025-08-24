@@ -1,4 +1,5 @@
-﻿using BNLReloadedServer.Service;
+﻿using BNLReloadedServer.Database;
+using BNLReloadedServer.Service;
 
 namespace BNLReloadedServer.Servers;
 
@@ -16,6 +17,12 @@ public class MatchServiceDispatcher : IServiceDispatcher
         _serviceLobby = new ServiceLobby(sender);
         _servicePing = new ServicePing(sender);
         _serviceMediator = new ServiceMediator(sender);
+
+        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceLogin, ServiceId.ServiceLogin);
+        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceZone, ServiceId.ServiceZone);
+        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceLobby, ServiceId.ServiceLobby);
+        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _servicePing, ServiceId.ServicePing);
+        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceMediator, ServiceId.ServiceMediator);
     }
 
     public void Dispatch(BinaryReader reader)
