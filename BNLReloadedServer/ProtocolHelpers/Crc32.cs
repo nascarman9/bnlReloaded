@@ -2,7 +2,7 @@
 
 namespace BNLReloadedServer.ProtocolHelpers;
 
-public class Crc32
+public static class Crc32
 {
     public const uint DefaultSeed = 4294967295;
     private static readonly uint[] CrcTable =

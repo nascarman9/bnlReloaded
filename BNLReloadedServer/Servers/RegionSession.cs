@@ -11,7 +11,7 @@ namespace BNLReloadedServer.Servers
 
         public RegionSession(TcpServer server) : base(server)
         {
-            _sender = new SessionSender(Id, this);
+            _sender = new SessionSender(server, Id, this);
             _serviceDispatcher = new RegionServiceDispatcher(_sender, Id);
         }
 

@@ -7,39 +7,100 @@ using NetCoreServer;
 
 namespace BNLReloadedServer.Database;
 
-public class GameInstance(TcpServer server) : IGameInstance
+public class GameInstance : IGameInstance
 {
-    private class MatchConnectionInfo(Guid guid)
+    private class MatchConnectionInfo(Guid guid, Guid regionGuid, TeamType team)
     {
         public Guid Guid { get; } = guid;
+        public Guid RegionGuid { get; } = regionGuid;
+        public TeamType Team { get; } = team;
     }
     
-    public required string GameInstanceId { get; init; }
+    private TcpServer Server { get; }
+    
+    public string GameInstanceId { get; }
 
-    public required IGameInitiator GameInitiator { get; init; }
+    private IGameInitiator GameInitiator { get; }
 
     private MapData? MapData { get; set; }
 
     private GameLobby? Lobby { get; set; }
     
     private readonly ConcurrentDictionary<uint, MatchConnectionInfo> _connectedUsers = new();
-
-    private readonly ConcurrentDictionary<Guid, TcpSession> _lobbySessions = new();
-    private readonly ConcurrentDictionary<Guid, TcpSession> _zoneSessions = new();
+    
+    private readonly SessionSender _lobbySender;
+    private readonly SessionSender _zoneSender;
     
     private readonly Dictionary<Guid, Dictionary<ServiceId, IService>> _services = new();
 
-    public void LinkGuidToPlayer(uint userId, Guid guid)
+    private InstanceChatRooms ChatRooms { get; }
+
+    public GameInstance(TcpServer matchServer, TcpServer regionServer, string gameInstanceId, IGameInitiator gameInitiator)
     {
-        _connectedUsers[userId] = new MatchConnectionInfo(guid);
+        Server = matchServer;
+        GameInstanceId = gameInstanceId;
+        GameInitiator = gameInitiator;
+        _lobbySender = new SessionSender(matchServer);
+        _zoneSender = new SessionSender(matchServer);
+        ChatRooms = CreateChatRooms(regionServer);
+    }
+
+    private InstanceChatRooms CreateChatRooms(TcpServer server)
+    {
+        var lobbyId = Guid.NewGuid().GetHashCode();
+        var instanceId = GameInstanceId.GetHashCode();
+        var team1Room = new RoomIdTeam
+        {
+            InstanceId = instanceId,
+            LobbyId = lobbyId,
+            Team = TeamType.Team1
+        };
+        var team2Room = new RoomIdTeam
+        {
+            InstanceId = instanceId,
+            LobbyId = lobbyId,
+            Team = TeamType.Team2
+        };
+        var bothRoom = new RoomIdTeam
+        {
+            InstanceId = instanceId,
+            LobbyId = lobbyId,
+            Team = TeamType.Neutral
+        };
+
+        var team1ChatRoom = new ChatRoom(team1Room, new SessionSender(server));
+        var team2ChatRoom = new ChatRoom(team2Room, new SessionSender(server));
+        var bothChatRoom = new ChatRoom(bothRoom, new SessionSender(server));
+        return new InstanceChatRooms(team1ChatRoom, team2ChatRoom, bothChatRoom);
+    }
+    
+    public void LinkGuidToPlayer(uint userId, Guid guid, Guid regionGuid)
+    {
+        var playerTeam = GameInitiator.GetTeamForPlayer(userId);
+        _connectedUsers[userId] = new MatchConnectionInfo(guid, regionGuid, playerTeam);
+        if (_services[regionGuid][ServiceId.ServiceChat] is not IServiceChat chatService) return;
+        ChatRooms.BothTeamsRoom.AddToRoom(regionGuid, chatService);
+        switch (playerTeam)
+        {
+            case TeamType.Team1:
+                ChatRooms.Team1Room.AddToRoom(regionGuid, chatService);
+                break;
+            case TeamType.Team2:
+                ChatRooms.Team2Room.AddToRoom(regionGuid, chatService);
+                break;
+            case TeamType.Neutral:
+            default:
+                break;
+        }
+
     }
     
     public void UserEnteredLobby(uint userId)
     {
         if (!_connectedUsers.TryGetValue(userId, out var value) || Lobby == null) return;
-        Lobby.EnqueueAction(() => Lobby.AddPlayer(userId, GameInitiator.GetTeamForPlayer(userId)));
+        Lobby.EnqueueAction(() => Lobby.AddPlayer(userId, value.Team));
         var playerGuid = value.Guid;
-        _lobbySessions[playerGuid] = server.FindSession(playerGuid);
+        _lobbySender.Subscribe(playerGuid);
         _services.TryGetValue(playerGuid, out var service);
         if (service?[ServiceId.ServiceLobby] is ServiceLobby lobbyService)
         {
@@ -47,14 +108,35 @@ public class GameInstance(TcpServer server) : IGameInstance
         }
     }
 
+    private void RemoveFromChat(MatchConnectionInfo? player)
+    {
+        if (player == null || _services[player.RegionGuid][ServiceId.ServiceChat] is not IServiceChat chatService) return;
+        ChatRooms.BothTeamsRoom.RemoveFromRoom(player.RegionGuid, chatService);
+        switch (player.Team)
+        {
+            case TeamType.Team1:
+                ChatRooms.Team1Room.RemoveFromRoom(player.RegionGuid, chatService);
+                break;
+            case TeamType.Team2:
+                ChatRooms.Team2Room.RemoveFromRoom(player.RegionGuid, chatService);
+                break;
+            case TeamType.Neutral:
+            default:
+                break;
+        }
+    }
+
     public void PlayerDisconnected(uint userId)
     {
+        RemoveFromChat(_connectedUsers[userId]);
         Lobby?.EnqueueAction(() => Lobby?.PlayerDisconnected(userId));
     }
     
     public void PlayerLeftInstance(uint userId)
     {
-        _connectedUsers.TryRemove(userId, out _);
+        _connectedUsers.TryRemove(userId, out var player);
+        RemoveFromChat(player);
+        
         Lobby?.EnqueueAction(() => Lobby?.PlayerLeft(userId));
     }
 
@@ -76,8 +158,8 @@ public class GameInstance(TcpServer server) : IGameInstance
             PlayerDisconnected(player.Key);
         }
         _services.Remove(sessionId);
-        _lobbySessions.TryRemove(sessionId, out _);
-        _zoneSessions.TryRemove(sessionId, out _);
+        _lobbySender.Unsubscribe(sessionId);
+        _zoneSender.Unsubscribe(sessionId);
     }
 
     public void CreateLobby(Key gameModeKey, MapInfo? mapInfo)
@@ -85,7 +167,7 @@ public class GameInstance(TcpServer server) : IGameInstance
         var gameMode = Databases.Catalogue.GetCard<CardGameMode>(gameModeKey);
         if (gameMode == null) return;
         
-        Lobby = new GameLobby(new ServiceLobby(new SessionSender(_lobbySessions)));
+        Lobby = new GameLobby(new ServiceLobby(_lobbySender));
         List<MapInfo> maps = [];
         if (mapInfo != null)
         {
@@ -125,6 +207,11 @@ public class GameInstance(TcpServer server) : IGameInstance
         }
         
         Lobby.CreateLobbyData(GameInstanceId, matchKey, gameModeKey, maps);
+    }
+
+    public ChatRoom? GetChatRoom(RoomId roomId)
+    {
+        return ChatRooms[roomId];
     }
 
     public void SwapHero(uint playerId, Key hero) => Lobby?.EnqueueAction(() => Lobby?.SwapHero(playerId, hero));

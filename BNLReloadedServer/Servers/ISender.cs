@@ -7,4 +7,7 @@ public interface ISender
     public void Send(byte[] buffer);
     public void SendSync(BinaryWriter writer);
     public void SendSync(byte[] buffer);
+    public void Subscribe(Guid sessionId);
+    public void Unsubscribe(Guid sessionId);
+    public void UnsubscribeAll();
 }

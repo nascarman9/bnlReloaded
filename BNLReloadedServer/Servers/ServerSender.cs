@@ -25,6 +25,19 @@ public class ServerSender(TcpServer server) : ISender
     {
         server.Multicast(buffer);
     }
+    
+    public void Subscribe(Guid sessionId)
+    {
+    }
+
+    public void Unsubscribe(Guid sessionId)
+    {
+    }
+
+    public void UnsubscribeAll()
+    {
+        
+    }
 
     private static byte[] AppendMessageLength(BinaryWriter writer)
     {

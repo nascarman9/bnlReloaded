@@ -1,40 +1,74 @@
-﻿using NetCoreServer;
+﻿using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using NetCoreServer;
 
 namespace BNLReloadedServer.Servers;
 
-public class SessionSender(IDictionary<Guid, TcpSession> callingSession) : ISender
+public class SessionSender : ISender
 {
+    private readonly TcpServer _server;
+
     // For senders that apply to only one session, this will house the playerId
     public uint? AssociatedPlayerId { get; set; }
+    
+    private readonly IDictionary<Guid, TcpSession> _sessions;
 
-    public SessionSender(Guid guid, TcpSession callingSession) : this( new Dictionary<Guid, TcpSession> {{guid, callingSession}} )
+    public SessionSender(TcpServer server, Guid guid, TcpSession callingSession)
     {
+        _server = server;
+        _sessions = new Dictionary<Guid, TcpSession>
+        {
+            {guid, callingSession}
+        }.ToImmutableDictionary();
+    }
+
+    public SessionSender(TcpServer server)
+    {
+        _server = server;
+        _sessions = new ConcurrentDictionary<Guid, TcpSession>();
     }
 
     public void Send(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);
-        foreach (var session in callingSession.Values)
+        foreach (var session in _sessions.Values)
             session.SendAsync(message);
     }
 
     public void Send(byte[] buffer)
     {
-        foreach (var session in callingSession.Values)
+        foreach (var session in _sessions.Values)
             session.SendAsync(buffer);
     }
 
     public void SendSync(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);
-        foreach (var session in callingSession.Values)
+        foreach (var session in _sessions.Values)
             session.Send(message);
     }
 
     public void SendSync(byte[] buffer)
     {
-        foreach (var session in callingSession.Values)
+        foreach (var session in _sessions.Values)
             session.Send(buffer);
+    }
+
+    public void Subscribe(Guid sessionId)
+    {
+        var session = _server.FindSession(sessionId);
+        if (session != null)
+            _sessions[sessionId] = session;
+    }
+
+    public void Unsubscribe(Guid sessionId)
+    {
+        _sessions.Remove(sessionId);
+    }
+
+    public void UnsubscribeAll()
+    {
+        _sessions.Clear();
     }
 
     private static byte[] AppendMessageLength(BinaryWriter writer)

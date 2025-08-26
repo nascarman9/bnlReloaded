@@ -13,13 +13,14 @@ namespace BNLReloadedServer.Database;
 
 public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRegionServerDatabase
 {
-    private class ConnectionInfo(Guid guid, UiId uiId, float uiDuration)
+    private class ConnectionInfo(Guid guid, ChatPlayer chatInfo)
     {
         public Guid Guid { get; set; } = guid;
         
         public Guid? MatchGuid { get; set; }
-        public UiId UiId { get; set; } = uiId;
-        public float UiDuration { get; set; } = uiDuration;
+        public UiId UiId { get; set; } = UiId.Home;
+        public float UiDuration { get; set; }
+        public ChatPlayer ChatInfo { get; } = chatInfo;
         public Scene? ActiveScene { get; set; }
         public ulong? CustomGameId { get; set; }
         public string? GameInstanceId { get; set; }
@@ -32,8 +33,10 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
     // Temporary container for services until we can connect the match session guid to a player
     private readonly Dictionary<Guid, Dictionary<ServiceId, IService>> _matchServices = new();
     
-    private readonly OrderedDictionary<ulong, (CustomGamePlayerGroup custom, ConcurrentDictionary<Guid, TcpSession> customSessions)> _customGamePlayerLists = new();
+    private readonly OrderedDictionary<ulong, (CustomGamePlayerGroup custom, ISender customSender)> _customGamePlayerLists = new();
     private readonly ConcurrentDictionary<string, IGameInstance> _gameInstances = new();
+
+    private readonly ChatRoom _globalChatRoom = new(new RoomIdGlobal(), new SessionSender(server));
     
     private readonly IPlayerDatabase _playerDatabase = Databases.PlayerDatabase;
 
@@ -53,7 +56,8 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         
         player.MatchGuid = sessionId;
         gameInstance.RegisterServices(sessionId, matchServices);
-        gameInstance.LinkGuidToPlayer(userId, sessionId);
+        gameInstance.RegisterServices(player.Guid, new Dictionary<ServiceId, IService>(_services[player.Guid].Where(s => s.Key == ServiceId.ServiceChat)));
+        gameInstance.LinkGuidToPlayer(userId, sessionId, player.Guid);
         switch (scene.Type)
         {
             case SceneType.Lobby:
@@ -67,18 +71,38 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
 
     public bool AddUser(uint userId, Guid sessionId)
     {
+        var result = true;
         if (!UserConnected(userId))
         {
-            return _connectedUsers.TryAdd(userId, new ConnectionInfo(sessionId, UiId.Home, 0));
+            var chatPlayer = new ChatPlayer
+            {
+                Nickname = _playerDatabase.GetPlayerName(userId),
+                PlayerId = userId
+            };
+            
+            result = _connectedUsers.TryAdd(userId, new ConnectionInfo(sessionId, chatPlayer));
         }
-
-        _connectedUsers[userId].Guid = sessionId;
-        return true;
+        else
+        {
+            _connectedUsers[userId].Guid = sessionId;
+        }
+        
+        /*if (_services[sessionId][ServiceId.ServiceChat] is IServiceChat chatService)
+        {
+            _globalChatRoom.AddToRoom(sessionId, chatService);
+        }*/
+        return result;
     }
 
     public bool RemoveUser(uint userId)
     {
         if (!UserConnected(userId)) return false;
+
+        /*var playerGuid = _connectedUsers[userId].Guid;
+        if (_services[playerGuid][ServiceId.ServiceChat] is IServiceChat chatService)
+        {
+            _globalChatRoom.RemoveFromRoom(playerGuid, chatService);
+        }*/
 
         var customId = _connectedUsers[userId].CustomGameId;
         if (!customId.HasValue || !_customGamePlayerLists.TryGetValue(customId.Value, out var list))
@@ -167,11 +191,19 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         if (player?.GameInstanceId == null) return;
         _gameInstances.TryGetValue(player.GameInstanceId, out var gameInstance);
         gameInstance?.RemoveService(sessionId);
+        gameInstance?.RemoveService(player.Guid);
     }
 
     public List<CustomGameInfo> GetCustomGames()
     {
         return _customGamePlayerLists.Values.Select(x => x.custom.GameInfo).ToList();
+    }
+    
+    private bool GetCustomGame(uint playerId, out CustomGamePlayerGroup? custom)
+    {
+        var playerCustomGame = _connectedUsers[playerId].CustomGameId;
+        custom = playerCustomGame == null ? null : _customGamePlayerLists[playerCustomGame.Value].custom;
+        return custom != null;
     }
 
     public ulong? AddCustomGame(string name, string password, uint playerId)
@@ -180,14 +212,28 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         var newCustom = CatalogueFactory.CreateCustomGame(name, password,
             Databases.PlayerDatabase.GetPlayerProfile(playerId).Nickname ?? string.Empty);
         var playerGuid = _connectedUsers[playerId].Guid;
-        var playerSessions = new ConcurrentDictionary<Guid, TcpSession>();
-        playerSessions.TryAdd(playerGuid, server.FindSession(playerGuid));
-        var sender = new SessionSender(playerSessions);
+        var sender = new SessionSender(server);
+        sender.Subscribe(playerGuid);
         var matchService = new ServiceMatchmaker(sender);
-        var playerGroup = new CustomGamePlayerGroup(matchService) { Password = password, GameInfo = newCustom };
+        var customRoom = new RoomIdCustomGame
+        {
+            CustomGameId = newCustom.Id
+        };
+        
+        var playerGroup = new CustomGamePlayerGroup(matchService)
+        {
+            Password = password, 
+            GameInfo = newCustom,
+            ChatRoom = new ChatRoom(customRoom, new SessionSender(server))
+        };
         _connectedUsers[playerId].CustomGameId = newCustom.Id;
         playerGroup.AddPlayer(playerId, true, _playerDatabase.GetPlayerProfile(playerId));
-        _customGamePlayerLists.Add(newCustom.Id, (playerGroup, playerSessions));
+        if (_services[playerGuid][ServiceId.ServiceChat] is IServiceChat chatService)
+        {
+            playerGroup.ChatRoom.AddToRoom(playerGuid, chatService);
+        }
+        
+        _customGamePlayerLists.Add(newCustom.Id, (playerGroup, sender));
         return newCustom.Id;
     }
 
@@ -197,7 +243,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         foreach (var playerId in list.custom.Players.Select(player => player.Id))
         {
             if(UserConnected(playerId)) 
-                _connectedUsers[playerId].CustomGameId = null;
+                RemoveFromCustomGame(playerId);
         }
         return _customGamePlayerLists.Remove(gameId);
     }
@@ -206,19 +252,22 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
     {
         if (!UserConnected(playerId) || !_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return CustomGameJoinResult.NoSuchGame;
         var playerGuid = _connectedUsers[playerId].Guid;
-        var playerSession = server.FindSession(playerGuid);
         if (password != customGame.custom.Password) return CustomGameJoinResult.WrongPassword;
         if (!customGame.custom.GameInfo.AllowBackfilling &&
             customGame.custom.GameInfo.Status != CustomGameStatus.Preparing) return CustomGameJoinResult.GameStarted;
         if (customGame.custom.Players.Count >= 10) return CustomGameJoinResult.FullTeams;
-        customGame.customSessions.TryAdd(playerGuid, playerSession);
+        customGame.customSender.Subscribe(playerGuid);
         if (customGame.custom.AddPlayer(playerId, false, _playerDatabase.GetPlayerProfile(playerId)))
         {
             _connectedUsers[playerId].CustomGameId = gameId;
+            if (_services[playerGuid][ServiceId.ServiceChat] is IServiceChat chatService)
+            {
+                customGame.custom.ChatRoom.AddToRoom(playerGuid, chatService);
+            }
             return CustomGameJoinResult.Accepted;
         }
 
-        customGame.customSessions.TryRemove(playerGuid, out _);
+        customGame.customSender.Unsubscribe(playerGuid);
         return CustomGameJoinResult.FullTeams;
     }
 
@@ -229,19 +278,21 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
         if (!_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return false;
-        if (customGame.custom.RemovePlayer(playerId))
+        var playerGuid = _connectedUsers[playerId].Guid;
+        if (_services[playerGuid][ServiceId.ServiceChat] is IServiceChat chatService)
         {
-            if (!_customGamePlayerLists.ContainsKey(gameId) ||
-                customGame.customSessions.TryRemove(_connectedUsers[playerId].Guid, out _))
-            {
-                _connectedUsers[playerId].CustomGameId = null;
-                var matchService =
-                    _services[_connectedUsers[playerId].Guid][ServiceId.ServiceMatchmaker] as IServiceMatchmaker;
-                matchService?.SendExitCustomGame();
-                return true;
-            }
+            customGame.custom.ChatRoom.RemoveFromRoom(playerGuid, chatService);
         }
-        return false;
+
+        customGame.custom.RemovePlayer(playerId);
+        
+        customGame.customSender.Unsubscribe(playerGuid);
+        
+        _connectedUsers[playerId].CustomGameId = null;
+        var matchService =
+            _services[playerGuid][ServiceId.ServiceMatchmaker] as IServiceMatchmaker;
+        matchService?.SendExitCustomGame();
+        return true;
     }
 
     public bool KickFromCustomGame(uint playerId, uint kickerId)
@@ -251,17 +302,18 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
         if (!_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return false;
-        if (customGame.custom.KickPlayer(playerId, kickerId) &&
-            customGame.customSessions.TryRemove(_connectedUsers[playerId].Guid, out _))
+        if (!customGame.custom.KickPlayer(playerId, kickerId)) return false;
+        var playerGuid = _connectedUsers[playerId].Guid;
+        customGame.customSender.Unsubscribe(playerGuid);
+        if (_services[playerGuid][ServiceId.ServiceChat] is IServiceChat chatService)
         {
-            _connectedUsers[playerId].CustomGameId = null;
-            var matchService =
-                _services[_connectedUsers[playerId].Guid][ServiceId.ServiceMatchmaker] as IServiceMatchmaker;
-            matchService?.SendExitCustomGame();
-            return true;
+            customGame.custom.ChatRoom.RemoveFromRoom(playerGuid, chatService);
         }
-
-        return false;
+        _connectedUsers[playerId].CustomGameId = null;
+        var matchService =
+            _services[playerGuid][ServiceId.ServiceMatchmaker] as IServiceMatchmaker;
+        matchService?.SendExitCustomGame();
+        return true;
     }
 
     public bool SwitchTeam(uint playerId)
@@ -321,12 +373,8 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         
         if (map == null) return false;
         if (!customGame.custom.StartIntoLobby(playerId)) return false;
-        
-        var gameInstance = new GameInstance(matchServer)
-        {
-            GameInstanceId = Guid.NewGuid().ToString(), 
-            GameInitiator = customGame.custom
-        };
+
+        var gameInstance = new GameInstance(matchServer, server, Guid.NewGuid().ToString(), customGame.custom);
         customGame.custom.GameInstanceId = gameInstance.GameInstanceId;
         
         gameInstance.SetMap(map);
@@ -347,6 +395,49 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             UpdateScene(player.Id, scene, sceneService);
         }
         return true;
+    }
+
+    private ChatRoom? GetChatRoom(uint playerId, RoomId roomId)
+    {
+        if (!UserConnected(playerId)) return null;
+        return roomId.Type switch
+        {
+            RoomIdType.Team => GetGameInstance(playerId)?.GetChatRoom(roomId),
+            RoomIdType.Squad => null, // add later
+            RoomIdType.CustomGame => GetCustomGame(playerId, out var custom) 
+                ? custom?.ChatRoom.RoomId.Equals(roomId) == true
+                    ? custom?.ChatRoom 
+                    : null 
+                : null,
+            RoomIdType.Global => _globalChatRoom,
+            _ => throw new ArgumentOutOfRangeException()
+        };
+    }
+
+    public bool SendMessage(uint playerId, RoomId roomId, string message)
+    {
+        var chatRoom = GetChatRoom(playerId, roomId);
+        if (chatRoom == null) return false;
+        chatRoom.SendMessage(_connectedUsers[playerId].ChatInfo, message);
+        return true;
+    }
+
+    public PrivateMessageFailReason? SendMessage(uint playerId, uint receiver, string message)
+    {
+        if (!UserConnected(playerId) || !UserConnected(receiver)) return PrivateMessageFailReason.Offline;
+        if (_connectedUsers[receiver].GameInstanceId != null) return PrivateMessageFailReason.Match;
+        if (_playerDatabase.GetIgnoredUsers(receiver).Contains(playerId)) return PrivateMessageFailReason.Ignor;
+        var me = _connectedUsers[playerId];
+        var them = _connectedUsers[receiver];
+        var chatPlayerMe = me.ChatInfo;
+        var chatPlayerThem = them.ChatInfo;
+        if (_services[me.Guid][ServiceId.ServiceChat] is not IServiceChat myChatService || 
+            _services[them.Guid][ServiceId.ServiceChat] is not IServiceChat theirChatService) 
+            return PrivateMessageFailReason.Offline;
+        
+        myChatService.SendPrivateMessage(chatPlayerMe, chatPlayerThem, message);
+        theirChatService.SendPrivateMessage(chatPlayerMe, chatPlayerThem, message);
+        return null;
     }
 
     public IGameInstance? GetGameInstance(uint? playerId)
