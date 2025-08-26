@@ -11,7 +11,7 @@ public class MatchSession : TcpSession
 
         public MatchSession(TcpServer server) : base(server)
         {
-            _sender = new SessionSender(Id, this);
+            _sender = new SessionSender(server, Id, this);
             _serviceDispatcher = new MatchServiceDispatcher(_sender, Id);
         }
 

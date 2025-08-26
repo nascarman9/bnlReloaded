@@ -58,6 +58,19 @@ public class BufferSender : IBufferedSender
             _stream.Write(buffer);
         }
     }
+    
+    public void Subscribe(Guid sessionId)
+    {
+    }
+
+    public void Unsubscribe(Guid sessionId)
+    {
+    }
+
+    public void UnsubscribeAll()
+    {
+        
+    }
 
     private static byte[] AppendMessageLength(BinaryWriter writer)
     {

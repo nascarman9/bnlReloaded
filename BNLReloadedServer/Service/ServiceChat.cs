@@ -1,4 +1,5 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 
@@ -19,6 +20,8 @@ public class ServiceChat(ISender sender) : IServiceChat
         MessageSendRoomMessage = 8, 
         MessageSendServiceMessage = 9
     }
+    
+    private readonly IRegionServerDatabase _serverDatabase = Databases.RegionServerDatabase;
     
     private static BinaryWriter CreateWriter()
     {
@@ -72,6 +75,12 @@ public class ServiceChat(ISender sender) : IServiceChat
     {
         var playerId = reader.ReadUInt32();
         var message = reader.ReadString();
+        if (sender.AssociatedPlayerId == null) return;
+        var result = _serverDatabase.SendMessage(sender.AssociatedPlayerId.Value, playerId, message);
+        if (result != null)
+        {
+            SendPrivateMessageFailed(playerId, result.Value);
+        }
     }
 
     public void SendPrivateMessageFailed(uint toId, PrivateMessageFailReason reason)
@@ -97,6 +106,8 @@ public class ServiceChat(ISender sender) : IServiceChat
     {
         var roomId = RoomId.ReadVariant(reader);
         var message = reader.ReadString();
+        if (sender.AssociatedPlayerId == null) return;
+        _serverDatabase.SendMessage(sender.AssociatedPlayerId.Value, roomId, message);
     }
 
     public void SendServiceMessage(RoomId? roomId, string message, bool isLocalized, Dictionary<string, string> arguments)

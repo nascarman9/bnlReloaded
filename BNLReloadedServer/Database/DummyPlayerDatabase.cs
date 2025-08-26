@@ -243,6 +243,11 @@ public class DummyPlayerDatabase : IPlayerDatabase
         return uint.Parse(authToken);
     }
 
+    public string GetPlayerName(uint playerId)
+    {
+        return TestUserName;
+    }
+
     public PlayerUpdate GetFullPlayerUpdate(uint playerId)
     {
         var globalLogic = CatalogueHelper.GlobalLogic;
@@ -341,5 +346,10 @@ public class DummyPlayerDatabase : IPlayerDatabase
             deviceLevels[deviceCard.Key] = dCard.DeviceLevels.Count;
         }
         return deviceLevels;
+    }
+
+    public List<uint> GetIgnoredUsers(uint playerId)
+    {
+        return [];
     }
 }

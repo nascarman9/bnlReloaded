@@ -1,11 +1,12 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
 
 namespace BNLReloadedServer.Database;
 
 public interface IGameInstance
 {
-    public void LinkGuidToPlayer(uint userId, Guid guid);
+    public void LinkGuidToPlayer(uint userId, Guid guid, Guid regionGuid);
     public void UserEnteredLobby(uint userId);
     // For when players leave via alt+f4
     public void PlayerDisconnected(uint userId);
@@ -15,6 +16,7 @@ public interface IGameInstance
     public void RegisterServices(Guid sessionId, Dictionary<ServiceId, IService> services);
     public void RemoveService(Guid sessionId);
     public void CreateLobby(Key gameModeKey, MapInfo? mapInfo);
+    public ChatRoom? GetChatRoom(RoomId roomId);
     public void SwapHero(uint playerId, Key hero);
     public void UpdateDeviceSlot(uint playerId, int slot, Key? deviceKey);
     public void SwapDevices(uint playerId, int slot1, int slot2);

@@ -31,6 +31,8 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
     
     public string? GameInstanceId { get; set; }
 
+    public required ChatRoom ChatRoom { get; init; }
+
     private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam1 { get; } = new();
     private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam2 { get; } = new();
 
@@ -98,7 +100,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
             
             if (Players.Count <= 0)
             {
-                Databases.RegionServerDatabase.RemoveCustomGame(GameInfo.Id);
+                CloseCustomGame();
                 return;
             }
             
@@ -135,6 +137,12 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
             CustomGameUpdate(players: Players);
         });
         return true;
+    }
+
+    public void CloseCustomGame()
+    {
+        Databases.RegionServerDatabase.RemoveCustomGame(GameInfo.Id);
+        ChatRoom.ClearRoom();
     }
 
     public void SwapTeam(uint playerId)
