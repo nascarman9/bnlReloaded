@@ -95,6 +95,18 @@ public class MapBinary
     return map3D;
   }
 
+  public byte[] ToBinary()
+  {
+    var output = new MemoryStream();
+    var binaryWriter = new BinaryWriter(output);
+    binaryWriter.Write((ushort) SizeX);
+    binaryWriter.Write((ushort) SizeY);
+    binaryWriter.Write((ushort) SizeZ);
+    binaryWriter.Write(data);
+    binaryWriter.Flush();
+    return output.ToArray().Zip(3).ToArray();
+  }
+
   public static byte[] Pack(BlockMap3D map)
   {
     var output = new MemoryStream();
@@ -114,7 +126,7 @@ public class MapBinary
       }
     }
     binaryWriter.Flush();
-    return output.ToArray().Zip(9).ToArray();
+    return output.ToArray().Zip(3).ToArray();
   }
 
   public static void DecodeColors(BlockMap3D map, byte[]? binary)
@@ -145,6 +157,6 @@ public class MapBinary
     foreach (var block in map)
       binaryWriter.Write(block.Color);
     binaryWriter.Flush();
-    return output.ToArray().Zip(9).ToArray();
+    return output.ToArray().Zip(3).ToArray();
   }
 }

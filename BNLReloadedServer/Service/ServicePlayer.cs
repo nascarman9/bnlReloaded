@@ -92,7 +92,7 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         });
         if (!sender.AssociatedPlayerId.HasValue) return;
         var scene = _serverDatabase.GetLastScene(sender.AssociatedPlayerId.Value);
-        _serverDatabase.UpdateScene(sender.AssociatedPlayerId.Value, scene, serviceScene);
+        _serverDatabase.UpdateScene(sender.AssociatedPlayerId.Value, scene, serviceScene, scene is not SceneMainMenu);
         SendPlayerUpdate(_playerDatabase.GetFullPlayerUpdate(sender.AssociatedPlayerId.Value));
     }
 

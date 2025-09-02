@@ -12,7 +12,7 @@ public interface IGameInstance
     public void PlayerDisconnected(uint userId);
     // For when players leave via disconnect button
     public void PlayerLeftInstance(uint userId);
-    public void SetMap(MapData map);
+    public void SetMap(MapInfo mapInfo, MapData map);
     public void RegisterServices(Guid sessionId, Dictionary<ServiceId, IService> services);
     public void RemoveService(Guid sessionId);
     public void CreateLobby(Key gameModeKey, MapInfo? mapInfo);
@@ -28,5 +28,8 @@ public interface IGameInstance
     public void VoteForMap(uint playerId, Key mapKey);
     public void PlayerReady(uint playerId);
     public void LoadProgressUpdate(uint playerId, float progress);
+    public void StartMatch(List<PlayerLobbyState> playerList);
+    public void SendUserToZone(uint playerId);
+    public void PlayerZoneReady(uint playerId);
 
 }

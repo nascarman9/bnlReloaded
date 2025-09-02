@@ -7,15 +7,63 @@ using Timer = System.Timers.Timer;
 
 namespace BNLReloadedServer.ServerTypes;
 
-public class GameLobby(IServiceLobby serviceLobby) : Updater
+public class GameLobby : Updater
 {
-    private LobbyData LobbyData { get; set; }
+    private LobbyData LobbyData { get; }
 
     private (LobbyTimerType timerType, Timer timer)? _currentTimer;
     
     private readonly ConcurrentDictionary<Timer, uint> _requeueTimers = new();
+    private readonly ConcurrentDictionary<uint, LobbyTimer> _requeueLobbyTimers = new();
     
     private readonly IPlayerDatabase _playerDatabase = Databases.PlayerDatabase;
+    private readonly IServiceLobby _serviceLobby;
+    private readonly IGameInstance _gameInstance;
+
+    public GameLobby(IServiceLobby serviceLobby, IGameInstance gameInstance, string sessionName, Key matchKey, Key gameModeKey, List<MapInfo> maps)
+    {
+        _serviceLobby = serviceLobby;
+        _gameInstance = gameInstance;
+        LobbyData = new LobbyData();
+        var gameCard = Databases.Catalogue.GetCard<CardGameMode>(gameModeKey);
+        var timer = gameCard?.LobbyMode switch
+        {
+            LobbyModeFreePick lobbyFree => new LobbyTimer
+            {
+                TimerType = LobbyTimerType.Selection,
+                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(lobbyFree.SelectionTime).ToUnixTimeMilliseconds()
+            },
+            LobbyModeDraftPick lobbyDraft => new LobbyTimer
+            {
+                TimerType = LobbyTimerType.Wait,
+                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(lobbyDraft.WaitTime).ToUnixTimeMilliseconds()
+            },
+            _ => new LobbyTimer
+            {
+                TimerType = LobbyTimerType.Selection,
+                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(60).ToUnixTimeMilliseconds()
+            }
+        };
+
+        var initLobbyUpdate = new LobbyUpdate
+        {
+            MatchMode = matchKey,
+            GameMode = gameModeKey,
+            Maps = maps.ConvertAll(info => new LobbyMapData
+            {
+                Info = info,
+                PlayerVotes = []
+            }),
+            Started = false,
+            Timer = timer,
+            SessionName = sessionName
+        };
+        LobbyData.UpdateData(initLobbyUpdate);
+        SetUpTimerEvent();
+    }
 
     private void SetUpTimerEvent()
     {
@@ -40,57 +88,6 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
         _currentTimer.Value.timer.Enabled = true;
     }
     
-    public void CreateLobbyData(string sessionName, Key matchKey, Key gameModeKey, List<MapInfo> maps)
-    {
-        LobbyData = new LobbyData();
-        var gameCard = Databases.Catalogue.GetCard<CardGameMode>(gameModeKey);
-        LobbyTimer timer;
-        if (gameCard == null)
-        {
-            timer = new LobbyTimer
-            {
-                TimerType = LobbyTimerType.Selection,
-                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
-                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(60).ToUnixTimeMilliseconds()
-            };
-        }
-        else if (gameCard.LobbyMode is LobbyModeDraftPick lobbyDraft)
-        {
-            timer = new LobbyTimer
-            {
-                TimerType = LobbyTimerType.Wait,
-                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
-                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(lobbyDraft.WaitTime).ToUnixTimeMilliseconds()
-            };
-        }
-        else
-        {
-            var lobbyFree = (LobbyModeFreePick)gameCard.LobbyMode!;
-            timer = new LobbyTimer
-            {
-                TimerType = LobbyTimerType.Selection,
-                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
-                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(lobbyFree.SelectionTime).ToUnixTimeMilliseconds()
-            };
-        }
-
-        var initLobbyUpdate = new LobbyUpdate
-        {
-            MatchMode = matchKey,
-            GameMode = gameModeKey,
-            Maps = maps.ConvertAll(info => new LobbyMapData
-            {
-                Info = info,
-                PlayerVotes = []
-            }),
-            Started = false,
-            Timer = timer,
-            SessionName = sessionName
-        };
-        LobbyData.UpdateData(initLobbyUpdate);
-        SetUpTimerEvent();
-    }
-
     public void AddPlayer(uint playerId, TeamType team)
     {
         if (!LobbyData.Players.TryGetValue(playerId, out var value))
@@ -121,6 +118,12 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
                 DeviceLevels = deviceLevels
             };
             LobbyData.Players.TryAdd(playerId, playerState);
+            if (LobbyData.Timer.TimerType == LobbyTimerType.Requeue)
+            {
+                LobbyData.RequeuePlayers[team].Add(playerId);
+                SendLobbyUpdate(players: LobbyData.Players.Values.ToList(), requeuePlayers: LobbyData.RequeuePlayers);
+                return;
+            }
         }
         else
         {
@@ -138,7 +141,7 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
 
     public void PlayerLeft(uint playerId)
     {
-        LobbyData.Players.TryRemove(playerId, out _);
+        LobbyData.Players.Remove(playerId, out _);
         SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
     }
 
@@ -161,7 +164,7 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
         SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
     }
 
-    private void UpdateDevices(PlayerLobbyState player, Dictionary<int, Key> devices)
+    private static void UpdateDevices(PlayerLobbyState player, Dictionary<int, Key> devices)
     {
         if (player.Devices == null) return;
         foreach (var slot in devices.Keys)
@@ -215,7 +218,7 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
         SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
     }
 
-    private void UpdatePerks(PlayerLobbyState player, List<Key> perks)
+    private static void UpdatePerks(PlayerLobbyState player, List<Key> perks)
     {
         if (player.Perks == null) return;
         player.Perks = perks;
@@ -265,7 +268,7 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
 
     public void VoteForMap(uint playerId, Key mapKey)
     {
-        if (!LobbyData.Players.TryGetValue(playerId, out var player)) return;
+        if (!LobbyData.Players.ContainsKey(playerId)) return;
         var map = LobbyData.Maps.FirstOrDefault(map => (map.Info as MapInfoCard)?.MapKey == mapKey);
         map?.PlayerVotes?.Add(playerId);
         SendLobbyUpdate(maps: LobbyData.Maps);
@@ -285,7 +288,42 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
     public void LoadProgressUpdate(uint playerId, float progress)
     {
         LobbyData.PlayersProgress[playerId] = progress;
-        serviceLobby.SendMatchLoadingProgress(LobbyData.PlayersProgress.ToDictionary());
+        _serviceLobby.SendMatchLoadingProgress(LobbyData.PlayersProgress.ToDictionary());
+    }
+
+    public PlayerLobbyState GetPlayerLobbyState(uint playerId)
+    {
+        return LobbyData.Players[playerId];
+    }
+
+    private LobbyTimer GetRequeueTimer(uint playerId)
+    {
+        if (_requeueLobbyTimers.TryGetValue(playerId, out var value))
+        {
+            return value;
+        }
+        
+        return LobbyData.GameMode?.LobbyMode switch
+        {
+            LobbyModeFreePick lobbyFree => new LobbyTimer
+            {
+                TimerType = LobbyTimerType.Requeue,
+                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(lobbyFree.ReconnectSelectionTime).ToUnixTimeMilliseconds()
+            },
+            LobbyModeDraftPick lobbyDraft => new LobbyTimer
+            {
+                TimerType = LobbyTimerType.Requeue,
+                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(lobbyDraft.ReconnectSelectionTime).ToUnixTimeMilliseconds()
+            },
+            _ => new LobbyTimer
+            {
+                TimerType = LobbyTimerType.Requeue,
+                StartTime = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds(),
+                EndTime = (ulong)DateTimeOffset.Now.AddSeconds(60).ToUnixTimeMilliseconds()
+            }
+        };
     }
 
     private void SendLobbyUpdate(Key? matchModeKey = null, Key? gameModeKey = null, List<LobbyMapData>? maps = null,
@@ -293,7 +331,7 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
         Dictionary<TeamType, List<uint>>? requeuePlayers = null, Dictionary<TeamType, LobbyTimer>? requeueTimers = null,
         string? sessionName = null)
     {
-        serviceLobby.SendLobbyUpdate(
+        _serviceLobby.SendLobbyUpdate(
             new LobbyUpdate
             {
                 MatchMode = matchModeKey,
@@ -308,18 +346,29 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
             });
     }
 
-    public LobbyUpdate GetLobbyUpdate()
+    public LobbyUpdate GetLobbyUpdate(uint playerId)
     {
+        var timer = LobbyData.Timer.TimerType == LobbyTimerType.Requeue ? GetRequeueTimer(playerId) : LobbyData.Timer;
+        if (timer.TimerType == LobbyTimerType.Requeue && !LobbyData.Players.ContainsKey(playerId))
+        {
+            var requeueTimer = new Timer(timer.EndTime - timer.StartTime);
+            requeueTimer.AutoReset = false;
+            requeueTimer.Elapsed += OnRequeueTimerElapsed;
+            requeueTimer.Enabled = true;
+            _requeueTimers.TryAdd(requeueTimer, playerId);
+            _requeueLobbyTimers.TryAdd(playerId, timer);
+        }
+        
         return new LobbyUpdate
         {
             MatchMode = LobbyData.MatchModeKey,
             GameMode = LobbyData.GameModeKey,
             Maps = LobbyData.Maps,
             Started = LobbyData.IsStarted,
-            Timer = LobbyData.Timer,
+            Timer = timer,
             Players = LobbyData.Players.Values.ToList(),
-            RequeuePlayers = LobbyData.RequeuePlayers.ToDictionary(),
-            RequeueTimers = LobbyData.RequeueTimers.ToDictionary(),
+            RequeuePlayers = LobbyData.RequeuePlayers,
+            RequeueTimers = LobbyData.RequeueTimers,
             SessionName = LobbyData.SessionName
         };
     }
@@ -382,10 +431,23 @@ public class GameLobby(IServiceLobby serviceLobby) : Updater
         _currentTimer = null;
 
         LobbyData.Timer.TimerType = LobbyTimerType.Requeue;
+        EnqueueAction(() => _gameInstance.StartMatch(LobbyData.Players.Values.ToList()));
     }
 
     private void OnRequeueTimerElapsed(object? sender, ElapsedEventArgs e)
     {
-        
+        if (sender is not Timer timer) return;
+        _requeueTimers.Remove(timer, out var playerId);
+        _requeueLobbyTimers.Remove(playerId, out _);
+        timer.Stop();
+        timer.Dispose();
+
+        EnqueueAction(() =>
+        {
+            LobbyData.RequeuePlayers[LobbyData.GetPlayerTeam(playerId)].Remove(playerId);
+            SendLobbyUpdate(requeuePlayers: LobbyData.RequeuePlayers);
+
+            _gameInstance.SendUserToZone(playerId);
+        });
     }
 }

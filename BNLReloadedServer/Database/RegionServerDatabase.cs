@@ -120,7 +120,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         _connectedUsers[userId].UiDuration = duration;
     }
 
-    public bool UpdateScene(uint userId, Scene scene, IServiceScene sceneService)
+    public bool UpdateScene(uint userId, Scene scene, IServiceScene sceneService, bool enterInstance)
     {
         if(!UserConnected(userId)) return false;
         _connectedUsers[userId].ActiveScene = scene;
@@ -129,7 +129,8 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         {
             case SceneType.Lobby:
             case SceneType.Zone:
-                sceneService.SendEnterInstance(server.Address, 28102, _playerDatabase.GetAuthTokenForPlayer(userId));
+                if (enterInstance)
+                    sceneService.SendEnterInstance(server.Address, 28102, _playerDatabase.GetAuthTokenForPlayer(userId));
                 break;
             case SceneType.MainMenu:
             default:
@@ -138,10 +139,20 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         return true;
     }
 
+    public bool UpdateScene(uint userId, Scene scene)
+    {
+        if(!UserConnected(userId)) return false;
+        var playerInfo = _connectedUsers[userId];
+        var guid = playerInfo.Guid;
+        var oldScene = playerInfo.ActiveScene;
+        playerInfo.ActiveScene = scene;
+        return _services[guid][ServiceId.ServiceScene] is IServiceScene sceneService && UpdateScene(userId, scene, sceneService, oldScene is SceneMainMenu);
+    }
+
     public Scene GetLastScene(uint userId)
     {
         if (!UserConnected(userId)) return new SceneMainMenu();
-        return _connectedUsers[userId].ActiveScene ?? new SceneMainMenu();
+        return _connectedUsers[userId].GameInstanceId != null ? _connectedUsers[userId].ActiveScene ?? new SceneMainMenu() : new SceneMainMenu();
     }
 
     public void UserEnterScene(uint userId)
@@ -245,6 +256,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             if(UserConnected(playerId)) 
                 RemoveFromCustomGame(playerId);
         }
+        list.custom.Stop();
         return _customGamePlayerLists.Remove(gameId);
     }
 
@@ -371,13 +383,13 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             map = Databases.Catalogue.GetCard<CardMap>(mapCard.MapKey)?.Data;
         }
         
-        if (map == null) return false;
+        if (map == null || customGame.custom.GameInfo.MapInfo == null) return false;
         if (!customGame.custom.StartIntoLobby(playerId)) return false;
 
         var gameInstance = new GameInstance(matchServer, server, Guid.NewGuid().ToString(), customGame.custom);
         customGame.custom.GameInstanceId = gameInstance.GameInstanceId;
         
-        gameInstance.SetMap(map);
+        gameInstance.SetMap(customGame.custom.GameInfo.MapInfo, map);
         gameInstance.CreateLobby(CatalogueHelper.ModeCustom.Key, customGame.custom.GameInfo.MapInfo);
         _gameInstances.TryAdd(gameInstance.GameInstanceId, gameInstance);
         var playerArray = customGame.custom.Players.ToArray();
@@ -392,7 +404,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
                 MyTeam = player.Team,
                 GameMode = CatalogueHelper.ModeCustom.Key
             };
-            UpdateScene(player.Id, scene, sceneService);
+            UpdateScene(player.Id, scene, sceneService, true);
         }
         return true;
     }
@@ -406,7 +418,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             RoomIdType.Squad => null, // add later
             RoomIdType.CustomGame => GetCustomGame(playerId, out var custom) 
                 ? custom?.ChatRoom.RoomId.Equals(roomId) == true
-                    ? custom?.ChatRoom 
+                    ? custom.ChatRoom 
                     : null 
                 : null,
             RoomIdType.Global => _globalChatRoom,
@@ -445,5 +457,24 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         if (playerId == null) return null;
         var playerGameInstance = _connectedUsers[playerId.Value].GameInstanceId;
         return playerGameInstance == null ? null : _gameInstances[playerGameInstance];
+    }
+
+    public bool RemoveGameInstance(string gameInstanceId)
+    {
+        foreach (var playerId in _connectedUsers.Keys)
+        {
+            RemoveFromGameInstance(playerId, gameInstanceId);
+        }
+        return _gameInstances.TryRemove(gameInstanceId, out _);
+    }
+
+    public bool RemoveFromGameInstance(uint playerId, string gameInstanceId)
+    {
+        if(!UserConnected(playerId)) return false;
+        if (_connectedUsers[playerId].GameInstanceId != gameInstanceId) return false;
+        _connectedUsers[playerId].GameInstanceId = null;
+        UpdateScene(playerId, new SceneMainMenu());
+
+        return true;
     }
 }

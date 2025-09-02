@@ -26,8 +26,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
     }
 
     public List<CustomGamePlayer> Players { get; } = [];
-
-    public int Spectators => _spectators;
+    public List<uint> Spectators { get; } = [];
     
     public string? GameInstanceId { get; set; }
 
@@ -37,7 +36,6 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
     private ConcurrentQueue<CustomGamePlayer> ChangeTeamRequestsTeam2 { get; } = new();
 
     private readonly CustomGameLogic _customLogic = CatalogueHelper.GlobalLogic.CustomGame!;
-    private int _spectators;
 
     private TeamType GetBalancedTeam()
     {
@@ -252,11 +250,11 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
             resourceCap: settings.ResourceCap, initResources: settings.InitResource);
     }
 
-    public void AddSpectator()
+    public void AddSpectator(uint playerId)
     {
-        if (Spectators >= _customLogic.MaxSpectatorsPerMatch)
+        if (Spectators.Count >= _customLogic.MaxSpectatorsPerMatch)
             return;
-        Interlocked.Increment(ref _spectators);
+        Spectators.Add(playerId);
     }
 
     public bool StartIntoLobby(uint playerId)
@@ -276,11 +274,53 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
         CustomGameUpdate(status: GameInfo.Status);
     }
 
+    public void ClearInstance()
+    {
+        GameInstanceId = null;
+        GameInfo.Status = CustomGameStatus.Preparing;
+        CustomGameUpdate(status: GameInfo.Status);
+    }
+
     public TeamType GetTeamForPlayer(uint playerId)
     {
         var playerArray = Players.ToArray();
         var player = playerArray.FirstOrDefault(p => p.Id == playerId);
         return player?.Team ?? TeamType.Team1; 
+    }
+
+    public bool IsPlayerSpectator(uint playerId)
+    {
+        return Spectators.Contains(playerId);
+    }
+
+    public Key GetGameMode()
+    {
+        return CatalogueHelper.ModeCustom.Key;
+    }
+
+    public bool CanSwitchHero()
+    {
+        return _gameInfo.HeroSwitch;
+    }
+
+    public bool IsMapEditor()
+    {
+        return false;
+    }
+
+    public float GetResourceCap()
+    {
+        return _gameInfo.ResourceCap;
+    }
+
+    public float GetResourceAmount()
+    {
+        return _gameInfo.InitResource;
+    }
+
+    public long? GetBuildPhaseEndTime(DateTimeOffset startTime)
+    {
+        return startTime.AddSeconds((long) _gameInfo.BuildTime).ToUnixTimeMilliseconds();
     }
 
     public CustomGameUpdate GetCustomGameUpdate()

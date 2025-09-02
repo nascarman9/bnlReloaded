@@ -7,7 +7,8 @@ public interface IRegionServerDatabase
 {
     public bool UserConnected(uint userId);
     public void UserUiChanged(uint userId, UiId uiId, float duration);
-    public bool UpdateScene(uint userId, Scene scene, IServiceScene sceneService);
+    public bool UpdateScene(uint userId, Scene scene, IServiceScene sceneService, bool enterInstance);
+    public bool UpdateScene(uint userId, Scene scene);
     public void UserEnterScene(uint userId);
     public Scene GetLastScene(uint userId);
     public bool RegisterService(Guid sessionId, IService service, ServiceId serviceId);
@@ -30,4 +31,6 @@ public interface IRegionServerDatabase
     public bool SendMessage(uint playerId, RoomId roomId, string message);
     public PrivateMessageFailReason? SendMessage(uint playerId, uint receiver, string message);
     public IGameInstance? GetGameInstance(uint? playerId);
+    public bool RemoveGameInstance(string gameInstanceId);
+    public bool RemoveFromGameInstance(uint playerId, string gameInstanceId);
 }

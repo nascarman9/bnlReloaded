@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 
@@ -109,6 +110,8 @@ public class ServiceZone(ISender sender) : IServiceZone
         MessageExecuteMapEditorCommand = 97
     }
     
+    private IGameInstance? GameInstance => Databases.RegionServerDatabase.GetGameInstance(sender.AssociatedPlayerId);
+    
     private static BinaryWriter CreateWriter()
     {
         var memStream =  new MemoryStream();
@@ -127,7 +130,7 @@ public class ServiceZone(ISender sender) : IServiceZone
 
     private void ReceiveZoneReady(BinaryReader reader)
     {
-        
+        GameInstance?.PlayerZoneReady(sender.AssociatedPlayerId!.Value);
     }
 
     private void ReceiveZoneLeave(BinaryReader reader)
@@ -153,7 +156,10 @@ public class ServiceZone(ISender sender) : IServiceZone
 
     private void ReceiveExitMatch(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value);    
+        }
     }
 
     private void ReceiveFinishTutorial(BinaryReader reader)
