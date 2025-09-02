@@ -10,13 +10,12 @@ public class LobbyData
     public Key MatchModeKey;
     public List<LobbyMapData> Maps = [];
     public bool IsStarted;
-    public readonly ConcurrentDictionary<uint, PlayerLobbyState> Players = new();
-    public readonly ConcurrentDictionary<TeamType, uint> Chat = new();
+    public readonly Dictionary<uint, PlayerLobbyState> Players = new();
     public LobbyTimer Timer;
     public Key GameModeKey;
-    public readonly ConcurrentDictionary<TeamType, List<uint>> RequeuePlayers = new();
-    public readonly ConcurrentDictionary<TeamType, LobbyTimer> RequeueTimers = new();
-    public readonly ConcurrentDictionary<uint, float> PlayersProgress = new();
+    public readonly Dictionary<TeamType, List<uint>> RequeuePlayers = new();
+    public readonly Dictionary<TeamType, LobbyTimer> RequeueTimers = new();
+    public readonly Dictionary<uint, float> PlayersProgress = new();
 
     public string? SessionName { get; private set; }
 
@@ -28,8 +27,8 @@ public class LobbyData
 
     public int MapVotes(Key map)
     {
-      var lobbyMapData = Maps.Find((Predicate<LobbyMapData>) (m => m.Info.GetKey() == map));
-      return lobbyMapData != null ? lobbyMapData.PlayerVotes.Count : -1;
+        var lobbyMapData = Maps.Find((Predicate<LobbyMapData>) (m => m.Info.GetKey() == map));
+        return lobbyMapData != null ? lobbyMapData.PlayerVotes.Count : -1;
     }
 
     public PlayerLobbyState? GetPlayer(uint playerId) => Players.GetValueOrDefault(playerId);

@@ -181,6 +181,7 @@ public class ServiceLobby(ISender sender) : IServiceLobby
         {
             lobbyEnum = (ServiceLobbyId)serviceLobbyId;
         }
+        Console.WriteLine($"Service Lobby ID: {lobbyEnum.ToString()}");
         switch (lobbyEnum)
         {
             case ServiceLobbyId.MessageSwitchHero:

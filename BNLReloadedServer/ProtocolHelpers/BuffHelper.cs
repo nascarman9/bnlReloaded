@@ -63,6 +63,11 @@ public static class BuffHelper
   {
     return Math.Max(0.0f, baseHeight + unit.GetBuff(BuffType.JumpHeight));
   }
+  
+  public static float BuildCost(Unit unit, float buildCost)
+  {
+    return buildCost * (1 - unit.GetBuff(BuffType.BuildCostReduction));
+  }
 
   public static float GearDropTime(Unit unit, float baseDropTime)
   {
