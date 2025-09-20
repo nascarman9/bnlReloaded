@@ -4,9 +4,9 @@ namespace BNLReloadedServer.BaseTypes;
 
 public static class BlockCardsCache
 {
-    private static CardBlock[] cache;
+    private static readonly Lazy<CardBlock[]> LazyCache = new(InitCache);
 
-    public static void InitCache()
+    private static CardBlock[] InitCache()
     {
         var dictionary = new Dictionary<ushort, CardBlock>();
         foreach (var card in Databases.Catalogue.All.Where((Func<Card, bool>) (a => a is CardBlock)))
@@ -15,13 +15,14 @@ public static class BlockCardsCache
             dictionary[cardBlock.BlockId] = cardBlock;
         }
 
-        cache = new CardBlock[65536];
+        var cache = new CardBlock[65536];
         for (var key = 0; key < cache.Length; ++key)
         {
             if (dictionary.TryGetValue((ushort) key, out var cardBlock))
                 cache[key] = cardBlock;
         }
+        return cache;
     }
 
-    public static CardBlock GetCard(ushort blockId) => cache[blockId];
+    public static CardBlock GetCard(ushort blockId) => LazyCache.Value[blockId];
 }

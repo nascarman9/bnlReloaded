@@ -44,15 +44,9 @@ public struct Block : IEquatable<Block>
     };
   }
 
-  public bool Compare(BlockUpdate bu)
-  {
-    return Id == bu.Id && Damage == bu.Damage && Vdata == bu.Vdata && Ldata == bu.Ldata;
-  }
+  public bool Compare(BlockUpdate bu) => Id == bu.Id && Damage == bu.Damage && Vdata == bu.Vdata && Ldata == bu.Ldata;
 
-  public static bool CompareIdData(Block b1, Block b2)
-  {
-    return b1.Id == b2.Id && b1.Vdata == b2.Vdata && b1.Ldata == b2.Ldata;
-  }
+  public static bool CompareIdData(Block b1, Block b2) => b1.Id == b2.Id && b1.Vdata == b2.Vdata && b1.Ldata == b2.Ldata;
 
   public static bool CompareWithoutLight(Block b1, Block b2)
   {

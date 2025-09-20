@@ -23,10 +23,9 @@ public static class PerkHelper
         return result;
     }
 
-    public static (Dictionary<Key, ulong?> effects, Dictionary<BuffType, float> buffs) ExtractEffectsAndBuffs(List<Key> perkList)
+    public static Dictionary<Key, ulong?> ExtractEffects(List<Key> perkList)
     {
         var effectResult = new Dictionary<Key, ulong?>();
-        var buffResult = new Dictionary<BuffType, float>();
         foreach (var perk in perkList)
         {
             if (Databases.Catalogue.GetCard<CardPerk>(perk) is not { PerkMods: not null } cp) continue;
@@ -45,46 +44,11 @@ public static class PerkHelper
                     {
                         effectResult.Add(effect, (ulong?) card.Duration);
                     }
-                    
-                    if (card.Effect is not ConstEffectBuff { Buffs: not null } effectBuff) continue;
-                    foreach (var buff in effectBuff.Buffs)
-                    {
-                        if (buffResult.ContainsKey(buff.Key))
-                        {
-                            buffResult[buff.Key] += buff.Value;
-                        }
-                        else
-                        {
-                            buffResult.Add(buff.Key, buff.Value);
-                        }
-                    }
                 }
             }
         }
         
-        return (effectResult, buffResult);
-    }
-    
-    public static Dictionary<BuffType, float> ExtractBuffs(this List<Key> effects)
-    {
-        var buffResult = new Dictionary<BuffType, float>();
-        foreach (var card in effects.Select(effect => Databases.Catalogue.GetCard<CardEffect>(effect)))
-        {
-            if (card?.Effect is not ConstEffectBuff { Buffs: not null } effectBuff) continue;
-            foreach (var buff in effectBuff.Buffs)
-            {
-                if (buffResult.ContainsKey(buff.Key))
-                {
-                    buffResult[buff.Key] += buff.Value;
-                }
-                else
-                {
-                    buffResult.Add(buff.Key, buff.Value);
-                }
-            }
-        }
-        
-        return buffResult;
+        return effectResult;
     }
 
     public static List<Key> ConvertPassives(this List<Key> passives, List<Key> perkList)

@@ -31,5 +31,16 @@ public interface IGameInstance
     public void StartMatch(List<PlayerLobbyState> playerList);
     public void SendUserToZone(uint playerId);
     public void PlayerZoneReady(uint playerId);
+    public void UnitMoved(uint unitId, ulong moveTime, ZoneTransform transform);
+    public void BuildRequest(ushort rpcId, uint playerId, BuildInfo buildInfo, IServiceZone builderService);
+    public void CancelBuildRequest(uint playerId);
+    public void EventBroadcast(ZoneEvent zoneEvent);
+    public void SwitchGear(ushort rpcId, uint playerId, Key gearKey, IServiceZone switcherService);
+    public void StartReload(ushort rpcId, uint playerId, IServiceZone reloaderService);
+    public void Reload(ushort rpcId, uint playerId, IServiceZone reloaderService);
+    public void ReloadEnd(uint playerId);
+    public void ReloadCancel(uint playerId);
+    public void CastRequest(uint playerId, CastData castData);
+    public void Hit(ulong time, Dictionary<ulong, HitData> hits);
 
 }

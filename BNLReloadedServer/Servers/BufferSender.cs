@@ -17,6 +17,8 @@ public class BufferSender : IBufferedSender
 
     public uint? AssociatedPlayerId { get; set; }
 
+    public int SenderCount => 0;
+
     public void Send(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);

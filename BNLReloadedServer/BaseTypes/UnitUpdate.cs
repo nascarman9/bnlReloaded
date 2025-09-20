@@ -28,7 +28,7 @@ public class UnitUpdate
 
     public float? Resource { get; set; }
 
-    public Dictionary<Key, ulong?>? Effects { get; set; }
+    public IDictionary<Key, ulong?>? Effects { get; set; }
 
     public Dictionary<BuffType, float>? Buffs { get; set; }
 

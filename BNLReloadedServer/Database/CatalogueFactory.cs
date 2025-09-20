@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using BNLReloadedServer.BaseTypes;
+﻿using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.ServerTypes;
 
@@ -36,7 +35,7 @@ public static class CatalogueFactory
         };
     }
     
-    public static Unit? CreateUnit(uint id, MapUnit unit)
+    public static Unit? CreateUnit(uint id, MapUnit unit, UnitUpdater updater)
     {
         var unitCard = Databases.Catalogue.GetCard<CardUnit>(unit.UnitKey);
         if (unitCard == null) return null;
@@ -56,41 +55,66 @@ public static class CatalogueFactory
             Team = unit.Team,
         };
 
-        var effects = new Dictionary<Key, ulong?>();
-        if (unitCard.InitEffects != null)
-        {
-            foreach (var initEffect in unitCard.InitEffects) 
-            {
-                effects.Add(initEffect, null);            
-            }
-        }
+        var newUnit = new Unit(id, unitInit, updater);
 
-        if (unitCard.EnabledEffects != null)
-        {
-            foreach (var enabledEffect in unitCard.EnabledEffects)
-            {
-                effects.Add(enabledEffect, null);
-            }
-        }
-
+        newUnit.ActiveEffects = ConstEffectInfo.Convert(newUnit.InitialEffects.AddRange(updater.GetTeamEffects(unit.Team).ToList()
+            .ToInfoDictionary()));
+        
         var initUpdate = new UnitUpdate
         {
             Team = unit.Team,
-            Health = unitCard.Health?.Health?.MaxHealth,
-            Forcefield = unitCard.Health?.Forcefield?.MaxAmount,
+            Health = unitCard.Health?.Health != null
+                ? newUnit.UnitMaxHealth(unitCard.Health.Health.MaxHealth)
+                : null,
+            Forcefield = unitCard.Health?.Forcefield != null
+                ? newUnit.UnitMaxForcefield(unitCard.Health.Forcefield.MaxAmount)
+                : null,
             Shield = unitCard.Health?.Health?.Shield,
-            Effects = effects
+            Effects = newUnit.ActiveEffects.ToInfoDictionary()
         };
-
-        var newUnit = new Unit();
         
-        newUnit.InitData(id, unitInit);
         newUnit.UpdateData(initUpdate);
         
         return newUnit;
     }
 
-    public static Unit? CreatePlayerUnit(uint id, uint playerId, ZoneTransform transform, PlayerLobbyState playerInfo, IGameInitiator gameInitiator)
+    public static Unit? CreateUnit(uint id, Key unitKey, ZoneTransform location, TeamType team, Unit? owner, UnitUpdater updater)
+    {
+        var unit = Databases.Catalogue.GetCard<CardUnit>(unitKey);
+        if (unit == null) return null;
+        
+        var unitInit = new UnitInit
+        {
+            Key = unit.Key,
+            Transform = location,
+            Controlled = owner == null,
+            OwnerId = owner?.PlayerId,
+            Team = team,
+        };
+
+        var newUnit = new Unit(id, unitInit, updater);
+
+        newUnit.ActiveEffects = ConstEffectInfo.Convert(newUnit.InitialEffects.AddRange(updater.GetTeamEffects(team).ToList().ToInfoDictionary()));
+        
+        var initUpdate = new UnitUpdate
+        {
+            Team = team,
+            Health = unit.Health?.Health != null
+                ? newUnit.UnitMaxHealth(unit.Health.Health.MaxHealth)
+                : null,
+            Forcefield = unit.Health?.Forcefield != null
+                ? newUnit.UnitMaxForcefield(unit.Health.Forcefield.MaxAmount)
+                : null,
+            Shield = unit.Health?.Health?.Shield,
+            Effects = newUnit.ActiveEffects.ToInfoDictionary()
+        };
+        
+        newUnit.UpdateData(initUpdate);
+        
+        return newUnit;
+    }
+
+    public static Unit? CreatePlayerUnit(uint id, uint playerId, ZoneTransform transform, PlayerLobbyState playerInfo, IGameInitiator gameInitiator, UnitUpdater updater)
     {
         var unitCard = Databases.Catalogue.GetCard<CardUnit>(playerInfo.Hero);
         if (unitCard is not { Data: UnitDataPlayer playerData }) return null;
@@ -106,26 +130,11 @@ public static class CatalogueFactory
             SkinKey = playerInfo.SkinKey,
             Gears = playerData.Gears?.ConvertGear(playerInfo.Perks ?? []),
         };
+
+        var newUnit = new Unit(id, unitInit, updater);
         
-        var newUnit = new Unit();
-        newUnit.InitData(id, unitInit);
-        var (effects, buffs) = PerkHelper.ExtractEffectsAndBuffs(playerInfo.Perks ?? []);
+        var effects = PerkHelper.ExtractEffects(playerInfo.Perks ?? []);
         var passives = playerData.Passive?.ConvertPassives(playerInfo.Perks ?? []);
-        var passiveBuffs = passives?.ExtractBuffs();
-        if (passiveBuffs != null)
-        {
-            foreach (var buff in passiveBuffs)
-            {
-                if (buffs.ContainsKey(buff.Key))
-                {
-                    buffs[buff.Key] += buff.Value;
-                }
-                else
-                {
-                    buffs.Add(buff.Key, buff.Value);
-                }
-            }
-        }
 
         if (passives != null)
         {
@@ -134,34 +143,37 @@ public static class CatalogueFactory
                 effects[effect] = null;
             }
         }
-        
-        newUnit.Buffs = buffs;
+
+        newUnit.InitialEffects = newUnit.InitialEffects.AddRange(effects);
+        newUnit.ActiveEffects = ConstEffectInfo.Convert(newUnit.InitialEffects.AddRange(updater.GetTeamEffects(playerInfo.Team).ToList().ToInfoDictionary()));
 
         var devices = playerInfo.Devices?.ConvertDevices(playerInfo.Perks ?? []);
 
         var updatedDevices = new Dictionary<int, DeviceData>();
+
+        newUnit.DeviceLevels = playerInfo.DeviceLevels ?? new Dictionary<Key, int>();
 
         if (devices != null)
         {
             foreach (var device in devices)
             {
                 var deviceCard = Databases.Catalogue.GetCard<CardDevice>(device.Value);
-                var itemKey = deviceCard?.DeviceKeyAtLevel((byte?) playerInfo.DeviceLevels?[deviceCard.GroupKey] ?? 1);
-                if (itemKey == null) continue;
+                var itemKey = deviceCard?.DeviceKeyAtLevel((byte)newUnit.DeviceLevels.GetValueOrDefault(deviceCard.GroupKey, 1));
+                if (!itemKey.HasValue) continue;
                 var itemCard = Databases.Catalogue.GetCard(itemKey.Value);
                 var deviceData = itemCard switch
                 {
                     CardBlock cBlock => new DeviceData
                     {
                         DeviceKey = device.Value,
-                        TotalCost = BuffHelper.BuildCost(newUnit, cBlock.BaseCost ?? 1),
-                        CostInc = BuffHelper.BuildCost(newUnit, cBlock.CostIncPerUnit ?? 0)
+                        TotalCost = newUnit.BuildCost(cBlock.BaseCost ?? 1),
+                        CostInc = newUnit.BuildCost(cBlock.CostIncPerUnit ?? 0)
                     },
                     CardUnit cUnit => new DeviceData
                     {
                         DeviceKey = device.Value,
-                        TotalCost = BuffHelper.BuildCost(newUnit, cUnit.BaseCost ?? 1),
-                        CostInc = BuffHelper.BuildCost(newUnit, cUnit.CostIncPerUnit ?? 0)
+                        TotalCost = newUnit.BuildCost(cUnit.BaseCost ?? 1),
+                        CostInc = newUnit.BuildCost(cUnit.CostIncPerUnit ?? 0)
                     },
                     _ => null
                 };
@@ -181,10 +193,10 @@ public static class CatalogueFactory
         {
             Team = playerInfo.Team,
             Health = unitCard.Health?.Health != null
-                ? BuffHelper.UnitMaxHealth(newUnit, unitCard.Health.Health.MaxHealth)
+                ? newUnit.UnitMaxHealth(unitCard.Health.Health.MaxHealth)
                 : null,
             Forcefield = unitCard.Health?.Forcefield != null
-                ? BuffHelper.UnitMaxForcefield(newUnit, unitCard.Health.Forcefield.MaxAmount)
+                ? newUnit.UnitMaxForcefield(unitCard.Health.Forcefield.MaxAmount)
                 : null,
             Shield = unitCard.Health?.Health?.Shield,
             MovementActive = false,
@@ -193,7 +205,7 @@ public static class CatalogueFactory
             AbilityCharges = abilityCard?.Charges?.MaxCharges,
             AbilityChargeCooldownEnd = 0,
             Resource = gameInitiator.GetResourceAmount(),
-            Effects = effects,
+            Effects = newUnit.ActiveEffects.ToInfoDictionary(),
             Devices = devices != null ? updatedDevices : null
         };
         

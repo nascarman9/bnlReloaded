@@ -23,13 +23,13 @@ public class GearAmmo
 
     public CardGear GearCard => Databases.Catalogue.GetCard<CardGear>(GearKey);
 
-    public bool IsPool => GearCard.Ammo[AmmoIndex].Pool != null;
+    public bool IsPool => GearCard.Ammo?[AmmoIndex].Pool != null;
 
-    public bool IsMag => GearCard.Ammo[AmmoIndex].MagSize.HasValue;
+    public bool IsMag => GearCard.Ammo?[AmmoIndex].MagSize != null;
 
-    public float MagSize => BuffHelper.MagazineSize(Unit, GearCard.Ammo[AmmoIndex].MagSize.Value);
+    public float MagSize => Unit.MagazineSize(GearCard.Ammo[AmmoIndex].MagSize.Value);
 
-    public float PoolSize => BuffHelper.PoolSize(Unit, GearCard.Ammo[AmmoIndex].Pool.PoolSize);
+    public float PoolSize => Unit.PoolSize(GearCard.Ammo[AmmoIndex].Pool.PoolSize);
 
     public void ServerUpdateAmmo(Ammo ammo)
     {
@@ -53,7 +53,31 @@ public class GearAmmo
       else
         Mag = Math.Min(Mag + rate, MagSize);
     }
-
+    
+    public Ammo? ReloadPartialAmmo(float rate)
+    {
+      if (!IsMag)
+        return null;
+      
+      var ammo = new Ammo
+      {
+        Index = AmmoIndex,
+        Mag = Mag,
+        Pool = Pool
+      };
+      
+      if (IsPool)
+      {
+        var num = Math.Min(Math.Min(rate, MagSize - ammo.Mag.Value), ammo.Pool.Value);
+        ammo.Mag += num;
+        ammo.Pool -= num;
+      }
+      else
+        ammo.Mag = Math.Min(Mag + rate, MagSize);
+      
+      return ammo;
+    }
+    
     public void Reload()
     {
       if (!IsMag)
@@ -68,9 +92,33 @@ public class GearAmmo
         Mag = MagSize;
     }
 
+    public Ammo? ReloadAmmo()
+    {
+      if (!IsMag)
+        return null;
+      
+      var ammo = new Ammo
+      {
+        Index = AmmoIndex,
+        Mag = Mag,
+        Pool = Pool
+      };
+      
+      if (IsPool)
+      {
+        var num = Math.Min(MagSize - ammo.Mag.Value, ammo.Pool.Value);
+        ammo.Mag += num;
+        ammo.Pool -= num;
+      }
+      else
+        ammo.Mag = MagSize;
+      
+      return ammo;
+    }
+
     public void TakeAmmo(float rate)
     {
-      rate = BuffHelper.AmmoRate(Unit, rate);
+      rate = Unit.AmmoRate(rate);
       if (IsMag)
       {
         Mag = Math.Max(0.0f, Mag - rate);
@@ -83,27 +131,52 @@ public class GearAmmo
       }
     }
 
+    public Ammo? TakeAmmoUpdate(float rate)
+    {
+      rate = Unit.AmmoRate(rate);
+      
+      var ammo = new Ammo
+      {
+        Index = AmmoIndex,
+        Mag = Mag,
+        Pool = Pool
+      };
+      
+      if (IsMag)
+      {
+        ammo.Mag = Math.Max(0.0f, ammo.Mag.Value - rate);
+      }
+      else
+      {
+        if (!IsPool)
+          return null;
+        ammo.Pool = Math.Max(0.0f, ammo.Pool.Value - rate);
+      }
+      
+      return ammo;
+    }
+
     public bool IsEnoughAmmoToUse(float rate)
     {
-      rate = BuffHelper.AmmoRate(Unit, rate);
+      rate = Unit.AmmoRate(rate);
       return IsMag && MoreOrEqual(Mag, rate) || !IsMag && IsPool && MoreOrEqual(Pool, rate);
     }
 
     public bool IsOutOfAmmo(float rate)
     {
-      rate = BuffHelper.AmmoRate(Unit, rate);
+      rate = Unit.AmmoRate(rate);
       return (!IsMag || !LessOrEqual(rate, Mag)) && (!IsPool || !LessOrEqual(rate, Pool));
     }
 
     public bool IsRequireToReload(float rate)
     {
-      rate = BuffHelper.AmmoRate(Unit, rate);
+      rate = Unit.AmmoRate(rate);
       return IsMag && Less(Mag, rate);
     }
 
     public bool IsPossibleToReload(float rate)
     {
-      rate = BuffHelper.AmmoRate(Unit, rate);
+      rate = Unit.AmmoRate(rate);
       return IsMag && Less(Mag, MagSize) && (!IsPool || IsPool && MoreOrEqual(Pool, rate));
     }
 

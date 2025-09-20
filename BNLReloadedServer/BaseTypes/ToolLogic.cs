@@ -8,60 +8,62 @@ public class ToolLogic(GearData data, byte index)
 
     public GearData Gear { get; private set; } = data;
 
-    public Tool Tool => Gear.Card.Tools![ToolIndex];
+    public Tool? Tool => Gear.Card.Tools?[ToolIndex];
 
     public Unit Unit => Gear.Unit;
 
     public GearAmmo? GetAmmoData()
     {
-        return Tool.Ammo != null ? Gear.Ammo[Tool.Ammo.AmmoIndex] : null;
+        return Tool?.Ammo != null ? Gear.Ammo[Tool.Ammo.AmmoIndex] : null;
     }
 
-    public void TakeAmmo() => GetAmmoData()?.TakeAmmo(Tool.Ammo!.Rate);
+    public void TakeAmmo() => GetAmmoData()?.TakeAmmo(Tool?.Ammo?.Rate ?? 0);
+    
+    public Ammo? TakeAmmoUpdate() => GetAmmoData()?.TakeAmmoUpdate(Tool?.Ammo?.Rate ?? 0);
 
     public bool IsEnoughAmmoToUse()
     {
         var ammoData = GetAmmoData();
-        return ammoData == null || ammoData.IsEnoughAmmoToUse(Tool.Ammo!.Rate);
+        return ammoData == null || ammoData.IsEnoughAmmoToUse(Tool?.Ammo?.Rate ?? 0);
     }
 
     public bool IsAvailableToEquip()
     {
         var ammoData = GetAmmoData();
-        return ammoData == null || !ammoData.IsOutOfAmmo(Tool.Ammo!.Rate);
+        return ammoData == null || !ammoData.IsOutOfAmmo(Tool?.Ammo?.Rate ?? 0);
     }
 
     public bool IsOutOfAmmo()
     {
         var ammoData = GetAmmoData();
-        return ammoData != null && ammoData.IsOutOfAmmo(Tool.Ammo!.Rate);
+        return ammoData != null && ammoData.IsOutOfAmmo(Tool?.Ammo?.Rate ?? 0);
     }
 
     public bool IsRequireReloading()
     {
         var ammoData = GetAmmoData();
-        return ammoData != null && ammoData.IsRequireToReload(Tool.Ammo!.Rate);
+        return ammoData != null && ammoData.IsRequireToReload(Tool?.Ammo?.Rate ?? 0);
     }
 
     public bool IsPossibleToReload()
     {
         var ammoData = GetAmmoData();
-        return ammoData != null && ammoData.IsPossibleToReload(Tool.Ammo!.Rate);
+        return ammoData != null && ammoData.IsPossibleToReload(Tool?.Ammo?.Rate ?? 0);
     }
 
     public bool IsAutoReloadLastShot()
     {
-        return Tool.Ammo is { AutoReloadAfterLastShot: true };
+        return Tool?.Ammo is { AutoReloadAfterLastShot: true };
     }
 
     public bool IsAutoReloadOnEmptyGunFire()
     {
-        return Tool.Ammo is { AutoReloadOnEmptyGunFire: true };
+        return Tool?.Ammo is { AutoReloadOnEmptyGunFire: true };
     }
 
     public bool IsAutoReloadOnEmptyGunSwitch()
     {
-      return Tool.Ammo is { AutoReloadOnEmptyGunSwitch: true };
+      return Tool?.Ammo is { AutoReloadOnEmptyGunSwitch: true };
     }
 
     public void Equip()
