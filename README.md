@@ -3,7 +3,7 @@ This is the open source github repo for the bnl private server recreation projec
 
 To run the private server, you'll need to do a couple things first.
 
-First, you must use something like https://github.com/tralph3/Steam-Metadata-Editor to change .exe file steam uses to launch the game. You'll need to set it to Win64/BlockNLoad.exe for at least the 3rd launch option (the first one is for Win32). If the program automatically updates any other fields when you change it, make sure to undo those changes (since it may try to set the Win64 folder as the root directory)
+First, you must add to the BNL launch options (which you can access by right clicking Block N Load in your steam library and selecting "Properties") something along the lines of this: ["C:\Program Files (x86)\Steam\steamapps\common\BlockNLoad\Win64\BlockNLoad.exe" %COMMAND%] (without the square brackets). The path you put in may or may not be different depending on where the location of the BlockNLoad.exe file is on your computer.
 
 After, you need to use something like https://github.com/dnSpy/dnSpy to edit the Assembly-CSharp.dll file in ..\Win64\BlockNLoad_Data\Managed and edit this function in LoginLogic to just "return true": https://media.discordapp.net/attachments/1400962017816215595/1401331912059912322/image.png?ex=68967b0b&is=6895298b&hm=90f5d980be3f0e152f38c7600a9c2c462bfc952b0652c1bddf852a0611a4d1d4&=&format=webp&quality=lossless&width=1923&height=402 
 
