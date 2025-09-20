@@ -4,7 +4,7 @@ namespace BNLReloadedServer.ServerTypes;
 
 public abstract class Updater
 {
-    private readonly BlockingCollection<Delegate> _updateActions = new();
+    private readonly BlockingCollection<Action> _updateActions = new();
 
     protected Updater()
     {
@@ -15,20 +15,20 @@ public abstract class Updater
     {
         while (!_updateActions.IsCompleted)
         {
-            Delegate? updateAction = null;
+            Action? updateAction = null;
             try
             {
                 updateAction = _updateActions.Take();
             }
             catch (InvalidOperationException) { }
 
-            updateAction?.DynamicInvoke();
+            updateAction?.Invoke();
         }
         
         _updateActions.Dispose();
     }
     
-    public void EnqueueAction(Delegate func)
+    public void EnqueueAction(Action func)
     {
         _updateActions.Add(func);
     }

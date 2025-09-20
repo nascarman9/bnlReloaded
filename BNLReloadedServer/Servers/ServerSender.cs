@@ -6,6 +6,8 @@ public class ServerSender(TcpServer server) : ISender
 {
     public uint? AssociatedPlayerId { get; set; }
 
+    public int SenderCount => (int) server.ConnectedSessions;
+
     public void Send(BinaryWriter writer)
     {
         server.Multicast(AppendMessageLength(writer));

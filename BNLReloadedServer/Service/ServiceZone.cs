@@ -259,6 +259,10 @@ public class ServiceZone(ISender sender) : IServiceZone
         var id = reader.ReadUInt32();
         var time = reader.ReadUInt64();
         var transform = ZoneTransform.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.UnitMoved(id, time, transform);
+        }
     }
 
     public void SendCast(uint unitId, CastData data)
@@ -385,12 +389,20 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveCast(BinaryReader reader)
     {
         var data = CastData.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.CastRequest(sender.AssociatedPlayerId.Value, data);
+        }
     }
 
     private void ReceiveHit(BinaryReader reader)
     {
         var time = reader.ReadUInt64();
         var hits = reader.ReadMap<ulong, HitData, Dictionary<ulong, HitData>>(reader.ReadUInt64, HitData.ReadRecord);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.Hit(time, hits);
+        }
     }
 
     public void SendSwitchGear(ushort rpcId, bool? accepted, string? error = null)
@@ -415,6 +427,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var rpcId = reader.ReadUInt16();
         var gearKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.SwitchGear(rpcId, sender.AssociatedPlayerId.Value, gearKey, this);
+        }
     }
 
     public void SendStartReload(ushort rpcId, bool? accepted, string? error = null)
@@ -438,6 +454,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveStartReload(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.StartReload(rpcId, sender.AssociatedPlayerId.Value, this);
+        }
     }
 
     public void SendReload(ushort rpcId, bool? accepted, string? error = null)
@@ -461,16 +481,26 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveReload(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.Reload(rpcId, sender.AssociatedPlayerId.Value, this);
+        }
     }
 
     private void ReceiveEndReload(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.ReloadEnd(sender.AssociatedPlayerId.Value);
+        }
     }
 
     private void ReceiveCancelReload(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.ReloadCancel(sender.AssociatedPlayerId.Value);
+        }
     }
 
     public void SendStartChannel(ushort rpcId, bool? accepted, string? error = null)
@@ -609,11 +639,18 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var rpcId = reader.ReadUInt16();
         var info = BuildInfo.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.BuildRequest(rpcId, sender.AssociatedPlayerId.Value, info, this);
+        }
     }
 
     private void ReceiveCancelBuild(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.CancelBuildRequest(sender.AssociatedPlayerId.Value);
+        }
     }
 
     public void SendCastAbility(ushort rpcId, bool? accepted, string? error = null)
@@ -714,6 +751,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveEmitZoneEvent(BinaryReader reader)
     {
         var data = ZoneEvent.ReadVariant(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.EventBroadcast(data);
+        }
     }
 
     public void SendBroadcastZoneEvent(ZoneEvent data)

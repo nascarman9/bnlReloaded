@@ -11,6 +11,8 @@ public class SessionSender : ISender
     // For senders that apply to only one session, this will house the playerId
     public uint? AssociatedPlayerId { get; set; }
     
+    public int SenderCount => _sessions.Count;
+
     private readonly IDictionary<Guid, TcpSession> _sessions;
 
     public SessionSender(TcpServer server, Guid guid, TcpSession callingSession)

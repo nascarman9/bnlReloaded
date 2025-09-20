@@ -1,5 +1,6 @@
 ﻿namespace BNLReloadedServer.BaseTypes;
 
+[Flags]
 public enum BlockCorner : byte
 {
     C000,

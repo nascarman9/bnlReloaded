@@ -3,7 +3,9 @@ using BNLReloadedServer.ProtocolHelpers;
 
 namespace BNLReloadedServer.BaseTypes;
 
-public class ZoneData
+public record ZoneUpdater(Action<ZoneUpdate> OnZoneUpdate);
+
+public class ZoneData(ZoneUpdater updater)
 {
     public Dictionary<TeamType, MatchTeamStats> TeamStats = new();
     public Dictionary<uint, MatchPlayerStats> PlayerStats = new();
@@ -21,6 +23,7 @@ public class ZoneData
     public Dictionary<uint, uint?> PlayerSpawnPoints = new();
     public Dictionary<uint, ulong> RespawnInfo = new();
     public required MapData MapData;
+    public required MapBinary BlocksData;
     public List<ZoneObjective> Objectives = [];
     public bool MatchEnded;
     public TeamType Winner;
@@ -61,17 +64,13 @@ public class ZoneData
       return GetPlayerStats(playerId).Team;
     }
 
-    public TimeTrialCourse GetTimeTrialCourse()
+    public TimeTrialCourse? GetTimeTrialCourse()
     {
-      return MapKey.HasValue ? CatalogueHelper.TimeTrialLogic.Courses.Find((Predicate<TimeTrialCourse>) (c => c.Map == MapKey.Value)) : (TimeTrialCourse) null;
+      return MapKey.HasValue ? CatalogueHelper.TimeTrialLogic.Courses?.Find((Predicate<TimeTrialCourse>) (c => c.Map == MapKey.Value)) : null;
     }
 
-    public ZoneInitData GetZoneInitData()
-    {
-        var mapBinary = new MapBinary(MapData.Schema, MapData.BlocksData ?? MapLoader.GetBlockData(MapKey) ?? [],
-            MapData.Size);
-        
-        return new ZoneInitData
+    public ZoneInitData GetZoneInitData() =>
+        new()
         {
             MapKey = MapKey,
             Map = new MapData
@@ -89,13 +88,12 @@ public class ZoneData
                 BlocksData = [],
                 ColorsData = []
             },
-            MapData = mapBinary.ToBinary(),
+            MapData = BlocksData.ToBinary(),
             ColorData = MapData.ColorsData ?? MapLoader.GetColorData(MapKey) ?? [],
             Updates = new Dictionary<Vector3s, BlockUpdate>(),
             CanSwitchHero = CanSwitchHero,
             IsCustomGame = GameModeKey == CatalogueHelper.ModeCustom.Key
         };
-    }
 
     public void UpdateData(ZoneUpdate update)
     {
@@ -147,6 +145,8 @@ public class ZoneData
           Objectives = update.Objectives;
         if (update.ResourceCap.HasValue)
           ResourceCap = update.ResourceCap.Value;
+
+        updater.OnZoneUpdate(update);
     }
 
     public void EndMatch(TeamType winner)

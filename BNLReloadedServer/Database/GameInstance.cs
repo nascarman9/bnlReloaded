@@ -251,7 +251,8 @@ public class GameInstance : IGameInstance
 
     public void SwapHero(uint playerId, Key hero) => Lobby?.EnqueueAction(() => Lobby?.SwapHero(playerId, hero));
 
-    public void UpdateDeviceSlot(uint playerId, int slot, Key? deviceKey) => Lobby?.EnqueueAction(() => Lobby?.UpdateDeviceSlot(playerId, slot, deviceKey));
+    public void UpdateDeviceSlot(uint playerId, int slot, Key? deviceKey) =>
+        Lobby?.EnqueueAction(() => Lobby?.UpdateDeviceSlot(playerId, slot, deviceKey));
 
     public void SwapDevices(uint playerId, int slot1, int slot2) => Lobby?.EnqueueAction(() => Lobby?.SwapDevices(playerId, slot1, slot2));
 
@@ -296,7 +297,8 @@ public class GameInstance : IGameInstance
             mapKey = mapInfoCard.MapKey;
         }
         
-        Zone = new GameZone(new ServiceZone(bufferedSender), new ServiceZone(_zoneSender), bufferedSender, _zoneSender, MapData, GameInitiator, playerList, mapKey);
+        Zone = new GameZone(new ServiceZone(bufferedSender), new ServiceZone(_zoneSender), bufferedSender, _zoneSender,
+            MapData, GameInitiator, playerList, mapKey);
         
         foreach (var playerId in _connectedUsers.Keys)
         {
@@ -372,6 +374,35 @@ public class GameInstance : IGameInstance
                 break;
         }
     }
+
+    public void UnitMoved(uint unitId, ulong moveTime, ZoneTransform transform) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedMoveRequest(unitId, moveTime, transform));
+
+    public void BuildRequest(ushort rpcId, uint playerId, BuildInfo buildInfo, IServiceZone builderService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedBuildRequest(rpcId, playerId, buildInfo, builderService));
+
+    public void CancelBuildRequest(uint playerId) => Zone?.EnqueueAction(() => Zone?.ReceivedCancelBuildRequest(playerId));
+
+    public void EventBroadcast(ZoneEvent zoneEvent) => Zone?.EnqueueAction(() => Zone?.ReceivedEventBroadcast(zoneEvent));
+    
+    public void SwitchGear(ushort rpcId, uint playerId, Key gearKey, IServiceZone switcherService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedSwitchGearRequest(rpcId, playerId, gearKey, switcherService));
+
+    public void StartReload(ushort rpcId, uint playerId, IServiceZone reloaderService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedStartReloadRequest(rpcId, playerId, reloaderService));
+
+    public void Reload(ushort rpcId, uint playerId, IServiceZone reloaderService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedReloadRequest(rpcId, playerId, reloaderService));
+
+    public void ReloadEnd(uint playerId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedReloadEndRequest(playerId));
+
+    public void ReloadCancel(uint playerId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedReloadCancelRequest(playerId));
+
+    public void CastRequest(uint playerId, CastData castData) => Zone?.EnqueueAction(() => Zone?.ReceivedCastRequest(playerId, castData));
+
+    public void Hit(ulong time, Dictionary<ulong, HitData> hits) => Zone?.EnqueueAction(() => Zone?.ReceivedHit(time, hits));
 
     private void OnLoadTimerElapsed(object? sender, ElapsedEventArgs e)
     {

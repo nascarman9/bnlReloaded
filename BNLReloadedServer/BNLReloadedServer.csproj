@@ -10,6 +10,8 @@
     <ItemGroup>
       <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.14.0" />
       <PackageReference Include="NetCoreServer" Version="8.0.7" />
+      <PackageReference Include="NetOctree" Version="2.1.0" />
+      <PackageReference Include="ObservableCollections" Version="3.3.4" />
     </ItemGroup>
 
 </Project>

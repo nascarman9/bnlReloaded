@@ -40,6 +40,22 @@ public struct Vector3s(short x, short y, short z) : IEquatable<Vector3s>
 
   public Vector3 ToVector3() => new(x, y, z);
 
+  public uint To10BitU32()
+  {
+    var xPos = x & ((1 << 10) - 1);
+    var yPos = (y & ((1 << 10) - 1)) << 10;
+    var zPos = (z & ((1 << 10) - 1)) << 20;
+    return (uint)(zPos | yPos | xPos);
+  }
+
+  public static Vector3s From10BitU32(uint bits)
+  {
+    var z = bits >> 20;
+    var y = bits >> 10 & ((1 << 10) - 1);
+    var x = bits & ((1 << 10) - 1);
+    return new Vector3s((short)bits, (short)bits, (short)bits);
+  }
+
   public override bool Equals(object? other)
   {
     return other is Vector3s vector3S ? this == vector3S : base.Equals(other);
