@@ -60,6 +60,28 @@ public static class BuffHelper
 
   public static float HealthGainAmount(this Unit unit, float healthGain) => 
     healthGain * Math.Max(0.0f, 1f + unit.GetBuff(BuffType.HealthGain));
+  
+  public static float PlayerDamageAmount(this Unit unit, float initialDamage) =>
+    initialDamage * Math.Max(0.0f, 1f + unit.GetBuff(BuffType.PlayerDamage));
+  
+  public static float WorldDamageAmount(this Unit unit, float initialDamage) =>
+    initialDamage * Math.Max(0.0f, 1f + unit.GetBuff(BuffType.WorldDamage));
+  
+  public static float ObjectiveDamageAmount(this Unit unit, float initialDamage) =>
+    initialDamage * Math.Max(0.0f, 1f + unit.GetBuff(BuffType.ObjectiveDamage));
+  
+  public static float ToolWorldDamageAmount(this Unit unit, float initialDamage) =>
+    initialDamage * Math.Max(0.0f, 1f + unit.GetBuff(BuffType.ToolWorldDamage) + unit.GetBuff(BuffType.WorldDamage));
+  
+  public static float DamageTaken(this Unit unit, float initialDamage) =>
+    initialDamage * float.Max(1f - unit.GetBuff(BuffType.Shield), 0.5f);
+  
+  public static float SplashDamageTaken(this Unit unit, float initialDamage) =>
+    initialDamage * Math.Max(0.0f, (100f - unit.GetBuff(BuffType.SplashDamageReduction)) / 100f) *
+    float.Max(1f - unit.GetBuff(BuffType.Shield), 0.5f);
+
+  public static float AbilityCooldownTime(this Unit unit, float initialCooldown) =>
+    initialCooldown * Math.Max(0.0f, 1f - unit.GetBuff(BuffType.AbilityCooldownReduction));
 
   public static float ResourceGainAmount(this Unit unit, float resourceGain, ResourceType source) =>
     source switch
@@ -123,14 +145,11 @@ public static class BuffHelper
         BuffType.PlayerDamage or 
         BuffType.WorldDamage or 
         BuffType.ObjectiveDamage or 
-        BuffType.BuildCostReduction or 
         BuffType.WeaponMagazine or 
         BuffType.WeaponPool or 
         BuffType.WeaponReload or 
         BuffType.WeaponSwitch or 
-        BuffType.FallDamageReduction or 
         BuffType.CofBonus or 
-        BuffType.AbilityCooldownReduction or 
         BuffType.HealthGain or 
         BuffType.AmmoGain or 
         BuffType.ToolWorldDamage => float.Max(originalValue + addValue, -1),
@@ -159,6 +178,11 @@ public static class BuffHelper
         BuffType.SlipperyImmunity or 
         BuffType.KnockbackIgnore => 1,
       
+      // Can be -Inf -> 1, final multiplier is (1 - buff)
+      BuffType.BuildCostReduction or
+        BuffType.FallDamageReduction or 
+        BuffType.AbilityCooldownReduction => float.Min(originalValue + addValue, 1),
+        
       // Can be -Inf -> 100, final result is (100 - buff) / 100
       BuffType.SplashDamageReduction => float.Min(originalValue + addValue, 100),
       

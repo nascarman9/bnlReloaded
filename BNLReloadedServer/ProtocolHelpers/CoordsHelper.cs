@@ -38,7 +38,7 @@ public static class CoordsHelper
     new(1, 0, 1),
     Vector3s.One
   ];
-  public static BlockFace[] OppositeFace =
+  public static readonly BlockFace[] OppositeFace =
   [
     BlockFace.Bottom,
     BlockFace.Top,
@@ -47,7 +47,7 @@ public static class CoordsHelper
     BlockFace.Back,
     BlockFace.Forward
   ];
-  public static Vector3s[] FaceToVector =
+  public static readonly Vector3s[] FaceToVector =
   [
     Vector3s.Up,
     Vector3s.Down,
@@ -56,7 +56,7 @@ public static class CoordsHelper
     Vector3s.Forward,
     Vector3s.Back
   ];
-  public static Vector3[] FaceToNormal =
+  public static readonly Vector3[] FaceToNormal =
   [
     Vector3s.Up.ToVector3(),
     Vector3s.Down.ToVector3(),
@@ -84,6 +84,8 @@ public static class CoordsHelper
   public static Vector3 BlockCenter(Vector3s origin) => origin.ToVector3() + new Vector3(0.5f, 0.5f, 0.5f);
 
   public static Vector3 BlockBottom(Vector3 origin) => Floor(origin) + new Vector3(0.5f, 0.0f, 0.5f);
+  
+  public static Vector3 BlockBottom(Vector3s origin) => origin.ToVector3() + new Vector3(0.5f, 0.0f, 0.5f);
 
   public static BlockFace VectorToFace(Vector3s dir)
   {
@@ -99,6 +101,18 @@ public static class CoordsHelper
       return BlockFace.Forward;
     return dir == Vector3s.Back ? BlockFace.Back : BlockFace.Top;
   }
+
+  public static BlockFace RotationToFace(Vector3s dir) =>
+    Vector3.Transform(Vector3.UnitY, ZoneTransformHelper.ToQuaternion(dir)) switch
+    {
+      { Y: >= .95f } => BlockFace.Top,
+      { Y: <= -.95f } => BlockFace.Bottom,
+      { X: >= .95f } => BlockFace.Right,
+      { X: <= -.95f } => BlockFace.Left,
+      { Z: >= .95f } => BlockFace.Forward,
+      { Z: <= -.95f } => BlockFace.Back,
+      _ => BlockFace.Top
+    };
 
   public static BlockCorner VectorToCorner(Vector3s dir)
   {
@@ -150,4 +164,8 @@ public static class CoordsHelper
     v.Z = (float) (num2 * (double) v.Z - num1 * (double) x);
     return v;
   }
+
+  private const double Sqrt3 = 1.7320508075689d;
+
+  public static int MaxBlockTraversal(float radius) => (int)double.Ceiling(radius * Sqrt3);
 }

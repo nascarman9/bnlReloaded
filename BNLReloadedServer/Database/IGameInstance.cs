@@ -1,4 +1,5 @@
-﻿using BNLReloadedServer.BaseTypes;
+﻿using System.Numerics;
+using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
 
@@ -40,7 +41,31 @@ public interface IGameInstance
     public void Reload(ushort rpcId, uint playerId, IServiceZone reloaderService);
     public void ReloadEnd(uint playerId);
     public void ReloadCancel(uint playerId);
+    public void CreateProj(uint playerId, ulong shotId, ProjectileInfo projInfo);
+    public void MoveProj(ulong shotId, ulong time, ZoneTransform transform);
+    public void DropProj(ulong shotId);
+    public void CreateChannel(ushort rpcId, uint playerId, ChannelData channelData, IServiceZone channelService);
+    public void EndChannel(uint playerId);
+    public void ToolChargeStart(uint playerId, byte toolIndex);
+    public void ToolChargeEnd(ushort rpcId, uint playerId, byte toolIndex, IServiceZone chargeService);
+    public void DashChargeStart(uint playerId, byte toolIndex);
+    public void DashChargeEnd(ushort rpcId, uint playerId, byte toolIndex, IServiceZone dashService);
+    public void DashCast(uint playerId, byte toolIndex);
+    public void DashHit(uint playerId, byte toolIndex, HitData hitData);
+    public void GroundSlamCast(uint playerId, byte toolIndex);
+    public void GroundSlamHit(uint playerId, byte toolIndex, HitData hitData);
+    public void AbilityCast(ushort rpcId, uint playerId, AbilityCastData castData, IServiceZone abilityService);
+    public void UnitProjectileHit(uint unitId, HitData hitData);
+    public void SkybeamHit(uint unitId, HitData hitData);
     public void CastRequest(uint playerId, CastData castData);
     public void Hit(ulong time, Dictionary<ulong, HitData> hits);
-
+    public void Fall(uint unitId, float height, bool force);
+    public void Pickup(uint playerId, uint pickupId);
+    public void SelectSpawnPoint(uint playerId, uint? spawnId);
+    public void TurretTarget(uint turretId, uint targetId);
+    public void TurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots);
+    public void MortarAttack(uint mortarId, Vector3 shotPos, List<ShotData> shots);
+    public void DrillAttack(uint drillId, Vector3 shotPos, List<ShotData> shots);
+    public void UpdateTesla(uint teslaId, uint? targetId, List<uint> teslasInRange);
+    public void PlayerCommand(uint playerId, Key command);
 }

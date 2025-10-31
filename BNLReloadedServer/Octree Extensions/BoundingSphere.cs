@@ -18,4 +18,6 @@ public readonly struct BoundingSphere(Vector3 center, float radius) : IBoundingS
 
     public (Vector3s max, Vector3s min) GetSquareBounds() => 
         ((Vector3s)(Center + new Vector3(radius)), (Vector3s)(Center - new Vector3(radius)));
+
+    public IBoundingShape GetShapeAtNewPosition(Vector3 position) => new BoundingSphere(position, radius);
 }

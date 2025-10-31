@@ -2,6 +2,7 @@
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Octree_Extensions;
 using BNLReloadedServer.ProtocolHelpers;
+using BNLReloadedServer.ServerTypes;
 
 namespace BNLReloadedServer.BaseTypes;
 
@@ -31,7 +32,13 @@ internal readonly ref struct StabilityBinary(Span<byte> span, Vector3s pos)
     public Vector3s StableVector => pos + StablePosition.ToVector();
 }
 
-public record MapUpdater(Action<uint, float> OnCut);
+internal readonly struct SplashDamagePropagation(Vector3s pos, bool[] dirCheck)
+{
+    public Vector3s Position { get; } = pos;
+    public bool[] CanGoDir { get; } = dirCheck;
+}
+
+public record MapUpdater(Action<uint, float> OnCut, Action<uint, Key> OnMined, Action<Unit> OnDetached);
 
 public class MapBinary
 {
@@ -40,14 +47,22 @@ public class MapBinary
     private readonly byte[] _data;
 
     private readonly byte[] _stabilityData;
+
+    private float _liquidPlane;
     
     public readonly Dictionary<Vector3s, Unit> OwnedBlocks = new();
+    
+    public readonly Dictionary<Vector3s, Unit?[]> AttachedUnits = new();
+
+    public readonly Dictionary<Vector3s, BlockIntervalUpdater> UnitsInsideBlock = new();
     
     public BoundsOctreeEx<Unit>? Units { get; set; }
     
     private const ushort NormalDest = 1;
     private const ushort FallingDest = 2;
     private const ushort SplashDest = 3;
+
+    private const float NaturalFalloff = 0.05f;
 
     public MapBinary(byte[] binary, float liquidPlane, MapUpdater mapUpdater)
     {
@@ -118,7 +133,8 @@ public class MapBinary
 
     public int SizeZ { get; }
 
-    public BlockBinary this[Vector3s pos] => new(_data.AsSpan(((pos.x * SizeY + pos.y) * SizeZ + pos.z) * BlockBinary.Size, BlockBinary.Size), pos);
+    public BlockBinary this[Vector3s pos] =>
+        new(_data.AsSpan(((pos.x * SizeY + pos.y) * SizeZ + pos.z) * BlockBinary.Size, BlockBinary.Size), pos);
 
     public BlockBinary this[int x, int y, int z] => this[new Vector3s(x, y, z)];
 
@@ -132,6 +148,7 @@ public class MapBinary
 
     private void InitStabilityData(float liquidPlane)
     {
+        _liquidPlane = liquidPlane;
         var blockQueue = new Queue<(Vector3s, ushort)>();
         var visitedBlocks = new HashSet<Vector3s>();
         for (short x = 0; x < SizeX; x++)
@@ -149,7 +166,7 @@ public class MapBinary
                     }
                     else
                     {
-                        if (block.Card.CanStayInAir || block.Y == (short)liquidPlane)
+                        if (block.Card.CanFloat || block.Y == (short)liquidPlane)
                         {
                             stable.StableDistance = 0;
                             blockQueue.Enqueue((block.Position, 0));
@@ -181,7 +198,7 @@ public class MapBinary
                 var stb = StableData(b);
                 
                 stb.StableDistance = distance;
-                stb.StablePosition = pos.ToStableDirection(b);
+                stb.StablePosition = b.ToStableDirection(pos);
                 
                 blockQueue.Enqueue((b, distance));
                 visitedBlocks.Add(b);
@@ -269,6 +286,25 @@ public class MapBinary
         return output.ToArray().Zip(3).ToArray();
     }
 
+    private void OnBlockRemoved(Vector3s blockPos)
+    {
+        OwnedBlocks.Remove(blockPos);
+        if (UnitsInsideBlock.TryGetValue(blockPos, out var unitsInside))
+        {
+            unitsInside.Clear();
+        }
+        
+        UnitsInsideBlock.Remove(blockPos);
+        if (AttachedUnits.TryGetValue(blockPos, out var units))
+        {
+            foreach (var unit in units.OfType<Unit>())
+            {
+                _mapUpdater.OnDetached(unit);
+            }
+        }
+        AttachedUnits.Remove(blockPos);
+    }
+
     // Assumes position has stability
     private void PropagateStability(Vector3s position, ushort startDistance = 0)
     {
@@ -288,7 +324,7 @@ public class MapBinary
                 var stb = StableData(b);
                 
                 stb.StableDistance = distance;
-                stb.StablePosition = pos.ToStableDirection(b);
+                stb.StablePosition = b.ToStableDirection(pos);
                 
                 blockQueue.Enqueue((b, distance));
                 visitedBlocks.Add(b);
@@ -318,7 +354,7 @@ public class MapBinary
                          p => !visitedBlocks.Contains(p) && !propBlocks.Contains(p) && CheckIfStable(pos)(p)))
             {
                 var stb = StableData(b);
-                if (visitedBlocks.Contains(stb.StableVector))
+                if (visitedBlocks.Contains(stb.StableVector) || stb.StableVector == position)
                 {
                     visitedBlocks.Add(b);
                     stb.StableDistance = ushort.MaxValue;
@@ -341,7 +377,7 @@ public class MapBinary
             {
                 var stb = StableData(b);
                 stb.StableDistance = (ushort)(dist + 1);
-                stb.StablePosition = pos.ToStableDirection(b);
+                stb.StablePosition = b.ToStableDirection(pos);
                 propBlocks.Add(b);
                 visitedBlocks.Remove(b);
                 propQueue.Enqueue(b, stb.StableDistance);
@@ -361,7 +397,7 @@ public class MapBinary
             block.Team = TeamType.Neutral;
 
             dict[b] = block.ToUpdate(FallingDest);
-            OwnedBlocks.Remove(b);
+            OnBlockRemoved(b);
         }
 
         return (dict, totalRes);
@@ -371,7 +407,7 @@ public class MapBinary
     {
         var block = this[position];
         var data = StableData(position);
-        if (block.Card.CanStayInAir)
+        if (block.Card.CanFloat)
         {
             data.StableDistance = 0;
             data.StablePosition = StableDirection.Inherent;
@@ -482,13 +518,13 @@ public class MapBinary
         };
     }
 
-    public IEnumerable<Vector3s> GetValidFaces(Vector3s pos, bool ignoreSlope = false)
+    public IEnumerable<Vector3s> GetValidFaces(Vector3s pos, bool buildCheck = false)
     {
         var faces = CoordsHelper.OppositeFace;
         var blk = this[pos];
         var blkCard = blk.Card;
-
-        if (blk.IsAir || blk.IsLocked)
+        
+        if (buildCheck && (blk.IsAir || blk.IsLocked))
         {
             return [];
         }
@@ -501,23 +537,24 @@ public class MapBinary
             return faces.Where(f => PrefabBuilder.IsSolidFace(this[pos], f))
                 .Select(fc => CoordsHelper.FaceToVector[(int)fc] + pos);
         }
-        if (blkCard.IsVisualSlope && !ignoreSlope)
+        if (blkCard.IsVisualSlope && !buildCheck)
         {
             return faces
-                .Where(f => SlopeBuilder.SidesCorners[(int)f].Count(c => SlopeBuilder.IsCorner(c, (byte)this[pos].VData)) >= 3)
+                .Where(f => SlopeBuilder.SidesCorners[(int)f]
+                    .Count(c => SlopeBuilder.IsCorner(c, (byte)this[pos].VData)) >= 3)
                 .Select(fc => CoordsHelper.FaceToVector[(int)fc] + pos);
         }
         
         return faces.Select(fc => CoordsHelper.FaceToVector[(int)fc] + pos);
     }
     
-    public IEnumerable<BlockFace> GetValidFacesActual(Vector3s pos, bool ignoreSlope = false)
+    public IEnumerable<BlockFace> GetValidFacesActual(Vector3s pos, bool buildCheck = false)
     {
         var faces = CoordsHelper.OppositeFace;
         var blk = this[pos];
         var blkCard = blk.Card;
         
-        if (blk.IsAir || blk.IsLocked)
+        if (buildCheck && (blk.IsAir || blk.IsLocked))
         {
             return [];
         }
@@ -529,21 +566,100 @@ public class MapBinary
         {
             return faces.Where(f => PrefabBuilder.IsSolidFace(this[pos], f));
         }
-        if (blkCard.IsVisualSlope && !ignoreSlope)
+        if (blkCard.IsVisualSlope && !buildCheck)
         {
             return faces
-                .Where(f => SlopeBuilder.SidesCorners[(int)f].Count(c => SlopeBuilder.IsCorner(c, (byte)this[pos].VData)) >= 3);
+                .Where(f => SlopeBuilder.SidesCorners[(int)f]
+                    .Count(c => SlopeBuilder.IsCorner(c, (byte)this[pos].VData)) >= 3);
         }
         
         return faces;
     }
 
-    public HashSet<Vector3s> GetContainedInUnits(Unit[] units)
+    public bool GetIsActuallyInside(Unit unit, Vector3s pos)
+    {
+        if (!ContainsBlock(pos)) return false;
+        var block = this[pos];
+        var blockCard = block.Card;
+        var unitMidpoint = unit.GetMidpoint();
+        var floatPos = pos.ToVector3();
+        var minY = floatPos.Y + UnitSizeHelper.HalfImprecisionVector.Y;
+        var maxY = floatPos.Y + blockCard.Visual?.Type switch
+        {
+            BlockVisualType.Prefab => blockCard.Solid
+                ? 1
+                : 0.9f,
+            BlockVisualType.CroppedCube => ContainsBlock(pos with { y = (short)(pos.y + 1) }) &&
+                                           this[pos with { y = (short)(pos.y + 1) }].IsSolid
+                ? 1
+                : 0.9f,
+            _ => 1
+        } - UnitSizeHelper.HalfImprecisionVector.Y;
+
+        var clampedY = float.Clamp(unitMidpoint.Y, minY, maxY);
+        var (max, min) = UnitSizeHelper.GetExactUnitBounds(unit);
+        
+        return clampedY <= max.Y && clampedY >= min.Y;
+    }
+
+    public bool GetCanFit(Unit unit, Vector3 position)
+    {
+        var (max, min) = UnitSizeHelper.GetUnitBounds(unit, position, true);
+        if (!ContainsBlock(min) && !ContainsBlock(max))
+        {
+            return true;
+        }
+        
+        for (var x = Math.Clamp(min.x, 0, SizeX - 1); x <= Math.Clamp(max.x, 0, SizeX - 1); x++)
+        {
+            for (var y = Math.Clamp(min.y, 0, SizeY - 1); y <= Math.Clamp(max.y, 0, SizeY - 1); y++)
+            {
+                for (var z = Math.Clamp(min.z, 0, SizeZ - 1); z <= Math.Clamp(max.z, 0, SizeZ - 1); z++)
+                {
+                    if (this[new Vector3s(x, y, z)].Card.Passable != BlockPassableType.Any)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public HashSet<Vector3s> GetContainedInUnits(ICollection<Unit> units, uint stepCount = 2, bool withSize = false, bool withExtraStep = false)
     {
         var contained = new HashSet<Vector3s>();
         foreach (var unit in units)
         {
-            var (max, min) = UnitSizeHelper.GetUnitBounds(unit);
+            foreach (var (max, min) in UnitSizeHelper.GetUnitBounds(unit, stepCount, withSize, withExtraStep))
+            {
+                if (!ContainsBlock(min) && !ContainsBlock(max))
+                {
+                    continue;
+                }
+
+                for (var x = Math.Clamp(min.x, 0, SizeX - 1); x <= Math.Clamp(max.x, 0, SizeX - 1); x++)
+                {
+                    for (var y = Math.Clamp(min.y, 0, SizeY - 1); y <= Math.Clamp(max.y, 0, SizeY - 1); y++)
+                    {
+                        for (var z = Math.Clamp(min.z, 0, SizeZ - 1); z <= Math.Clamp(max.z, 0, SizeZ - 1); z++)
+                        {
+                            contained.Add(new Vector3s(x, y, z));
+                        }
+                    }
+                }
+            }
+        }
+        
+        return contained;
+    }
+    
+    public HashSet<Vector3s> GetContainedInUnit(Unit unit, uint stepCount = 2, bool withSize = false, bool withExtraStep = false)
+    {
+        var contained = new HashSet<Vector3s>();
+        foreach (var (max, min) in UnitSizeHelper.GetUnitBounds(unit, stepCount, withSize, withExtraStep))
+        {
             if (!ContainsBlock(min) && !ContainsBlock(max))
             {
                 continue;
@@ -563,14 +679,46 @@ public class MapBinary
         
         return contained;
     }
+    
+    public static (Dictionary<Vector3s, HashSet<Unit>> unitsForBlock, Dictionary<Unit, HashSet<Vector3s>> blocksForUnit)
+        GetUnitBlockPositions(ICollection<Unit> units)
+    {
+        var unitsForBlock = new Dictionary<Vector3s, HashSet<Unit>>();
+        var blocksForUnit = new Dictionary<Unit, HashSet<Vector3s>>();
+        foreach (var unit in units)
+        {
+            foreach (var pos in unit.OverlappingMapBlocks)
+            {
+                if (unitsForBlock.TryGetValue(pos, out var unitSet))
+                {
+                    unitSet.Add(unit);
+                }
+                else
+                {
+                    unitsForBlock.Add(pos, [unit]);
+                }
 
-    public bool CheckBlocks(IBoundingShape bounds, Func<BlockBinary, bool> check)
+                if (blocksForUnit.TryGetValue(unit, out var blockSet))
+                {
+                    blockSet.Add(pos);
+                }
+                else
+                {
+                    blocksForUnit.Add(unit, [pos]);
+                }
+            }
+        }
+
+        return (unitsForBlock, blocksForUnit);
+    }
+
+    public Vector3s? CheckBlocks(IBoundingShape bounds, Func<BlockBinary, bool> check)
     {
         var startPoint = (Vector3s)bounds.Center;
 
         if (!ContainsBlock(startPoint))
         {
-            return false;
+            return null;
         }
         
         var blockQueue = new Queue<Vector3s>();
@@ -583,7 +731,7 @@ public class MapBinary
             var block = this[point];
             if (check(block))
             {
-                return true;
+                return point;
             }
             
             foreach (var b in GetBordering(point,
@@ -595,7 +743,7 @@ public class MapBinary
             }
         }
         
-        return false;
+        return null;
     }
 
     public IEnumerable<Vector3s> EnumerateBlocks(IBoundingShape bounds, Func<BlockBinary, bool>? check)
@@ -651,12 +799,12 @@ public class MapBinary
         {
             location += shift switch
             {
-                BlockShift.Left => Vector3s.Left.ToVector3(),
-                BlockShift.Right => Vector3.UnitX,
-                BlockShift.Bottom => Vector3s.Down.ToVector3(),
-                BlockShift.Top => Vector3.UnitY,
-                BlockShift.Back => Vector3s.Back.ToVector3(),
-                BlockShift.Front => Vector3.UnitZ,
+                BlockShift.Left => Vector3s.Left.ToVector3() * ((location.X - float.Truncate(location.X)) * 2),
+                BlockShift.Right => Vector3.UnitX * ((1 - (location.X - float.Truncate(location.X))) * 2),
+                BlockShift.Bottom => Vector3s.Down.ToVector3() * ((location.Y - float.Truncate(location.Y)) * 2),
+                BlockShift.Top => Vector3.UnitY * ((1 - (location.Y - float.Truncate(location.Y))) * 2),
+                BlockShift.Back => Vector3s.Back.ToVector3() * ((location.Z - float.Truncate(location.Z)) * 2),
+                BlockShift.Front => Vector3.UnitZ * ((1 - (location.Z - float.Truncate(location.Z))) * 2),
                 _ => Vector3.Zero
             };
         }
@@ -664,7 +812,8 @@ public class MapBinary
         switch (pattern)
         {
             case BlocksPatternOne blocksPatternOne:
-                return AddBlock(blocksPatternOne.BlockKey, (Vector3s)location, CoordsHelper.GetCollidingBlock(location), Direction2D.Left, owner);
+                return AddBlock(blocksPatternOne.BlockKey, (Vector3s)location, CoordsHelper.GetCollidingBlock(location),
+                    Direction2D.Left, owner);
             case BlocksPatternSphere blocksPatternSphere:
                 bounds = new BoundingSphere(location, blocksPatternSphere.Radius);
                 chance = blocksPatternSphere.FillRate;
@@ -716,13 +865,14 @@ public class MapBinary
         return dict;
     }
 
-    public Dictionary<Vector3s, BlockUpdate> AddBlock(Key blockKey, Vector3s location, Vector3s attachTo, Direction2D placeDirection, Unit? owner)
+    public Dictionary<Vector3s, BlockUpdate> AddBlock(Key blockKey, Vector3s location, Vector3s attachTo,
+        Direction2D placeDirection, Unit? owner)
     {
         var blockCard = Databases.Catalogue.GetCard<CardBlock>(blockKey);
         var dict = new Dictionary<Vector3s, BlockUpdate>();
         var collidingUnits = Units?.GetColliding(new BoundingBoxEx(location)) ?? [];
         var collidingAttachToUnits = Units?.GetColliding(new BoundingBoxEx(attachTo)) ?? [];
-        if (blockCard == null) return dict;
+        if (blockCard == null || (!blockCard.CanSwim && location.y <= _liquidPlane)) return dict;
         
         if (blockCard.Grounded)
         {
@@ -781,7 +931,6 @@ public class MapBinary
         {
             var block = this[pos];
             block.Id = blockCard.BlockId;
-            block.Damage = 0;
             if (!blockCard.IsVisualSlope)
             {
                 block.VData = 0;
@@ -799,14 +948,15 @@ public class MapBinary
         return dict;
     }
 
-    public Dictionary<Vector3s, BlockUpdate> DamageBlock(Vector3s location, Damage damage, Unit? attacker)
+    public Dictionary<Vector3s, BlockUpdate> DamageBlock(Vector3s location, DamageData damage, Unit? attacker)
     {
         var block = this[location];
         var blockCard = block.Card;
         var dict = new Dictionary<Vector3s, BlockUpdate>();
-        if (block.IsAir || block.IsLocked || (!blockCard.Destructible && !damage.IgnoreInvincibility) || !(blockCard.Health?.MaxHealth > 0)) return dict;
-
-        var dmgAmount = (damage.WorldDamage - blockCard.Health.Toughness) *
+        if (block.IsAir || block.IsLocked || (!blockCard.Destructible && !damage.IgnoreInvincibility) ||
+            !(blockCard.Health?.MaxHealth > 0)) return dict;
+        
+        var dmgAmount = MathF.Max(damage.BlockDamage - blockCard.Health.Toughness, 0) *
                         (byte.MaxValue / blockCard.Health.MaxHealth);
 
         if (block.Damage + dmgAmount >= byte.MaxValue)
@@ -825,15 +975,22 @@ public class MapBinary
                     }
                 }
             }
-                
+
+            var blockKey = blockCard.Key;
             block.Id = 0;
             block.Damage = 0;
             block.VData = 0;
             block.Team = TeamType.Neutral;
                 
-            OwnedBlocks.Remove(location);
+            OnBlockRemoved(location);
             StableData(location).Int = uint.MaxValue;
             dict[location] = block.ToUpdate(NormalDest);
+            
+            if (damage.Mining && attacker is { PlayerId: not null })
+            {
+                _mapUpdater.OnMined(attacker.PlayerId.Value, blockKey);
+            }
+            
             var (cutBlocks, cutRes) = PropagateInstability(location);
             foreach (var cut in cutBlocks)
             {
@@ -854,6 +1011,192 @@ public class MapBinary
         return dict;
     }
 
+    public (Dictionary<Vector3s, BlockUpdate> updates, List<Unit> hitUnits) SplashDamageBlocks(Vector3[] locations,
+        DamageData damage, ImpactData impact, float radius, ICollection<Unit> unitsInRadius, Unit? attacker, TeamType? attackingTeam)
+    {
+        var dict = new Dictionary<Vector3s, BlockUpdate>();
+        var hitUnits = new List<Unit>();
+        var visitedBlocks = new HashSet<Vector3s>();
+        var maxTravCount = CoordsHelper.MaxBlockTraversal(radius);
+        var (unitsForBlock, blocksForUnit) = GetUnitBlockPositions(unitsInRadius);
+        var blockQueue = new PriorityQueue<(SplashDamagePropagation prop, uint travCount), float>();
+        var naturalFalloff = Math.Min(NaturalFalloff, 1f / maxTravCount);
+        
+        var radiusSqrd = radius * radius;
+        
+        foreach (var startBlock in locations.Select(l => (Vector3s)l))
+        {
+            if (!ContainsBlock(startBlock)) continue;
+            var startBlockData = this[startBlock];
+            if (!startBlockData.Card.Destructible && !damage.IgnoreInvincibility) continue;
+            
+            var startDirCount = new bool[6];
+            Array.Fill(startDirCount, true);
+            blockQueue.Enqueue((new SplashDamagePropagation(startBlock, startDirCount), 0), 0);
+        }
+
+        while (blockQueue.TryDequeue(out var propInfo, out var dmgReduction))
+        {
+            if (!visitedBlocks.Add(propInfo.prop.Position))
+                continue;
+
+            var dmg = dmgReduction > 0 ? damage.ReduceByPercent(dmgReduction - naturalFalloff * propInfo.travCount, dmgReduction) : damage;
+            if (unitsForBlock.TryGetValue(propInfo.prop.Position, out var units))
+            {
+                foreach (var unit in units)
+                {
+                    if (!dmg.IsZeroDamage())
+                    {
+                        unit.TakeDamage(dmg, impact, true, attacker, attackingTeam);
+                    }
+                    hitUnits.Add(unit);
+                    foreach (var block in blocksForUnit[unit])
+                    {
+                        if (unitsForBlock.TryGetValue(block, out var blockUnits))
+                        {
+                            blockUnits.Remove(unit);
+                        }
+                    }
+
+                    blocksForUnit.Remove(unit);
+                }
+                
+                unitsForBlock.Remove(propInfo.prop.Position);
+            }
+            
+            var blk = this[propInfo.prop.Position];
+            var blkCard = blk.Card;
+            var dmgTaken = 0.0f;
+            var checkOpenFaces = false;
+            var onlyOpenFaces = false;
+            var oldVdata = blk.VData;
+            if (blkCard.Health?.MaxHealth > 0)
+            {
+                if (dmg.BlockDamage == 0)
+                {
+                    continue;
+                }
+                
+                var dmgAmount = MathF.Max(dmg.BlockDamage - blkCard.Health.Toughness, 0) * ((100 - blkCard.SplashResistance) / 100f);
+                var actDamage = dmgAmount * (byte.MaxValue / blkCard.Health.MaxHealth);
+
+                checkOpenFaces = (blkCard.IsVisualSlope && blk.VData != 0) || blkCard.IsVisualPrefab;
+                if (blk.Damage + actDamage >= byte.MaxValue)
+                {
+                    dmgTaken = (byte.MaxValue - blk.Damage) * (blkCard.Health.MaxHealth / byte.MaxValue);
+                    
+                    blk.Id = 0;
+                    blk.Damage = 0;
+                    blk.VData = 0;
+                    blk.Team = TeamType.Neutral;
+                
+                    OnBlockRemoved(propInfo.prop.Position);
+                    StableData(propInfo.prop.Position).Int = uint.MaxValue;
+                    dict[propInfo.prop.Position] = blk.ToUpdate(SplashDest);
+                    var (cutBlocks, cutRes) = PropagateInstability(propInfo.prop.Position);
+                    foreach (var cut in cutBlocks)
+                    {
+                        dict[cut.Key] = cut.Value;
+                    }
+
+                    if (cutRes > 0 && attacker is { OwnerPlayerId: not null })
+                    {
+                        _mapUpdater.OnCut(attacker.OwnerPlayerId.Value, cutRes);
+                    }
+                }
+                else
+                {
+                    blk.Damage += (byte) float.Truncate(actDamage);
+                    dict[propInfo.prop.Position] = blk.ToUpdate();
+
+                    onlyOpenFaces = checkOpenFaces;
+                    if (!onlyOpenFaces)
+                        continue;
+                }
+            }
+
+            var newReduction = dmgReduction + naturalFalloff + 
+                               (blkCard.SplashFalloff > 0
+                                   ? blkCard.SplashFalloff / 100f
+                                   : 0) +
+                               (dmgTaken > 0 ? dmgTaken / damage.BlockDamage : 0);
+            
+            if (newReduction >= 1f || propInfo.travCount == maxTravCount) continue;
+            
+            foreach (var (dir, index) in propInfo.prop.CanGoDir.Select((i, i1) => (i, i1)))
+            {
+                if (!dir) continue;
+                var direction = CoordsHelper.FaceToVector[index];
+                var newPos = direction + propInfo.prop.Position;
+                if (visitedBlocks.Contains(newPos) || !ContainsBlock(newPos))
+                {
+                    continue;
+                }
+
+                if (onlyOpenFaces && blk.VData is var vData && blkCard switch
+                    {
+                        { IsVisualSlope: true } => SlopeBuilder.SidesCorners[index].All(c =>
+                            SlopeBuilder.IsCorner(c, (byte)vData)),
+                        { IsVisualPrefab: true } => PrefabBuilder.IsSolidFace(blk, (BlockFace)index),
+                        _ => true
+                    })
+                {
+                    continue;
+                }
+                
+                var newBlock = this[newPos];
+                var newBlockCard = newBlock.Card;
+
+                var closestPoint = Vector3.Clamp(locations[0], newPos.ToVector3(), (newPos + Vector3s.One).ToVector3());
+                if (Vector3.DistanceSquared(closestPoint, locations[0]) > radiusSqrd ||
+                    (!newBlockCard.Destructible && !damage.IgnoreInvincibility))
+                {
+                    visitedBlocks.Add(newPos);
+                    continue;
+                }
+                
+                var newDirCount = propInfo.prop.CanGoDir
+                    .Select((c, idx) => c && idx != (int)CoordsHelper.OppositeFace[index]).ToArray();
+                
+                blockQueue.Enqueue((new SplashDamagePropagation(newPos, newDirCount), propInfo.travCount + 1),
+                    onlyOpenFaces || (checkOpenFaces && oldVdata is var vdata && !(blkCard switch
+                    {
+                        { IsVisualSlope: true } => SlopeBuilder.SidesCorners[index].All(c =>
+                            SlopeBuilder.IsCorner(c, (byte)vdata)),
+                        { IsVisualPrefab: true } => PrefabBuilder.IsSolidFace(blk, (BlockFace)index),
+                        _ => true
+                    })) ? dmgReduction + naturalFalloff : newReduction);
+            }
+        }
+        
+        return (dict, hitUnits);
+    }
+
+    public Dictionary<Vector3s, BlockUpdate> HealBlock(Vector3s location, float amount, Unit? healer)
+    {
+        var block = this[location];
+        var blockCard = block.Card;
+        var dict = new Dictionary<Vector3s, BlockUpdate>();
+        if (block.Damage == 0 || block.IsAir || block.IsLocked || !blockCard.Destructible ||
+            !(blockCard.Health?.MaxHealth > 0)) return dict;
+        
+        var healAmount = amount * (byte.MaxValue / blockCard.Health.MaxHealth);
+        byte heal;
+        if (float.Truncate(healAmount) > block.Damage)
+        {
+            heal = block.Damage;
+            block.Damage = 0;
+        }
+        else
+        {
+            heal = (byte)float.Truncate(healAmount);
+            block.Damage -= heal;
+        }
+        
+        dict[location] = block.ToUpdate();
+        return dict;
+    }
+
     public Dictionary<Vector3s, BlockUpdate> RemoveBlock(Vector3s location)
     {
         var block = this[location];
@@ -863,7 +1206,7 @@ public class MapBinary
         block.Damage = 0;
         block.VData = 0;
         block.Team = TeamType.Neutral;
-        OwnedBlocks.Remove(location);
+        OnBlockRemoved(location);
         StableData(location).Int = uint.MaxValue;
         dict[location] = block.ToUpdate();
         var (updates, _) = PropagateInstability(location);
@@ -873,6 +1216,37 @@ public class MapBinary
         }
         
         return dict;
+    }
+
+    public bool AttachToBlock(Unit unit, Vector3s location, BlockFace face)
+    {
+        if (!ContainsBlock(location)) return false;
+        
+        if (AttachedUnits.TryGetValue(location, out var attachedUnits))
+        {
+            if (attachedUnits[(int)face] is not null) return false;
+            attachedUnits[(int)face] = unit;
+            unit.AttachedTo = location;
+            return true;
+        }
+        
+        AttachedUnits.Add(location, new Unit?[6]);
+        AttachedUnits[location][(int)face] = unit;
+        unit.AttachedTo = location;
+        return true;
+    }
+
+    public void DetachFromBlock(Unit unit, Vector3s location)
+    {
+        if (!AttachedUnits.TryGetValue(location, out var attachedUnits)) return;
+        for (var index = 0; index < attachedUnits.Length; index++)
+        {
+            var u = attachedUnits[index];
+            if (u is not null && u.Id == unit.Id)
+            {
+                attachedUnits[index] = null;
+            }
+        }
     }
 
     public Dictionary<Vector3s, BlockUpdate> MakeSlopeSolid(Vector3s location, Vector3s attachTo)
@@ -892,41 +1266,103 @@ public class MapBinary
         return dict;
     }
 
-    private Func<BlockBinary, bool> CanPlaceBlock(CardBlock blockCard, Unit[] unitsInArea, Vector3s? attachTo = null, Unit[]? unitsInAttachArea = null)
+    private Func<BlockBinary, bool> CanPlaceBlock(CardBlock blockCard, Unit[] unitsInArea, Vector3s? attachTo = null,
+        Unit[]? unitsInAttachArea = null)
     {
         Func<BlockBinary, bool> stable = attachTo is null
             ? block => GetBorderingFaces(block.Position, CheckIfStable(block.Position)).Any()
             : block => CheckIfStable(block.Position, ignoreSlope: true)(attachTo.Value);
 
-        var blockedPositions = GetContainedInUnits(unitsInArea);
-        var blockedAttachPositions =  GetContainedInUnits(unitsInAttachArea ?? []);
-
+        Func<BlockBinary, bool> replaceable = block => block.IsReplaceable;
+        if (blockCard.Replaceable)
+        {
+            unitsInArea = unitsInArea.Where(u => u.PlayerId is null).ToArray();
+            replaceable = block => block.Card.Replaceable;
+        }
+        
+        var blockedPositions = GetContainedInUnits(unitsInArea, 2, blockCard.Solid, true);
+        var blockedAttachPositions =  GetContainedInUnits(unitsInAttachArea ?? [], 2, blockCard.Solid, true);
         return blockCard switch
         {
             { Grounded: true, Solid: true } => block =>
-                block.IsReplaceable && block.Y > 0 &&
+                replaceable(block) && block.Y > 0 &&
                 GetValidFacesActual(block.Position with { y = (short)(block.Y - 1) }, true).Contains(BlockFace.Top) &&
                                                              !blockedPositions.Contains(block.Position) &&
                 (attachTo is null || !this[attachTo.Value].Card.IsVisualSlope || !blockedAttachPositions.Contains(attachTo.Value)),
             
             { Grounded: true } => block =>
-                block.IsReplaceable && block.Y > 0 &&
+                replaceable(block) && block.Y > 0 && !blockedPositions.Contains(block.Position) &&
                 GetValidFacesActual(block.Position with { y = (short)(block.Y - 1) }, true).Contains(BlockFace.Top),
             
-            { Solid: true, CanStayInAir: true } => block =>
-                block.IsReplaceable && !blockedPositions.Contains(block.Position) &&
+            { Solid: true, CanFloat: true } => block =>
+                replaceable(block) && !blockedPositions.Contains(block.Position) &&
                 (attachTo is null || !this[attachTo.Value].Card.IsVisualSlope || !blockedAttachPositions.Contains(attachTo.Value)),
             
             { Solid: true } => block =>
-                block.IsReplaceable && !blockedPositions.Contains(block.Position) &&
-                (attachTo is null || !this[attachTo.Value].Card.IsVisualSlope || !blockedAttachPositions.Contains(attachTo.Value)) && stable(block),
+                replaceable(block) && !blockedPositions.Contains(block.Position) &&
+                (attachTo is null || !this[attachTo.Value].Card.IsVisualSlope ||
+                 !blockedAttachPositions.Contains(attachTo.Value)) && stable(block),
+
+            { CanFloat: true } => block => replaceable(block) && !blockedPositions.Contains(block.Position),
             
-            { CanStayInAir: true } => block => block.IsReplaceable,
-            
-            _ => block => block.IsReplaceable && stable(block)
+            _ => block => replaceable(block) && !blockedPositions.Contains(block.Position) && stable(block)
         };
     }
 
     private static Func<BlockBinary, bool> CanReplaceBlock() => block => block.Card is
-        { Solid: true, Grounded: false, Transparent: false, HasTeam: false, CanStayInAir: false, Destructible: true, IsVisualClone: false };
+        {
+            Solid: true, Grounded: false, Transparent: false, HasTeam: false, CanFloat: false, Destructible: true,
+            IsVisualClone: false
+        };
+
+    public Vector3s? GetGroundBlockFromSky(int xVal, int zVal)
+    {
+        for (var y = SizeY - 1; y >= 0; y--)
+        {
+            var pos = new Vector3s(xVal, y, zVal);
+            if (!ContainsBlock(pos)) continue;
+            
+            var block = this[pos];
+            if (block.IsSolid && !block.IsGrounded)
+            {
+                return block.Position;
+            }
+        }
+        
+        return null;
+    }
+
+    public ImpactData CreateImpactForBlock(Vector3s blockPos, Vector3 targetPos)
+    {
+        var owner = OwnedBlocks.GetValueOrDefault(blockPos);
+        var block = BlockCardsCache.GetCard(this[blockPos].Id);
+        return new ImpactData
+        {
+            InsidePoint = targetPos,
+            Normal = Vector3s.Zero,
+            CasterUnitId = owner?.Id,
+            CasterPlayerId = owner?.OwnerPlayerId,
+            SourceKey = block.Key,
+            ShotPos = blockPos.ToVector3(),
+            Crit = false
+        };
+    }
+
+    public bool OnFriendlySide(Vector3 position, TeamType team) =>
+        team switch
+        {
+            TeamType.Neutral => false,
+            TeamType.Team1 => position.X <= SizeX * 0.5f,
+            TeamType.Team2 => position.X >= SizeX * 0.5f,
+            _ => false
+        };
+    
+    public bool OnEnemySide(Vector3 position, TeamType team) =>
+        team switch
+        {
+            TeamType.Neutral => true,
+            TeamType.Team1 => position.X > SizeX * 0.5f,
+            TeamType.Team2 => position.X < SizeX * 0.5f,
+            _ => true
+        };
 }

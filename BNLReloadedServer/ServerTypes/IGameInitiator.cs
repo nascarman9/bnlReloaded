@@ -14,4 +14,5 @@ public interface IGameInitiator
     public float GetResourceCap();
     public float GetResourceAmount();
     public long? GetBuildPhaseEndTime(DateTimeOffset startTime);
+    public float GetRespawnMultiplier();
 }

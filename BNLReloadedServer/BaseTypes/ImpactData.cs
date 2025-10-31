@@ -71,4 +71,18 @@ public class ImpactData
       impactData.Read(reader);
       return impactData;
     }
+
+    public ImpactData Clone() =>
+      new()
+      {
+        InsidePoint = InsidePoint,
+        Normal = Normal,
+        CasterUnitId = CasterUnitId,
+        CasterPlayerId = CasterPlayerId,
+        Impact = Impact,
+        SourceKey = SourceKey,
+        HitUnits = HitUnits?.ToList(),
+        ShotPos = ShotPos,
+        Crit = Crit
+      };
 }

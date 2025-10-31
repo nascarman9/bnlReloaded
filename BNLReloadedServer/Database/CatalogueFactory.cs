@@ -57,8 +57,22 @@ public static class CatalogueFactory
 
         var newUnit = new Unit(id, unitInit, updater);
 
-        newUnit.ActiveEffects = ConstEffectInfo.Convert(newUnit.InitialEffects.AddRange(updater.GetTeamEffects(unit.Team).ToList()
-            .ToInfoDictionary()));
+        var startingEffects = newUnit.InitialEffects.ToDictionary();
+        foreach (var effect in updater.GetTeamEffects(unit.Team))
+        {
+            if (startingEffects.TryGetValue(effect.Key, out var value))
+            {
+                if (value.HasValue && (!effect.HasDuration || effect.TimestampEnd > value))
+                {
+                    startingEffects[effect.Key] = effect.TimestampEnd;
+                }
+            }
+            else
+            {
+                startingEffects.Add(effect.Key, effect.TimestampEnd);
+            }
+        }
+        newUnit.ActiveEffects = ConstEffectInfo.Convert(startingEffects);
         
         var initUpdate = new UnitUpdate
         {
@@ -70,7 +84,21 @@ public static class CatalogueFactory
                 ? newUnit.UnitMaxForcefield(unitCard.Health.Forcefield.MaxAmount)
                 : null,
             Shield = unitCard.Health?.Health?.Shield,
-            Effects = newUnit.ActiveEffects.ToInfoDictionary()
+            Effects = newUnit.ActiveEffects.ToInfoDictionary(),
+            MovementActive = unitCard.Movement is null or UnitMovementStatic ? null : false,
+            BombTimeoutEnd = unitCard.Data is UnitDataBomb bombData
+                ? (ulong)DateTimeOffset.Now.AddSeconds(bombData.Timeout).ToUnixTimeMilliseconds()
+                : null,
+            TeslaCharge = unitCard.Data is UnitDataTeslaCoil teslaData 
+                ? teslaData.InitCharges > 0 
+                    ? teslaData.InitCharges == teslaData.MaxCharges 
+                        ? TeslaChargeType.FullSelfCharge 
+                        : TeslaChargeType.SelfCharge
+                    : TeslaChargeType.NoCharge
+                : null,
+            DamageCapturers = unitCard.Data is UnitDataDamageCapture
+                ? []
+                : null
         };
         
         newUnit.UpdateData(initUpdate);
@@ -78,7 +106,7 @@ public static class CatalogueFactory
         return newUnit;
     }
 
-    public static Unit? CreateUnit(uint id, Key unitKey, ZoneTransform location, TeamType team, Unit? owner, UnitUpdater updater)
+    public static Unit? CreateUnit(uint id, Key unitKey, ZoneTransform location, TeamType team, Unit? owner, UnitUpdater updater, float speed = 0, bool isAttached = false)
     {
         var unit = Databases.Catalogue.GetCard<CardUnit>(unitKey);
         if (unit == null) return null;
@@ -87,14 +115,29 @@ public static class CatalogueFactory
         {
             Key = unit.Key,
             Transform = location,
-            Controlled = owner == null,
-            OwnerId = owner?.PlayerId,
+            Controlled = owner?.OwnerPlayerId == null,
+            OwnerId = owner?.OwnerPlayerId,
             Team = team,
         };
 
         var newUnit = new Unit(id, unitInit, updater);
-
-        newUnit.ActiveEffects = ConstEffectInfo.Convert(newUnit.InitialEffects.AddRange(updater.GetTeamEffects(team).ToList().ToInfoDictionary()));
+        
+        var startingEffects = newUnit.InitialEffects.ToDictionary();
+        foreach (var effect in updater.GetTeamEffects(team))
+        {
+            if (startingEffects.TryGetValue(effect.Key, out var value))
+            {
+                if (value.HasValue && (!effect.HasDuration || effect.TimestampEnd > value))
+                {
+                    startingEffects[effect.Key] = effect.TimestampEnd;
+                }
+            }
+            else
+            {
+                startingEffects.Add(effect.Key, effect.TimestampEnd);
+            }
+        }
+        newUnit.ActiveEffects = ConstEffectInfo.Convert(startingEffects);
         
         var initUpdate = new UnitUpdate
         {
@@ -106,7 +149,19 @@ public static class CatalogueFactory
                 ? newUnit.UnitMaxForcefield(unit.Health.Forcefield.MaxAmount)
                 : null,
             Shield = unit.Health?.Health?.Shield,
-            Effects = newUnit.ActiveEffects.ToInfoDictionary()
+            Effects = newUnit.ActiveEffects.ToInfoDictionary(),
+            MovementActive = unit.Movement is null or UnitMovementStatic ? null : !isAttached,
+            BombTimeoutEnd = unit.Data is UnitDataBomb bombData
+                ? (ulong)DateTimeOffset.Now.AddSeconds(bombData.Timeout).ToUnixTimeMilliseconds()
+                : null,
+            TeslaCharge = unit.Data is UnitDataTeslaCoil teslaData 
+                ? teslaData.InitCharges > 0 
+                    ? teslaData.InitCharges == teslaData.MaxCharges 
+                        ? TeslaChargeType.FullSelfCharge 
+                        : TeslaChargeType.SelfCharge
+                    : TeslaChargeType.NoCharge
+                : null,
+            ProjectileInitSpeed = unit.Data is UnitDataProjectile ? speed : null
         };
         
         newUnit.UpdateData(initUpdate);
@@ -114,7 +169,8 @@ public static class CatalogueFactory
         return newUnit;
     }
 
-    public static Unit? CreatePlayerUnit(uint id, uint playerId, ZoneTransform transform, PlayerLobbyState playerInfo, IGameInitiator gameInitiator, UnitUpdater updater)
+    public static Unit? CreatePlayerUnit(uint id, uint playerId, ZoneTransform transform, PlayerLobbyState playerInfo,
+        IGameInitiator gameInitiator, CardMatch matchCard, UnitUpdater updater)
     {
         var unitCard = Databases.Catalogue.GetCard<CardUnit>(playerInfo.Hero);
         if (unitCard is not { Data: UnitDataPlayer playerData }) return null;
@@ -136,7 +192,7 @@ public static class CatalogueFactory
         var effects = PerkHelper.ExtractEffects(playerInfo.Perks ?? []);
         var passives = playerData.Passive?.ConvertPassives(playerInfo.Perks ?? []);
 
-        if (passives != null)
+        if (passives is { Count: > 0 })
         {
             foreach (var effect in passives)
             {
@@ -144,8 +200,32 @@ public static class CatalogueFactory
             }
         }
 
+        if (matchCard.PlayerEffects is { Count: > 0 })
+        {
+            foreach (var effect in matchCard.PlayerEffects)
+            {
+                effects[effect] = null;
+            }
+        }
+        
         newUnit.InitialEffects = newUnit.InitialEffects.AddRange(effects);
-        newUnit.ActiveEffects = ConstEffectInfo.Convert(newUnit.InitialEffects.AddRange(updater.GetTeamEffects(playerInfo.Team).ToList().ToInfoDictionary()));
+        
+        var startingEffects = newUnit.InitialEffects.ToDictionary();
+        foreach (var effect in updater.GetTeamEffects(playerInfo.Team))
+        {
+            if (startingEffects.TryGetValue(effect.Key, out var value))
+            {
+                if (value.HasValue && (!effect.HasDuration || effect.TimestampEnd > value))
+                {
+                    startingEffects[effect.Key] = effect.TimestampEnd;
+                }
+            }
+            else
+            {
+                startingEffects.Add(effect.Key, effect.TimestampEnd);
+            }
+        }
+        newUnit.ActiveEffects = ConstEffectInfo.Convert(startingEffects);
 
         var devices = playerInfo.Devices?.ConvertDevices(playerInfo.Perks ?? []);
 
@@ -167,27 +247,44 @@ public static class CatalogueFactory
                     {
                         DeviceKey = device.Value,
                         TotalCost = newUnit.BuildCost(cBlock.BaseCost ?? 1),
-                        CostInc = newUnit.BuildCost(cBlock.CostIncPerUnit ?? 0)
+                        CostInc = 0
                     },
                     CardUnit cUnit => new DeviceData
                     {
                         DeviceKey = device.Value,
                         TotalCost = newUnit.BuildCost(cUnit.BaseCost ?? 1),
-                        CostInc = newUnit.BuildCost(cUnit.CostIncPerUnit ?? 0)
+                        CostInc = 0
                     },
                     _ => null
                 };
 
-                if (deviceData != null)
+                if (deviceData == null) continue;
+                if (matchCard.DevicesLogic?.DeviceCostModifiers is { Count: > 0 } costModifiers &&
+                    costModifiers.TryGetValue(deviceData.DeviceKey, out var modifier))
                 {
-                    updatedDevices[device.Key] = deviceData;
+                    deviceData.TotalCost *= modifier;
                 }
+                updatedDevices[device.Key] = deviceData;
             }
         }
 
         var abilityCard =
             Databases.Catalogue.GetCard<CardAbility>(
                 playerData.ActiveAbilityKey.ConvertAbility(playerInfo.Perks ?? []));
+        
+        foreach (var ammo in newUnit.Gears.SelectMany(gear => gear.Ammo))
+        {
+            ammo.Mag = ammo.MagSize;
+            ammo.Pool = ammo.PoolSize;
+        }
+        
+        Dictionary<Key, List<Ammo>> updateAmmo = [];
+        foreach (var gear in newUnit.Gears)
+        {
+            var ammo = gear.Ammo
+                .Select(ammo => new Ammo { Index = ammo.AmmoIndex, Mag = ammo.Mag, Pool = ammo.Pool }).ToList();
+            updateAmmo.Add(gear.Key, ammo);
+        }
 
         var initUpdate = new UnitUpdate
         {
@@ -199,6 +296,7 @@ public static class CatalogueFactory
                 ? newUnit.UnitMaxForcefield(unitCard.Health.Forcefield.MaxAmount)
                 : null,
             Shield = unitCard.Health?.Health?.Shield,
+            Ammo = updateAmmo,
             MovementActive = false,
             CurrentGear = newUnit.Gears[0].Key,
             Ability = abilityCard?.Key,

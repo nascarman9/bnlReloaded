@@ -6,7 +6,7 @@ public partial class Unit
 
     public void UpdateStat(ScoreType scoreType, float amount)
     {
-        if (!(amount > 0) || Stats is null) return;
+        if (amount <= 0 || Stats is null) return;
         if (!Stats.TryAdd(scoreType, amount))
         {
             Stats[scoreType] += amount;

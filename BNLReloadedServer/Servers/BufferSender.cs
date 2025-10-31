@@ -32,6 +32,13 @@ public class BufferSender : IBufferedSender
         _stream.Write(buffer);
     }
 
+    public void SendExcept(BinaryWriter writer, List<Guid> excluded)
+    {
+        var message = AppendMessageLength(writer);
+        _messageLength += message.Length;
+        _stream.Write(message);
+    }
+
     public void SendSync(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);

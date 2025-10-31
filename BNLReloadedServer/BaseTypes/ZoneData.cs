@@ -1,4 +1,5 @@
-﻿using BNLReloadedServer.Database;
+﻿using System.Numerics;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 
 namespace BNLReloadedServer.BaseTypes;
@@ -7,8 +8,8 @@ public record ZoneUpdater(Action<ZoneUpdate> OnZoneUpdate);
 
 public class ZoneData(ZoneUpdater updater)
 {
-    public Dictionary<TeamType, MatchTeamStats> TeamStats = new();
-    public Dictionary<uint, MatchPlayerStats> PlayerStats = new();
+    public readonly Dictionary<TeamType, MatchTeamStats> TeamStats = new();
+    public readonly Dictionary<uint, MatchPlayerStats> PlayerStats = new();
     public Dictionary<uint, SpawnPoint> SpawnPoints = new();
     public Dictionary<uint, ZonePlayerInfo> PlayerInfo = new();
     public Dictionary<TeamType, uint> Chat = new();
@@ -147,6 +148,78 @@ public class ZoneData(ZoneUpdater updater)
           ResourceCap = update.ResourceCap.Value;
 
         updater.OnZoneUpdate(update);
+    }
+
+    public void UpdateSpawn(uint spawnId, SpawnPointLockType? lockType = null, uint? ownerId = null,
+        bool changeOwner = false, Vector3? position = null, TeamType? team = null)
+    {
+        bool hasChange;
+        if (SpawnPoints.TryGetValue(spawnId, out var spawn))
+        {
+            hasChange = lockType is not null && spawn.Lock != lockType;
+            spawn.Lock = lockType ?? spawn.Lock;
+            hasChange = hasChange || (changeOwner && ownerId != spawn.Owner);
+            spawn.Owner = changeOwner ? ownerId : spawn.Owner;
+            hasChange = hasChange || (position is not null && position != spawn.Pos);
+            spawn.Pos = position ?? spawn.Pos;
+            hasChange = hasChange || (team is not null && team != spawn.Team);
+            spawn.Team = team ?? spawn.Team;
+        }
+        else
+        {
+            hasChange = true;
+            SpawnPoints[spawnId] = new SpawnPoint
+            {
+                Id = spawnId,
+                Lock = lockType ?? SpawnPointLockType.Free,
+                Owner = ownerId,
+                Pos = position ?? Vector3.Zero,
+                Team = team ?? TeamType.Neutral
+            };
+        }
+
+        if (hasChange)
+        {
+            updater.OnZoneUpdate(new ZoneUpdate
+            {
+                SpawnPoints = SpawnPoints.Values.ToList()
+            });
+        }
+    }
+
+    public void RemoveSpawn(uint spawnId)
+    {
+        SpawnPoints.Remove(spawnId);
+
+        updater.OnZoneUpdate(new ZoneUpdate
+        {
+            SpawnPoints = SpawnPoints.Values.ToList()
+        });
+    }
+
+    public void UpdatePlayerSelectedSpawn(uint playerId, uint? spawnId)
+    {
+        PlayerSpawnPoints[playerId] = spawnId;
+        updater.OnZoneUpdate(new ZoneUpdate
+        {
+            PlayerSpawnPoints = PlayerSpawnPoints
+        });
+    }
+
+    public void UpdateSpawnTime(uint playerId, ulong? spawnTime)
+    {
+        if (spawnTime is null)
+        {
+            RespawnInfo.Remove(playerId);
+        }
+        else
+        {
+            RespawnInfo[playerId] = spawnTime.Value;
+        }
+        updater.OnZoneUpdate(new ZoneUpdate
+        {
+            RespawnInfo = RespawnInfo
+        });
     }
 
     public void EndMatch(TeamType winner)

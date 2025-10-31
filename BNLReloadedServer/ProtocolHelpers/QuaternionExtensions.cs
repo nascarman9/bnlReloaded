@@ -30,12 +30,20 @@ public static class QuaternionExtensions
 
     public static Quaternion LookRotation(Vector3 forward, Vector3? up = null)
     {
+        var doFlip = forward.Z < 0;
         up ??= Vector3.UnitY;
-        var newForward = Vector3.Normalize(forward);
+        var newForward = Vector3.Normalize(doFlip ? forward with { Z = -forward.Z } : forward);
         var newRight = Vector3.Normalize(Vector3.Cross(up.Value, newForward));
-        if (newRight == Vector3.NaN)
+        if (newRight.LengthSquared() == 0)
         {
-            return FromToRotation(Vector3.UnitZ, newForward);
+            var res = FromToRotation(Vector3.UnitZ, newForward);
+            if (doFlip)
+            {
+                res *= Quaternion.CreateFromYawPitchRoll(MathF.PI, 0, 0);
+            }
+            
+            return res;
+            
         }
         var newUp = Vector3.Normalize(Vector3.Cross(newForward, newRight));
 
@@ -62,24 +70,47 @@ public static class QuaternionExtensions
         quat.Y = (mat.M13 - mat.M31) / q4;
         quat.Z = (mat.M21 - mat.M12) / q4;
 
+        if (doFlip)
+        {
+            quat *= Quaternion.CreateFromYawPitchRoll(MathF.PI, 0, 0);
+        }
         return quat;
     }
     
     public static Quaternion FromToRotation(Vector3 fromDirection, Vector3 toDirection)
     {
-        //calc rot angle
-        var angleHalfRad =
-            MathF.Acos(Vector3.Dot(fromDirection, toDirection) / (fromDirection.Length() * toDirection.Length())) /
-            2.0f;
+        fromDirection = Vector3.Normalize(fromDirection);
+        toDirection = Vector3.Normalize(toDirection);
 
-        //calc rot axis
-        var axis = Vector3.Normalize(Vector3.Cross(fromDirection, toDirection));
-        axis *= MathF.Sin(angleHalfRad);
+        var dotProduct = Vector3.Dot(fromDirection, toDirection);
 
-        //calc quaternion
-        var quat = new Quaternion(axis.X, axis.Y, axis.Z, MathF.Cos(angleHalfRad));
-
-        return quat;
+        switch (dotProduct)
+        {
+            // Vectors are already aligned
+            case >= 1.0f:
+            {
+                // Identity quaternion
+                return Quaternion.Identity;
+            }
+            // Vectors are opposite
+            case <= -1.0f:
+            {
+                // Rotate 180 degrees around an arbitrary orthogonal axis
+                var axis = Vector3.Cross(fromDirection, Vector3.UnitY); 
+                if (axis.LengthSquared() == 0) // If sourceVector is parallel to UnitY
+                {
+                    axis = Vector3.Cross(fromDirection, Vector3.UnitX);
+                }
+                axis = Vector3.Normalize(axis);
+                return Quaternion.CreateFromAxisAngle(axis, MathF.PI); // 180 degrees
+            }
+            default:
+            {
+                var axis = Vector3.Normalize(Vector3.Cross(fromDirection, toDirection));
+                var angle = MathF.Acos(dotProduct);
+                return Quaternion.CreateFromAxisAngle(axis, angle);
+            }
+        }
     }
 
     public static Quaternion ToQuaternion(this Direction2D dir) =>

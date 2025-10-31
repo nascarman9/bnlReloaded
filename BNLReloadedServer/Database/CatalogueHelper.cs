@@ -1,4 +1,5 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using MatchType = BNLReloadedServer.BaseTypes.MatchType;
 
 namespace BNLReloadedServer.Database;
 
@@ -34,12 +35,29 @@ public static class CatalogueHelper
 
     public static CardGameMode? GetMode(GameRankingType type)
     {
-        return GlobalLogic.Matchmaker?.GameModesForQueues?.Select(gameModesForQueue => Databases.Catalogue.GetCard<CardGameMode>(gameModesForQueue)).FirstOrDefault(card => card?.Ranking == type);
+        return GlobalLogic.Matchmaker?.GameModesForQueues
+            ?.Select(gameModesForQueue => Databases.Catalogue.GetCard<CardGameMode>(gameModesForQueue))
+            .FirstOrDefault(card => card?.Ranking == type);
     }
 
-    public static CardMatch? GetMatch(BaseTypes.MatchType type)
+    public static CardMatch? GetMatch(MatchType type, Key gameMode)
     {
-        return GetCards<CardMatch>(CardCategory.Match).Find(x => x.Data?.Type == type);
+        if (type != MatchType.ShieldRush2)
+            return GetCards<CardMatch>(CardCategory.Match).Find(x => x.Data?.Type == type);
+        
+        var madMode = ModeMad;
+        var rankedMode = ModeRanked;
+        if (gameMode == rankedMode.Key)
+        {
+            return rankedMode.MatchMode.GetCard<CardMatch>();
+        }
+
+        if (gameMode == madMode.Key)
+        {
+            return madMode.MatchMode.GetCard<CardMatch>();
+        }
+
+        return ModeFriendly.MatchMode.GetCard<CardMatch>();
     }
 
     public static CardGameMode ModeFriendly => Databases.Catalogue.GetCard<CardGameMode>("game_mode_friendly")!;
@@ -51,6 +69,34 @@ public static class CatalogueHelper
     public static CardGameMode ModeMad => Databases.Catalogue.GetCard<CardGameMode>("game_mode_mad")!;
 
     public static CardGameMode ModeTutorial => Databases.Catalogue.GetCard<CardGameMode>("game_mode_tutorial")!;
+    public static Key BrawnClassKey { get; } = new("hero_class_brawn");
+    public static Key SkillsClassKey { get; } = new("hero_class_skills");
+    public static Key BrainsClassKey { get; } = new("hero_class_brains");
+    public static Key DefaultSource { get; } = new("damage_source_default");
+    public static Key SmokeBomb { get; } = new("unit_device_generic_smoketrap");
+
+    public static Key FallImpact { get; } = new("impact_falling");
+
+    public static readonly List<Key> ObjectiveShieldKeys =
+    [
+        new("effect_shield_for_line_base"),
+        new("effect_shield_for_line_2"),
+        new("effect_shield_for_line_3")
+    ];
+
+    public static readonly List<Key> GasGrenadeKeys =
+    [
+        new("gear_doc_eliza_chem_grenade"),
+        new("gear_doc_eliza_chem_grenade_perk_homebrewed_chemicals"),
+        new("gear_doc_eliza_chem_grenade_perk_beautiful_bubbles"),
+        new("gear_doc_eliza_chem_grenade_splashing_damage_1"),
+        new("gear_doc_eliza_chem_grenade_splashing_damage_2"),
+        new("gear_doc_eliza_chem_grenade_splashing_damage_3"),
+        new("gear_doc_eliza_chem_grenade_perk_splashing_damage"),
+        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_1"),
+        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_2"),
+        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_3")
+    ];
 
     public static Dictionary<int, Key>? GetDefaultDevices(Key heroKey)
     {

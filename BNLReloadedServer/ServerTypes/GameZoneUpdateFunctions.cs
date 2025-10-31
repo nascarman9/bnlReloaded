@@ -12,18 +12,27 @@ public partial class GameZone
 {
     private void UnitCreated(Unit unit, UnitInit unitInit, IServiceZone? creatorService = null)
     {
-        _units.Add(unit.Id, unit);
-        if (unitInit.PlayerId != null)
+        if (_units.TryAdd(unit.Id, unit))
         {
-            _playerUnits.Add(unit.Id, unit);
-            _playerIdToUnitId.Add(unitInit.PlayerId.Value, unit.Id);
+            if (unitInit.PlayerId != null)
+            {
+                _playerUnits.Add(unit.Id, unit);
+                _playerIdToUnitId.Add(unitInit.PlayerId.Value, unit.Id);
+            }
         }
-        
+
         if (unitInit.Transform is not null)
         {
             AddUnitToOctree(unit, unitInit.Transform);
         }
-        
+
+        if (unit.UnitCard?.Labels?.Contains(UnitLabel.RespawnPoint) is true)
+        {
+            unit.SpawnId = NewSpawnId();
+            UpdateSpawnPoint(unit);
+            _playerSpawnPoints.Add(unit.SpawnId.Value, unit);
+        }
+
         if (_sessionsSender.SenderCount == 0 && unit.PlayerId == null) return;
         if (unitInit.Controlled)
         {
@@ -42,32 +51,52 @@ public partial class GameZone
                 creatorService?.SendUnitCreate(unit.Id, unitInit);
             }
         }
+        
+        if (unitInit.Transform is not null && _gameLoop != null)
+        {
+            RunBlockCheckForUnit(unit);
+        }
     }
 
-    private void UnitUpdated(Unit unit, UnitUpdate unitUpdate)
+    private void UnitUpdated(Unit unit, UnitUpdate unitUpdate, bool unbuffered = false)
     {
         if (_sessionsSender.SenderCount == 0) return;
-        if (_gameLoop != null)
-        {
-            _serviceZone.SendUnitUpdate(unit.Id, unitUpdate); 
-        }
-        else
+        if (_gameLoop == null || unbuffered)
         {
             _unbufferedZone.SendUnitUpdate(unit.Id, unitUpdate);
         }
+        else
+        {
+            _serviceZone.SendUnitUpdate(unit.Id, unitUpdate);
+        }
     }
 
-    private void UnitMoved(Unit unit, ulong time, ZoneTransform transform)
+    private void UnitMoved(Unit unit, ulong time, ZoneTransform transform, Vector3 oldPosition)
     {
-        _unitOctree.Remove(unit);
-        AddUnitToOctree(unit, transform);
-        _serviceZone.SendUnitMove(unit.Id, time, transform);
+        if ((unit.UnitCard?.AllowUnderwater is not false || !(oldPosition.Y >= _zoneData.PlanePosition &&
+                                                             transform.Position.Y < _zoneData.PlanePosition)) && 
+            (_zoneData.MapData.Properties?.KillPosition is null ||
+             !(oldPosition.Y >= _zoneData.MapData.Properties.KillPosition &&
+               transform.Position.Y < _zoneData.MapData.Properties.KillPosition)))
+        {
+            _unitOctree.Remove(unit);
+            AddUnitToOctree(unit, transform);
+            _serviceZone.SendUnitMove(unit.Id, time, transform);
+            RunBlockCheckForUnit(unit);
+        }
+        else
+        {
+            unit.Killed(unit.CreateBlankImpactData());
+        }
     }
 
     private void UnitTeamEffectAdded(Unit unit, ConstEffectInfo effectInfo)
     {
         IEnumerable<Unit> teamUnits;
-        if (effectInfo.Card.Effect is not { } constEffect) return;
+        if (effectInfo.Card.Effect is not ConstEffectTeam constEffect) return;
+        var effects = constEffect.ConstantEffects?.Select(e => new ConstEffectInfo(e)).ToList();
+        if (effects is null or { Count: <= 0 }) return;
+        
         switch (constEffect.Targeting)
         {
             case { AffectedTeam: RelativeTeamType.Friendly }:
@@ -95,17 +124,20 @@ public partial class GameZone
         {
             teamUnits = teamUnits.Except([unit]);
         }
-
+        
         foreach (var element in teamUnits)
         {
-            element.AddEffect(effectInfo, unit.Team);
+            element.AddEffects(effects, unit.Team, unit.GetSelfSource());
         }
     }
 
     private void UnitTeamEffectRemoved(Unit unit, ConstEffectInfo effectInfo)
     {
         IEnumerable<Unit> teamUnits;
-        if (effectInfo.Card.Effect is not { } constEffect) return;
+        if (effectInfo.Card.Effect is not ConstEffectTeam constEffect) return;
+        var effects = constEffect.ConstantEffects?.Select(e => new ConstEffectInfo(e, null)).ToList();
+        if (effects is null or { Count: <= 0 }) return;
+        
         switch (constEffect.Targeting)
         {
             case { AffectedTeam: RelativeTeamType.Friendly }:
@@ -136,28 +168,108 @@ public partial class GameZone
 
         foreach (var element in teamUnits)
         {
-            element.RemoveEffect(effectInfo, unit.Team);
+            element.RemoveEffects(effects, unit.Team, unit.GetSelfSource());
         }
     }
+
+    private const float ImpactImprecision = 0.05f;
+    private const float ImpactImprecisionInv = 1 - ImpactImprecision;
     
-    private bool ApplyInstEffect(Unit source, IEnumerable<Unit> affectedUnits, InstEffect effect, bool enqueueAction,
-        ImpactData impactData, BlockShift? shift = null, Direction2D? sourceDirection = null, ResourceType? resourceType = null)
+    private bool ApplyInstEffect(EffectSource source, IEnumerable<Unit> affectedUnits, InstEffect effect,
+        ImpactData impactData, BlockShift? shift = null, Direction2D? sourceDirection = null, ResourceType? resourceType = null, 
+        bool damageBlock = true)
     {
-        if (enqueueAction)
+        var unitSource = source switch
         {
-            EnqueueAction(() => ApplyInstEffect(source, affectedUnits, effect, false, impactData, shift, sourceDirection, resourceType));
-            return true;
+            BlockSource blockSrc => MapBinary.OwnedBlocks.GetValueOrDefault(blockSrc.Position),
+            UnitSource unitSrc => unitSrc.Unit,
+            _ => null,
+        };
+        
+        var impactPoint = impactData.InsidePoint;
+        if (impactData.Normal != Vector3s.Zero)
+        {
+            impactPoint = impactData.InsidePoint + ZoneTransformHelper.ToVector3(impactData.Normal);
         }
 
-        var actualUnits = affectedUnits;
-        if (effect.Targeting?.IgnoreCaster ?? false)
+        IEnumerable<Unit> actualUnits;
+        switch(effect)
         {
-            actualUnits = actualUnits.Except([source]);
+            case InstEffectAllUnitsBunch allUnitsBunch:
+                if (allUnitsBunch.Range is not null)
+                {
+                    actualUnits = _unitOctree.GetColliding(
+                        new BoundingSphere(impactPoint, allUnitsBunch.Range.Value));
+                }
+                else
+                {
+                    actualUnits = _units.Values.ToList();
+                }
+                break;
+
+            case InstEffectChargeTesla:
+                actualUnits = affectedUnits.Where(u => u is
+                {
+                    TeslaUnitData: not null,
+                    TeslaCharge: not TeslaChargeType.FullSelfCharge
+                });
+                break; 
+                
+            case InstEffectFireMortars instEffectFireMortars:
+                var applicableMortars = instEffectFireMortars.OwnedMortarsOnly
+                    ? _units.Values.Where(u => u.UnitCard?.Data is UnitDataMortar && unitSource is not null &&
+                                               u.OwnerPlayerId == unitSource.OwnerPlayerId).ToList()
+                    : _units.Values.Where(u => u.UnitCard?.Data is UnitDataMortar && u.Team == source.Team).ToList();
+                
+                if (instEffectFireMortars.MaxMortars is not null)
+                {
+                    applicableMortars.Sort((m1, m2) =>
+                        Vector3.DistanceSquared(m1.Transform.Position, impactPoint)
+                            .CompareTo(Vector3.DistanceSquared(m2.Transform.Position, impactPoint)));
+
+                    applicableMortars = applicableMortars.Take(instEffectFireMortars.MaxMortars.Value).ToList();
+                }
+                actualUnits = applicableMortars;
+                break;
+            
+            case InstEffectKnockback instEffectKnockback:
+                actualUnits =
+                    _unitOctree.GetColliding(
+                        new BoundingSphere(impactPoint, instEffectKnockback.EffectRange));
+                actualUnits = actualUnits.Where(u => u.PlayerId != null && !u.IsBuff(BuffType.KnockbackIgnore));
+                break;
+            
+            case InstEffectResourceAll:
+                actualUnits = _playerUnits.Values.ToList();
+                break;
+
+            case InstEffectSplashDamage instEffectSplashDamage:
+                actualUnits = _unitOctree.GetColliding(new BoundingSphere(impactPoint, instEffectSplashDamage.Radius));
+                break;
+                    
+            case InstEffectZoneEffect:
+                actualUnits = _playerUnits.Values.ToList();
+                break;
+                
+            default:
+                actualUnits = affectedUnits;
+                break;
+        }
+        
+        if (effect.Targeting?.CasterOwnedOnly is true)
+        {
+            actualUnits = actualUnits.Where(u => unitSource is not null &&
+                u.OwnerPlayerId == unitSource.PlayerId && u.OwnerPlayerId.HasValue == unitSource.PlayerId.HasValue);
+        }
+
+        if (effect.Targeting?.IgnoreCaster is true && unitSource is not null)
+        {
+            actualUnits = actualUnits.Except([unitSource]);
         }
 
         if (effect.Targeting?.AffectedLabels is { Count: > 0 } labels)
         {
-            actualUnits = actualUnits.Where(u => u.UnitCard?.Labels?.Intersect(labels).Any() ?? false);
+            actualUnits = actualUnits.Where(u => u.UnitCard?.Labels?.Intersect(labels).Any() is true);
         }
 
         actualUnits = effect.Targeting switch
@@ -174,11 +286,53 @@ public partial class GameZone
         
         var actualUnitList = actualUnits.ToList();
 
+        var hasImpact = false;
         if (effect.Impact is { } imp && Databases.Catalogue.GetCard<CardImpact>(imp) is { } impact)
         {
-            impactData.HitUnits = actualUnitList.Select(u => u.Id).ToList();
+            hasImpact = true;
             impactData.Impact = impact.Key;
-            ImpactOccur(impactData);
+            switch (effect)
+            {
+                case InstEffectAddAmmo:
+                case InstEffectAddAmmoPercent:
+                case InstEffectAddResource:
+                case InstEffectBuildDevice:
+                case InstEffectDamage:
+                case InstEffectDrainAmmo:
+                case InstEffectDrainMagazineAmmo:
+                case InstEffectHeal:
+                case InstEffectInstReload:
+                case InstEffectKill:
+                case InstEffectPurge:
+                case InstEffectSlip:
+                case InstEffectSupply:
+                case InstEffectTeleport:
+                case InstEffectTeleportTo:
+                case InstEffectChargeTesla:
+                case InstEffectFireMortars:   
+                case InstEffectZoneEffect:
+                    impactData.HitUnits = actualUnitList.Select(u => u.Id).ToList();
+                    ImpactOccur(impactData);
+                    break;
+                
+                case InstEffectBlocksSpawn:
+                case InstEffectDamageBlocks:
+                case InstEffectHealBlocks:
+                case InstEffectReplaceBlocks:
+                case InstEffectUnitSpawn:
+                    impactData.HitUnits = [];
+                    ImpactOccur(impactData);
+                    break;
+                
+                case InstEffectAllUnitsBunch:
+                case InstEffectBunch:    
+                    impactData.HitUnits = actualUnitList.Select(u => u.Id).ToList();
+                    break;
+                
+                case InstEffectCasterBunch when unitSource is not null:
+                    impactData.HitUnits = [unitSource.Id];
+                    break;
+            }
         }
 
         switch (effect)
@@ -193,18 +347,9 @@ public partial class GameZone
             
             case InstEffectAddResource instEffectAddResource:
                 ResourceType resType;
-                var sourceCard = source.UnitCard;
                 if (resourceType.HasValue)
                 {
                     resType = resourceType.Value;
-                }
-                else if (sourceCard == null)
-                {
-                    resType = ResourceType.General;
-                }
-                else if (sourceCard.IsObjective)
-                {
-                    resType = ResourceType.Objective;
                 }
                 else if (instEffectAddResource.Supply)
                 {
@@ -215,55 +360,71 @@ public partial class GameZone
                     resType = ResourceType.General;
                 }
                 
-                actualUnitList.ForEach(u => u.AddResource(instEffectAddResource.Amount, resType));
+                unitSource?.AddResource(instEffectAddResource.Amount, resType);
                 return true;
             
             case InstEffectAllPlayersPersistent instEffectAllPlayersPersistent:
-                var players = instEffectAllPlayersPersistent switch
+                var playerEnumer = instEffectAllPlayersPersistent switch
                 {
-                    { AffectedTeam: RelativeTeamType.Friendly } => _playerUnits.Where(p => p.Value.Team == source.Team),
-                    { AffectedTeam: RelativeTeamType.Opponent } => _playerUnits.Where(p => p.Value.Team != source.Team),
-                    _ => _playerUnits
+                    { AffectedTeam: RelativeTeamType.Friendly } => _playerUnits.Values.Where(p => p.Team == source.Team),
+                    { AffectedTeam: RelativeTeamType.Opponent } => _playerUnits.Values.Where(p => p.Team != source.Team),
+                    _ => _playerUnits.Values
                 };
 
                 if (!instEffectAllPlayersPersistent.IncludeDeadPlayers)
                 {
-                    players = players.Where(p => !p.Value.IsDead);
+                    playerEnumer = playerEnumer.Where(p => !p.IsDead);
+                }
+
+                var players = playerEnumer.ToList();
+
+                if (hasImpact)
+                {
+                    impactData.HitUnits = players.Select(p => p.Id).ToList();
+                    ImpactOccur(impactData);
                 }
 
                 var constEffects = instEffectAllPlayersPersistent.Constant?.Select(c =>
                     new ConstEffectInfo(c, instEffectAllPlayersPersistent.PersistenceDuration));
                 if (constEffects != null)
                 {
-                    players.ToList().ForEach(player => player.Value.AddEffects(constEffects.ToList(), source.Team));
+                    players.ForEach(plyer => plyer.AddEffects(constEffects.ToList(), source.Team, source));
                 }
                 return true;
             
-            case InstEffectAllUnitsBunch { Range: not null } instEffectAllUnitsBunch:
-                var units = _unitOctree.GetColliding(new BoundingSphere(impactData.InsidePoint, instEffectAllUnitsBunch.Range.Value));
+            case InstEffectAllUnitsBunch instEffectAllUnitsBunch:
                 if (instEffectAllUnitsBunch.Constant is { } constant)
                 {
-                   foreach (var unit in units)
+                   foreach (var unit in actualUnitList)
                    {
-                       unit.AddEffects(constant.Select(c => new ConstEffectInfo(c)).ToList(), source.Team);
+                       unit.AddEffects(constant.Select(c => new ConstEffectInfo(c)).ToList(), source.Team, source);
                    } 
                 }
 
                 if (instEffectAllUnitsBunch.Instant is not { } instant) return true;
-                return !instant.Any(ins => !ApplyInstEffect(source, units, ins, false, impactData, shift, sourceDirection, resourceType) &&
-                                            instEffectAllUnitsBunch.BreakOnEffectFail);
+                var beforeAll = impactData.Clone();
+                var successAll = !instant.Any(ins =>
+                    !ApplyInstEffect(source, actualUnitList, ins, impactData, shift, sourceDirection,
+                        resourceType) && instEffectAllUnitsBunch.BreakOnEffectFail);
+
+                if (successAll && hasImpact)
+                {
+                    ImpactOccur(beforeAll);
+                }
+
+                return successAll;
 
             case InstEffectBlocksSpawn { Pattern: not null } instEffectBlocksSpawn:
                 var addUpdates =
-                    _zoneData.BlocksData.AddBlocks(instEffectBlocksSpawn.Pattern, impactData.InsidePoint, shift, source);
+                    _zoneData.BlocksData.AddBlocks(instEffectBlocksSpawn.Pattern, impactPoint, shift, unitSource);
                 if (addUpdates.Count > 0)
                 {
                    _unbufferedZone.SendBlockUpdates(addUpdates); 
                 }
                 return true;
             
-            case InstEffectBuildDevice instEffectBuildDevice:
-                if (source.Resource < instEffectBuildDevice.TotalCost) return false;
+            case InstEffectBuildDevice instEffectBuildDevice when unitSource is not null:
+                if (unitSource.Resource < instEffectBuildDevice.TotalCost) return false;
                 var blockLoc = (Vector3s)(impactData.InsidePoint + shift switch
                 {
                     BlockShift.Left => Vector3s.Left.ToVector3(),
@@ -283,17 +444,35 @@ public partial class GameZone
                 {
                     case CardBlock blockCard: 
                         var updates = _zoneData.BlocksData.AddBlock(blockCard.Key, blockLoc, (Vector3s)impactData.InsidePoint,
-                            source.CurrentBuildInfo?.Direction ?? Direction2D.Left, source);
+                            unitSource.CurrentBuildInfo?.Direction ?? Direction2D.Left, unitSource);
                         if (updates.Count <= 0) return true;
                         
                         _unbufferedZone.SendBlockUpdates(updates);
-                        source.RemoveResources(instEffectBuildDevice.TotalCost);
-                        if (source.PlayerId is not null)
+                        unitSource.RemoveResources(instEffectBuildDevice.TotalCost);
+                        if (unitSource.PlayerId is not null)
                         {
-                            _serviceZone.SendDeviceBuilt(source.PlayerId.Value, devCard.Key, blockLoc.ToVector3() + new Vector3(0.5f));
+                            _serviceZone.SendDeviceBuilt(unitSource.PlayerId.Value, devCard.Key, blockLoc.ToVector3() + new Vector3(0.5f));
                         }
                         return true;
                     case CardUnit unitCard:
+                        if (unitCard.CountLimit is not null)
+                        {
+                            var existingUnitCount = unitCard.CountLimit.Scope switch
+                            {
+                                UnitLimitScope.World => _units.Values.Count(u => u.Key == unitCard.Key),
+                
+                                UnitLimitScope.Team => _units.Values.Count(u =>
+                                    u.Key == unitCard.Key && u.Team == source.Team),
+                
+                                UnitLimitScope.Owner => _units.Values
+                                    .Count(u => u.Key == unitCard.Key && u.OwnerPlayerId == unitSource.OwnerPlayerId),
+                
+                                _ => 0
+                            };
+
+                            if (existingUnitCount > unitCard.CountLimit.Limit) return false;
+                        }
+                        
                         var placePos = blockLoc.ToVector3() + new Vector3(0.5f);
                         var placeDirection = devCard.InverseDirection ? (sourceDirection ?? Direction2D.Left).Inverse() : sourceDirection ?? Direction2D.Left;
                         var rotation = BuildHelper.GetBuildRotation(devCard, blockLoc, (Vector3s)impactData.InsidePoint,
@@ -334,17 +513,19 @@ public partial class GameZone
                         
                         if (unitCard.Size is not null && unitCard.Size != Vector3s.Zero)
                         {
-                            if (_zoneData.BlocksData[checkPosition].Card.IsVisualSlope &&
-                                UnitSizeHelper.IsInsideUnit(checkPosition, source) || _unitOctree.GetColliding(
+                            if (MapBinary.ContainsBlock(checkPosition) && MapBinary[checkPosition].Card.IsVisualSlope &&
+                                MapBinary[checkPosition].VData != 0 &&
+                                UnitSizeHelper.IsInsideUnit(checkPosition, unitSource) || _unitOctree.GetColliding(
                                     new BoundingBoxEx(
-                                    checkPosition.ToVector3() + unitCard.Size.Value.ToVector3() * 0.5f,
-                                    unitCard.Size.Value.ToVector3())).Except([source]).Any()) 
+                                        checkPosition.ToVector3() + unitCard.Size.Value.ToVector3() * 0.5f,
+                                        unitCard.Size.Value.ToVector3() - UnitSizeHelper.ImprecisionVector))
+                                    .Where(u => u.PlayerId != null).Except([unitSource]).Any()) 
                                 return false;
                             
-                            collision = UnitSizeHelper.IsInsideUnit(blockLoc, source) || _unitOctree.GetColliding(
+                            collision = UnitSizeHelper.IsInsideUnit(blockLoc, unitSource) || _unitOctree.GetColliding(
                                 new BoundingBoxEx(
                                 blockLoc.ToVector3() + unitCard.Size.Value.ToVector3() * 0.5f,
-                                unitCard.Size.Value.ToVector3())).Except([source]).Any();
+                                unitCard.Size.Value.ToVector3() - UnitSizeHelper.ImprecisionVector)).Except([unitSource]).Any();
                         }
 
                         var isAttached = !unitCard.GroundOnly ||
@@ -416,7 +597,42 @@ public partial class GameZone
                         if (!_zoneData.BlocksData[blockLoc].IsReplaceable || !isAttached ||
                             (!unitCard.AllowUnderwater && blockLoc.y <= _zoneData.PlanePosition) || collision)
                             return false;
-                        CreateUnit(unitCard, transform, source, source.ZoneService);
+                        var isAttachedToBlock = isAttached && unitCard.BlockBinding is UnitBlockBindingType.Destroy
+                                                    or UnitBlockBindingType.Detach;
+
+                        
+                        var newUnit = CreateUnit(unitCard, transform, unitSource, unitSource.ZoneService, isAttachedToBlock);
+                        if (newUnit is null)
+                        {
+                            return false;
+                        }
+
+                        if (unitSource.Devices.Values.FirstOrDefault(d => d.DeviceKey == devCard.Key) is { } devData &&
+                            unitCard.CostIncPerUnit is { } baseCostInc and > 0)
+                        {
+                            var costInc = unitSource.BuildCost(baseCostInc);
+                            devData.TotalCost += costInc;
+                            devData.CostInc += costInc;
+                            unitSource.UpdateData(new UnitUpdate
+                            {
+                                Devices = unitSource.Devices
+                            });
+
+                            newUnit.OnDestroyed = () =>
+                            {
+                                if (unitSource.Devices.Values.FirstOrDefault(d => d.DeviceKey == devCard.Key) is
+                                    not { CostInc: > 0 } dData) return;
+                                
+                                dData.TotalCost -= costInc;
+                                dData.CostInc -= costInc;
+                                
+                                unitSource.UpdateData(new UnitUpdate
+                                {
+                                    Devices = unitSource.Devices
+                                });
+                            };
+                        }
+                        
                         var blkUpdates = _zoneData.BlocksData.RemoveBlock(blockLoc);
                         var blkUpdates2 =
                             _zoneData.BlocksData.MakeSlopeSolid(blockLoc, checkPosition);
@@ -424,13 +640,23 @@ public partial class GameZone
                         {
                             blkUpdates[upd.Key] = upd.Value;
                         }
-                        source.RemoveResources(instEffectBuildDevice.TotalCost);
+                        unitSource.RemoveResources(instEffectBuildDevice.TotalCost);
                         if (blkUpdates.Count > 0)
                         {
                             _unbufferedZone.SendBlockUpdates(blkUpdates);
                         }
-                        if (source.PlayerId is not null)
-                            _serviceZone.SendDeviceBuilt(source.PlayerId.Value, devCard.Key, placePos);
+                        
+                        if (isAttachedToBlock)
+                        {
+                            if (!MapBinary.AttachToBlock(newUnit, checkPosition,
+                                    CoordsHelper.VectorToFace(blockLoc - checkPosition)))
+                            {
+                                OnDetached(newUnit);
+                            }
+                        }
+                        
+                        if (unitSource.PlayerId is not null)
+                            _serviceZone.SendDeviceBuilt(unitSource.PlayerId.Value, devCard.Key, placePos);
                         return true;
                     default:
                         return false;
@@ -441,50 +667,240 @@ public partial class GameZone
                 {
                     foreach (var unit in actualUnitList)
                     {
-                        unit.AddEffects(con.Select(c => new ConstEffectInfo(c)).ToList(), source.Team);
+                        unit.AddEffects(con.Select(c => new ConstEffectInfo(c)).ToList(), source.Team, source);
                     } 
                 }
                 if (instEffectBunch.Instant is not { } inst) return true;
-                return !inst.Any(ins => !ApplyInstEffect(source, actualUnitList, ins, false, impactData, shift, sourceDirection, resourceType) &&
-                                            instEffectBunch.BreakOnEffectFail);
+                var before = impactData.Clone();
+                var success = !inst.Any(ins =>
+                    !ApplyInstEffect(source, actualUnitList, ins, impactData, shift, sourceDirection,
+                        resourceType) && instEffectBunch.BreakOnEffectFail);
+
+                if (success && hasImpact)
+                {
+                    ImpactOccur(before);
+                }
+
+                return success;
             
-            case InstEffectCasterBunch instEffectCasterBunch:
+            case InstEffectCasterBunch instEffectCasterBunch when unitSource is not null:
                 if (instEffectCasterBunch.Constant is { } cons)
                 {
-                    source.AddEffects(cons.Select(c => new ConstEffectInfo(c)).ToList(), source.Team);
+                    unitSource.AddEffects(cons.Select(c => new ConstEffectInfo(c)).ToList(), source.Team, source);
                 }
                 if (instEffectCasterBunch.Instant is not { } insta) return true;
-                return !insta.Any(ins => !ApplyInstEffect(source, [source], ins, false, impactData, shift, sourceDirection, resourceType) &&
+                var beforeCast = impactData.Clone();
+                var successCast = !insta.Any(ins =>
+                    !ApplyInstEffect(source, [unitSource], ins, impactData, shift, sourceDirection, resourceType) &&
                                          instEffectCasterBunch.BreakOnEffectFail);
+                
+                if (successCast && hasImpact)
+                {
+                    ImpactOccur(beforeCast);
+                }
+
+                return successCast;
             
             case InstEffectChargeTesla instEffectChargeTesla:
+                foreach (var tesla in actualUnitList)
+                {
+                    tesla.ChargeTesla(instEffectChargeTesla.Charges);
+                }
                 return true;
-            case InstEffectDamage instEffectDamage:
+            
+            case InstEffectDamage { Damage: not null } instEffectDamage:
+                var dData = ConvertToDamageData(instEffectDamage.Damage, impactPoint, impactData.ShotPos,
+                    unitSource, false, impactData.Crit, instEffectDamage.CritModifier, instEffectDamage.Falloff);
+
+                foreach (var unit in actualUnitList)
+                {
+                    unit.TakeDamage(dData, impactData, false, unitSource, source.Team);
+                }
+
+                if (dData.BlockDamage > 0 && damageBlock)
+                {
+                    var bUpdates = MapBinary.DamageBlock((Vector3s)impactPoint, dData, unitSource);
+                    _unbufferedZone.SendBlockUpdates(bUpdates);
+                }
+                
                 return true;
-            case InstEffectDamageBlocks instEffectDamageBlocks:
+            
+            case InstEffectDamageBlocks { Damage: not null } instEffectDamageBlocks:
+                var bDData = ConvertToDamageData(instEffectDamageBlocks.Damage, impactPoint,
+                    impactData.ShotPos, unitSource);
+
+                var blUpdates = new Dictionary<Vector3s, BlockUpdate>();
+                foreach (var block in MapBinary.EnumerateBlocks(new BoundingSphere(impactPoint,
+                             instEffectDamageBlocks.Range), null))
+                {
+                    foreach (var update in MapBinary.DamageBlock(block, bDData, unitSource))
+                    {
+                        blUpdates[update.Key] = update.Value;
+                    }
+                }
+
+                if (blUpdates.Count > 0)
+                {
+                    _unbufferedZone.SendBlockUpdates(blUpdates);
+                }
                 return true;
+            
             case InstEffectDrainAmmo instEffectDrainAmmo:
+                foreach (var unit in actualUnitList.Where(u => u.PlayerId != null))
+                {
+                    unit.TakeAmmo(instEffectDrainAmmo.Amount, false);
+                }
                 return true;
+            
             case InstEffectDrainMagazineAmmo instEffectDrainMagazineAmmo:
+                foreach (var unit in actualUnitList.Where(u => u.PlayerId != null))
+                {
+                    unit.TakeAmmo(instEffectDrainMagazineAmmo.Amount, true);
+                }
                 return true;
+            
             case InstEffectFireMortars instEffectFireMortars:
+                var rand = new Random();
+                foreach (var (mortar, index) in actualUnitList.Select((item, index) => (item, index)))
+                {
+                    mortar.OnMortarHit = instEffectFireMortars.HitEffect;
+                    var normalSpread = instEffectFireMortars.BaseSpread +
+                                       index * instEffectFireMortars.IncrementalSpread;
+                    var distSpread =
+                        Math.Max(
+                            Vector3.Distance(mortar.Transform.Position, impactPoint) *
+                            instEffectFireMortars.DistanceSpread, instEffectFireMortars.MinSpreadPercent);
+
+                    var totalSpread = normalSpread + distSpread;
+                    var r = totalSpread * MathF.Sqrt(rand.NextSingle());
+                    var theta = rand.NextSingle() * 2 * MathF.PI;
+        
+                    var newShotX = float.FusedMultiplyAdd(r, MathF.Cos(theta), impactPoint.X);
+                    var newShotZ = float.FusedMultiplyAdd(r, MathF.Sin(theta), impactPoint.Z);
+                    
+                    var newShotPos = impactPoint with { X = newShotX, Z = newShotZ };
+
+                    var delay = rand.NextSingle() * instEffectFireMortars.FireDelayModifier +
+                                instEffectFireMortars.BaseFireDelay;
+
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(delay));
+                        EnqueueAction(() =>
+                        {
+                            _serviceZone.SendFireMortar(mortar.Id, newShotPos);
+                            if (instEffectFireMortars.MortarFireEffect is null) return;
+
+                            var mortarImpact = mortar.CreateImpactData();
+                            var mortarSource = mortar.GetSelfSource(mortarImpact);
+                            ApplyInstEffect(mortarSource, [mortar], instEffectFireMortars.MortarFireEffect,
+                                mortarImpact);
+                        });
+                    });
+                }
                 return true;
+            
             case InstEffectHeal instEffectHeal:
+                foreach (var unit in actualUnitList)
+                {
+                    if (unit.PlayerId != null)
+                    {
+                        unit.AddHealth(instEffectHeal.PlayerHeal);
+                        unit.AddForcefield(instEffectHeal.ForcefieldAmount);
+                    }
+                    else if (unit.UnitCard?.IsObjective ?? false)
+                    {
+                        unit.AddHealth(instEffectHeal.ObjectiveHeal);
+                        unit.AddForcefield(instEffectHeal.ForcefieldAmount);
+                    }
+                    else if (unit.IsHealth)
+                    {
+                        unit.AddHealth(instEffectHeal.WorldHeal);
+                        unit.AddForcefield(instEffectHeal.ForcefieldAmount);
+                    }
+                }
                 return true;
+            
             case InstEffectHealBlocks instEffectHealBlocks:
+                var boUpdates = new Dictionary<Vector3s, BlockUpdate>();
+                foreach (var block in MapBinary.EnumerateBlocks(new BoundingSphere(impactPoint,
+                             instEffectHealBlocks.Range), null))
+                {
+                    foreach (var update in MapBinary.HealBlock(block, instEffectHealBlocks.HealAmount, unitSource))
+                    {
+                        boUpdates[update.Key] = update.Value;
+                    }
+                }
+
+                if (boUpdates.Count > 0)
+                {
+                    _unbufferedZone.SendBlockUpdates(boUpdates);
+                }
                 return true;
+            
             case InstEffectInstReload instEffectInstReload:
+                foreach (var unit in actualUnitList)
+                {
+                    unit.ReloadAmmo(instEffectInstReload.AllWeapons, instEffectInstReload.ClipPart);
+                }
                 return true;
-            case InstEffectKill instEffectKill:
+            
+            case InstEffectKill:
+                foreach (var unit in actualUnitList.Where(u => u is { IsHealth: true, IsDead: false }))
+                {
+                    unit.Killed(impactData);
+                }
                 return true;
+            
             case InstEffectKnockback instEffectKnockback:
+                actualUnitList = actualUnitList.Where(u => u.PlayerId != null).ToList();
+                
+                if (!instEffectKnockback.AffectCaster && unitSource is not null)
+                {
+                    actualUnitList.RemoveAll(u => u.PlayerId == unitSource.OwnerPlayerId);
+                }
+
+                if (hasImpact)
+                {
+                    impactData.HitUnits = actualUnitList.Select(u => u.Id).ToList();
+                    ImpactOccur(impactData);
+                }
+
+                foreach (var unit in actualUnitList)
+                {
+                    var unitPos = unit.GetExactPosition();
+                    unitPos = Vector3.Clamp(impactPoint,
+                        unitPos - new Vector3(0.25f, unit.Transform.IsCrouch ? 0.45f : 0.95f, 0.25f),
+                        unitPos + new Vector3(0.25f, unit.Transform.IsCrouch ? 0.45f : 0.95f, 0.25f));
+                    var distance = Vector3.Distance(impactPoint, unitPos);
+
+                    var force = instEffectKnockback.Force;
+                    var midairForce = instEffectKnockback.MidairForce;
+                    if (instEffectKnockback is { LinearFalloff: true, EffectRange: > 0 })
+                    {
+                        var weight = distance / instEffectKnockback.EffectRange;
+                        force = float.Lerp(instEffectKnockback.Force, 0.0f, weight);
+                        midairForce = float.Lerp(instEffectKnockback.MidairForce, 0.0f, weight);
+                    }
+
+                    var knockback = new ManeuverKnockback
+                    {
+                        Origin = impactPoint,
+                        Force = force,
+                        MidairForce = midairForce
+                    };
+                    
+                    _serviceZone.SendUnitManeuver(unit.Id, knockback);
+                }
                 return true;
+            
             case InstEffectPurge instEffectPurge:
+                actualUnitList.ForEach(u => u.PurgeEffects(instEffectPurge.Positive, instEffectPurge.Negative));
                 return true;
             
             case InstEffectReplaceBlocks instEffectReplaceBlocks:
                 var repUpdates = _zoneData.BlocksData.ReplaceBlocks(instEffectReplaceBlocks.ReplaceWith,
-                    instEffectReplaceBlocks.Range, impactData.InsidePoint, source);
+                    instEffectReplaceBlocks.Range, impactPoint, unitSource);
                 if (repUpdates.Count > 0)
                 {
                     _unbufferedZone.SendBlockUpdates(repUpdates); 
@@ -492,27 +908,418 @@ public partial class GameZone
                 return true;
             
             case InstEffectResourceAll instEffectResourceAll:
+                ResourceType resAllType;
+                var srcCard = unitSource?.UnitCard;
+                if (resourceType.HasValue)
+                {
+                    resAllType = resourceType.Value;
+                }
+                else if (instEffectResourceAll.Supply)
+                {
+                    resAllType = ResourceType.Supply;
+                }
+                else if (srcCard == null)
+                {
+                    resAllType = ResourceType.General;
+                }
+                else if (srcCard.IsObjective)
+                {
+                    resAllType = ResourceType.Objective;
+                }
+                else
+                {
+                    resAllType = ResourceType.General;
+                }
+                
+                if (instEffectResourceAll.IgnoreCasterPlayer && unitSource is not null)
+                {
+                    actualUnitList.RemoveAll(u => u.PlayerId == unitSource.OwnerPlayerId);
+                }
+
+                actualUnitList = instEffectResourceAll.AffectedTeam switch
+                {
+                    RelativeTeamType.Friendly => actualUnitList.Where(u => u.Team == source.Team).ToList(),
+                    RelativeTeamType.Opponent => actualUnitList.Where(u => u.Team != source.Team).ToList(),
+                    _ => actualUnitList
+                };
+
+                if (!instEffectResourceAll.IncludeDeadPlayers)
+                {
+                    actualUnitList = actualUnitList.Where(u => !u.IsDead).ToList();
+                }
+
+                if (hasImpact)
+                {
+                    impactData.HitUnits = actualUnitList.Select(u => u.Id).ToList();
+                    ImpactOccur(impactData);
+                }
+                
+                actualUnitList.ForEach(u => u.AddResource(instEffectResourceAll.Resource, resAllType));
                 return true;
+            
             case InstEffectSlip instEffectSlip:
+                actualUnitList = actualUnitList.Where(u => u.PlayerId != null).ToList();
+                var maneuver = new ManeuverSlip
+                {
+                    DirectionAngle = instEffectSlip.DirectionAngleRandom,
+                    Distance = MathF.Abs(instEffectSlip.DistanceTo - instEffectSlip.DistanceFrom),
+                    Time = instEffectSlip.Time,
+                    RotationTime = instEffectSlip.RotationTime
+                };
+                actualUnitList.ForEach(u => _serviceZone.SendUnitManeuver(u.Id, maneuver));
                 return true;
+            
             case InstEffectSplashDamage instEffectSplashDamage:
+                var dmgData = instEffectSplashDamage.Damage is not null
+                    ? ConvertToDamageData(instEffectSplashDamage.Damage, impactPoint,
+                    impactData.ShotPos, unitSource, true) : DamageData.ZeroDamage;
+                
+                Vector3[] locs = shift switch
+                {
+                    BlockShift.Left when impactPoint.X - float.Truncate(impactPoint.X) < ImpactImprecision
+                        => [impactPoint, impactPoint with
+                        {
+                            X = impactPoint.X - ImpactImprecision
+                        }],
+                    BlockShift.Right when impactPoint.X - float.Truncate(impactPoint.X) > ImpactImprecisionInv
+                        => [impactPoint, impactPoint with
+                        {
+                            X = impactPoint.X + ImpactImprecision
+                        }],
+                    BlockShift.Bottom when impactPoint.Y - float.Truncate(impactPoint.Y) < ImpactImprecision
+                        => [impactPoint, impactPoint with
+                        {
+                            Y = impactPoint.Y - ImpactImprecision
+                        }],
+                    BlockShift.Top when impactPoint.Y - float.Truncate(impactPoint.Y) > ImpactImprecisionInv
+                        => [impactPoint, impactPoint with
+                        {
+                            Y = impactPoint.Y + ImpactImprecision
+                        }],
+                    BlockShift.Back when impactPoint.Z - float.Truncate(impactPoint.Z) < ImpactImprecision
+                        => [impactPoint, impactPoint with
+                        {
+                            Z = impactPoint.Z - ImpactImprecision
+                        }],
+                    BlockShift.Front when impactPoint.Z - float.Truncate(impactPoint.Z) > ImpactImprecisionInv
+                        => [impactPoint, impactPoint with
+                        {
+                            Z = impactPoint.Z + ImpactImprecision
+                        }],
+                    _ => [impactPoint]
+                };
+
+                var newImpact = impactData.Clone();
+                newImpact.ShotPos = impactPoint;
+
+                var (bkUpdates, affUnits) = MapBinary.SplashDamageBlocks(locs, dmgData, newImpact,
+                    instEffectSplashDamage.Radius, actualUnitList, unitSource, source.Team);
+
+                if (bkUpdates.Count > 0)
+                {
+                    _unbufferedZone.SendBlockUpdates(bkUpdates);
+                }
+
+                if (hasImpact)
+                {
+                    var hitUnits = affUnits.Select(u => u.Id).ToList();
+                    impactData.HitUnits = hitUnits;
+                    newImpact.HitUnits = hitUnits;
+                    ImpactOccur(impactData);
+                }
+
+                if (affUnits.Count <= 0) return true;
+            
+                if (instEffectSplashDamage.UnitInstEffects is { Count: > 0 })
+                {
+                    instEffectSplashDamage.UnitInstEffects.ForEach(ef =>
+                        ApplyInstEffect(source, affUnits, ef, newImpact, shift, sourceDirection,
+                            resourceType));
+                }
+
+                if (instEffectSplashDamage.UnitConstEffects is { Count: > 0 })
+                {
+                    affUnits.ForEach(u =>
+                        u.AddEffects(
+                            instEffectSplashDamage.UnitConstEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                            source.Team, source));
+                }
                 return true;
+            
             case InstEffectSupply instEffectSupply:
+                foreach (var unit in actualUnitList)
+                {
+                    unit.AddSupplies(instEffectSupply.Amount);
+                }
                 return true;
+            
             case InstEffectTeleport instEffectTeleport:
-                return true;
-            case InstEffectTeleportTo instEffectTeleportTo:
-                return true;
+                var validAnchors = instEffectTeleport.OwnedAnchorOnly
+                    ? _units.Values.Where(u => unitSource is not null &&
+                        u.OwnerPlayerId == unitSource.OwnerPlayerId &&
+                        u.UnitCard?.Labels?.Contains(instEffectTeleport.Anchor) is true)
+                    : _units.Values.Where(u =>
+                        u.Team == source.Team &&
+                        u.UnitCard?.Labels?.Contains(instEffectTeleport.Anchor) is true);
+                
+                if (instEffectTeleport.RangeLimit is { } limit)
+                {
+                    var limitSqrd = limit * limit;
+                    validAnchors = validAnchors.Where(a =>
+                        Vector3.DistanceSquared(a.GetMidpoint(), impactPoint) < limitSqrd);
+                }
+
+                var anchorList = validAnchors.ToList();
+                anchorList.Sort((u1, u2) => u1.CreationTime.CompareTo(u2.CreationTime));
+                var anchor = anchorList.First();
+                var successfulTele = false;
+                var aSize = anchor.UnitCard?.Size ?? Vector3s.Zero;
+                foreach (var unit in actualUnitList)
+                {
+                    var uSize = unitSource?.UnitCard?.Size ?? Vector3s.Zero;
+                    var anchorY = anchor.Transform.Position.Y - aSize.y * 0.5f +
+                                                          (unit.PlayerId != null ? 0.95f : uSize.y * 0.5f);
+
+                    var telePos = anchor.Transform.Position with { Y = anchorY };
+                    if (MapBinary.GetCanFit(unit, telePos) && CollidingWithUnit(unit, telePos).All(u =>
+                            (u.UnitCard?.Size ?? Vector3s.Zero) == Vector3s.Zero || u.Id == anchor.Id))
+                    {
+                        var teleManeuver = new ManeuverTeleport
+                        {
+                            Position = unit.PlayerId != null ? telePos with { Y = telePos.Y - 0.95f } : telePos
+                        };
+                        _serviceZone.SendUnitManeuver(unit.Id, teleManeuver);
+                        successfulTele = true;
+                    }
+                }
+
+                if (instEffectTeleport.DestroyAnchor)
+                {
+                    anchor.Killed(anchor.CreateBlankImpactData());
+                }
+                
+                return successfulTele;
+            
+            case InstEffectTeleportTo when unitSource is not null:
+                var midpoint = unitSource.GetMidpoint();
+                var dist = Vector3.Distance(impactPoint, midpoint);
+                if (dist == 0) return true;
+
+                for (var i = 0; i < dist; i++)
+                {
+                    var telePos = Vector3.Lerp(impactPoint, midpoint, i / dist);
+                    var doYCheck = true;
+                    if (telePos.Y < _zoneData.PlanePosition)
+                    {
+                        telePos.Y = _zoneData.PlanePosition + UnitSizeHelper.ImprecisionVector.Y;
+                        doYCheck = false;
+                    }
+                    
+                    if (CanFit(telePos))
+                    {
+                        var teleToManeuver = new ManeuverTeleport
+                        {
+                            Position = unitSource.PlayerId != null ? telePos with { Y = telePos.Y - 0.95f } : telePos
+                        };
+                        _serviceZone.SendUnitManeuver(unitSource.Id, teleToManeuver);
+                        return true;
+                    }
+
+                    var adjustedPosition = i == 0 ? shift switch
+                    {
+                        BlockShift.Left when telePos.X - float.Truncate(telePos.X) < ImpactImprecision
+                            => telePos with
+                            {
+                                X = telePos.X - ImpactImprecision
+                            },
+                        BlockShift.Right when telePos.X - float.Truncate(telePos.X) > ImpactImprecisionInv
+                            => telePos with
+                            {
+                                X = telePos.X + ImpactImprecision
+                            },
+                        BlockShift.Bottom when telePos.Y - float.Truncate(telePos.Y) < ImpactImprecision && doYCheck
+                            => telePos with
+                            {
+                                Y = telePos.Y - ImpactImprecision
+                            },
+                        BlockShift.Top when telePos.Y - float.Truncate(telePos.Y) > ImpactImprecisionInv && doYCheck
+                            => telePos with
+                            {
+                                Y = telePos.Y + ImpactImprecision
+                            },
+                        BlockShift.Back when telePos.Z - float.Truncate(telePos.Z) < ImpactImprecision
+                            => telePos with
+                            {
+                                Z = telePos.Z - ImpactImprecision
+                            },
+                        BlockShift.Front when telePos.Z - float.Truncate(telePos.Z) > ImpactImprecisionInv
+                            => telePos with
+                            {
+                                Z = telePos.Z + ImpactImprecision
+                            },
+                        _ => telePos
+                    } : telePos;
+
+                    if (i == 0 && CanFit(adjustedPosition))
+                    {
+                        var teleToManeuver = new ManeuverTeleport
+                        {
+                            Position = unitSource.PlayerId != null ? adjustedPosition with { Y = adjustedPosition.Y - 0.95f } : adjustedPosition
+                        };
+                        _serviceZone.SendUnitManeuver(unitSource.Id, teleToManeuver);
+                        return true;
+                    }
+
+                    var uSize = unitSource.UnitCard?.Size ?? Vector3s.Zero;
+                    var vecX = unitSource.PlayerId != null ? 0.25f : uSize.x * 0.5f;
+                    var vecY = unitSource.PlayerId != null 
+                        ? unitSource.Transform.IsCrouch ? 0.45f : 0.95f 
+                        : uSize.y * 0.5f;
+                    var vecZ = unitSource.PlayerId != null ? vecX : uSize.z * 0.5f;
+
+
+                    var fitXPos = CanFitPoint(adjustedPosition with
+                    {
+                        X = adjustedPosition.X + vecX - UnitSizeHelper.HalfImprecisionVector.X
+                    });
+                    
+                    var fitXNeg = CanFitPoint(adjustedPosition with
+                    {
+                        X = adjustedPosition.X - vecX + UnitSizeHelper.HalfImprecisionVector.X
+                    });
+
+                    if (!fitXPos && !fitXNeg)
+                    {
+                        continue;
+                    }
+                    if (!fitXPos)
+                    {
+                        adjustedPosition.X = float.Floor(adjustedPosition.X + vecX) - vecX;
+                    }
+                    else if (!fitXNeg)
+                    {
+                        adjustedPosition.X = float.Ceiling(adjustedPosition.X - vecX) + vecX;
+                    }
+                    
+                    var fitYPos = CanFitPoint(adjustedPosition with
+                    {
+                        Y = adjustedPosition.Y + vecY - UnitSizeHelper.HalfImprecisionVector.Y
+                    });
+                    
+                    var fitYNeg = CanFitPoint(adjustedPosition with
+                    {
+                        Y = adjustedPosition.Y - vecY + UnitSizeHelper.HalfImprecisionVector.Y
+                    });
+                    
+                    if (!fitYPos && !fitYNeg)
+                    {
+                        continue;
+                    }
+                    if (!fitYPos)
+                    {
+                        adjustedPosition.Y = float.Floor(adjustedPosition.Y + vecY) - vecY;
+                    }
+                    else if (!fitYNeg)
+                    {
+                        adjustedPosition.Y = float.Ceiling(adjustedPosition.Y - vecY) + vecY;
+                    }
+                    
+                    var fitZPos = CanFitPoint(adjustedPosition with
+                    {
+                        Z = adjustedPosition.Z + vecZ - UnitSizeHelper.HalfImprecisionVector.Z
+                    });
+                    
+                    var fitZNeg = CanFitPoint(adjustedPosition with
+                    {
+                        Z = adjustedPosition.Z - vecZ + UnitSizeHelper.HalfImprecisionVector.Z
+                    });
+                    
+                    if (!fitZPos && !fitZNeg)
+                    {
+                        continue;
+                    }
+                    if (!fitZPos)
+                    {
+                        adjustedPosition.Z = float.Floor(adjustedPosition.Z + vecZ) - vecZ;
+                    }
+                    else if (!fitZNeg)
+                    {
+                        adjustedPosition.Z = float.Ceiling(adjustedPosition.Z - vecZ) + vecZ;
+                    }
+                    
+                    if (CanFit(adjustedPosition))
+                    {
+                        var teleToManeuver = new ManeuverTeleport
+                        {
+                            Position = unitSource.PlayerId != null ? adjustedPosition with { Y = adjustedPosition.Y - 0.95f } : adjustedPosition
+                        };
+                        _serviceZone.SendUnitManeuver(unitSource.Id, teleToManeuver);
+                        return true;
+                    }
+                }
+                return false;
+
+                bool CanFit(Vector3 pos) => MapBinary.GetCanFit(unitSource, pos) && CollidingWithUnit(unitSource, pos).All(u =>
+                    (u.UnitCard?.Size ?? Vector3s.Zero) == Vector3s.Zero);
+                
+                bool CanFitPoint(Vector3 pos) => (!MapBinary.ContainsBlock((Vector3s)pos) ||
+                                                  MapBinary[(Vector3s)pos].Card.Passable == BlockPassableType.Any) &&
+                                                 _unitOctree.GetColliding(new BoundingBoxEx(pos, new Vector3(0.01f)))
+                                                     .Where(u => u.Id != unitSource.Id && u.Key != CatalogueHelper.SmokeBomb).All(u =>
+                                                         (u.UnitCard?.Size ?? Vector3s.Zero) == Vector3s.Zero);
+
             case InstEffectUnitSpawn instEffectUnitSpawn:
+                var uCard = Databases.Catalogue.GetCard<CardUnit>(instEffectUnitSpawn.UnitKey);
+                if (uCard is null) return true;
+
+                var zoneService = unitSource?.ZoneService;
+                if (unitSource?.OwnerPlayerId != null &&
+                    _playerIdToUnitId.TryGetValue(unitSource.OwnerPlayerId.Value, out var playerUnitId) &&
+                    _playerUnits.TryGetValue(playerUnitId, out var player))
+                {
+                    zoneService = player.ZoneService;
+                }
+
+                var placePoint = uCard.PivotType switch
+                {
+                    UnitPivotType.Zero => impactPoint - (uCard.Size?.ToVector3() ?? Vector3.Zero) / 2,
+                    UnitPivotType.Center => impactPoint,
+                    UnitPivotType.CenterBottom or
+                        UnitPivotType.PointBottom => impactPoint with
+                        {
+                            Y = impactPoint.Y - (uCard.Size?.y ?? 0) / 2.0f
+                        },
+                    _ => impactPoint
+                };
+                
+                var trnsform = new ZoneTransform
+                {
+                    Position = impactData.SourceKey.HasValue &&
+                               CatalogueHelper.GasGrenadeKeys.Contains(impactData.SourceKey.Value)
+                        ? placePoint with { Y = impactPoint.Y + 0.5f }
+                        : placePoint,
+                    Rotation = Vector3s.Zero,
+                    LocalVelocity = Vector3s.Zero
+                };
+                CreateUnit(uCard, trnsform, unitSource, zoneService);
                 return true;
+            
             case InstEffectZoneEffect instEffectZoneEffect:
+                if (instEffectZoneEffect.Effects is not { } eff) return true;
+                var persistantSource = unitSource is not null ? new PersistOnDeathSource(unitSource, impactData) : source;
+                foreach (var unit in actualUnitList)
+                {
+                    unit.AddEffects(eff.Select(c => new ConstEffectInfo(c, instEffectZoneEffect.Duration)).ToList(),
+                        source.Team, persistantSource);
+                }
                 return true;
+            
             default:
                 return true;
         }
     }
 
-    private IEnumerable<ConstEffectInfo> GetTeamEffects(TeamType team) => _teamEffects[(int) team];
+    private HashSet<ConstEffectInfo> GetTeamEffects(TeamType team) => _teamEffects[(int) team];
 
     private bool DoesObjBuffApply(TeamType team, IEnumerable<UnitLabel> labels) =>
         _zoneData.MatchCard.Data?.Type == MatchType.TimeTrial || !labels.Contains(
@@ -571,6 +1378,523 @@ public partial class GameZone
         });
     }
 
+    private void UnitIsDamaged(Unit target, float damage, ImpactData impact)
+    {
+        _serviceZone.SendDamage(new DamageInfo
+        {
+            TargetUnitId = target.Id,
+            SourceUnitId = impact.CasterUnitId,
+            SourcePosition = impact.ShotPos,
+            Impact = impact.Impact,
+            Damage = damage,
+            InitialDamage = damage,
+            Crit = impact.Crit
+        });
+        
+        var attacker = impact.CasterUnitId is null ? null : _units.GetValueOrDefault(impact.CasterUnitId.Value);
+        var attackerPlayer = impact.CasterPlayerId is null
+            ? null
+            : _playerUnits.GetValueOrDefault(_playerIdToUnitId.GetValueOrDefault(impact.CasterPlayerId.Value));
+        
+        
+        if (target.PlayerId != null && attackerPlayer != null)
+        {
+            target.RecentDamagers[attackerPlayer] = DateTimeOffset.Now.AddMinutes(1);
+            
+            var playerData = target.PlayerUnitData;
+            if (playerData?.Class == CatalogueHelper.BrawnClassKey)
+            {
+                attackerPlayer.UpdateStat(ScoreType.DamageBrawn, damage);
+            }
+            else if (playerData?.Class == CatalogueHelper.SkillsClassKey)
+            {
+                attackerPlayer.UpdateStat(ScoreType.DamageSkills, damage);
+            }
+            else if (playerData?.Class == CatalogueHelper.BrainsClassKey)
+            {
+                attackerPlayer.UpdateStat(ScoreType.DamageBrains, damage);
+            }
+
+            if (attackerPlayer == attacker)
+            {
+                target.UpdateStat(ScoreType.DamagedByHero, damage);
+                attackerPlayer.UpdateStat(ScoreType.DamagePlayerByHero, damage);
+            }
+            else if (attacker is null || attacker.UnitCard?.DeviceType == DeviceType.Device ||
+                     attacker.UnitCard?.DeviceType == DeviceType.Block)
+            {
+                target.UpdateStat(ScoreType.DamagedByBlock, damage);
+                attackerPlayer.UpdateStat(ScoreType.DamagePlayerByBlock, damage);
+            }
+            else
+            {
+                target.UpdateStat(ScoreType.DamagedByOther, damage);
+            }
+            
+            if (attackerPlayer.Team == target.Team)
+            {
+                target.UpdateStat(ScoreType.DamagedByFriendlyPlayer, damage);
+                attackerPlayer.UpdateStat(ScoreType.DamageFriendlyPlayer, damage);
+            }
+            
+            var attackerData = attackerPlayer.PlayerUnitData;
+            if (attackerData?.Class == CatalogueHelper.BrawnClassKey)
+            {
+                target.UpdateStat(ScoreType.DamagedByBrawn, damage);
+            }
+            else if (attackerData?.Class == CatalogueHelper.SkillsClassKey)
+            {
+                target.UpdateStat(ScoreType.DamagedBySkills, damage);
+            }
+            else if (attackerData?.Class == CatalogueHelper.BrainsClassKey)
+            {
+                target.UpdateStat(ScoreType.DamagedByBrains, damage);
+            }
+        }
+
+        if (target.UnitCard?.IsObjective ?? false)
+        {
+            attackerPlayer?.UpdateStat(ScoreType.DamageBase, damage);
+        }
+        
+        attacker ??= attackerPlayer;
+
+    }
+
+    private void UnitIsKilled(Unit target, ImpactData impact, bool mining = false)
+    {
+        var assists = target.PlayerId != null
+            ? target.RecentDamagers.Where(a => a.Value > DateTimeOffset.Now && a.Key.Team != target.Team)
+                .Select(k => k.Key.PlayerId)
+            .Where(a => a is not null && a != impact.CasterPlayerId).OfType<uint>().ToList() : [];
+        if (target.PlayerId != null)
+        {
+            _serviceZone.SendKill(new KillInfo
+            {
+                DeadUnitId = target.Id,
+                Killer = impact.CasterPlayerId,
+                Assistants = assists,
+                DamageSource = impact.SourceKey ?? CatalogueHelper.DefaultSource,
+                SourcePosition = impact.ShotPos,
+                Crit = impact.Crit
+            });
+        }
+        
+        var killer = impact.CasterUnitId is null ? null : _units.GetValueOrDefault(impact.CasterUnitId.Value);
+        var killerPlayer = impact.CasterPlayerId is null
+            ? null
+            : _playerUnits.GetValueOrDefault(_playerIdToUnitId.GetValueOrDefault(impact.CasterPlayerId.Value));
+        
+        var targetTeam = target.Team;
+
+        var isObjective = target.UnitCard?.IsObjective is true;
+
+        RemoveUnitFromOctree(target.Id);
+        foreach (var block in target.OverlappingMapBlocks)
+        {
+            if (MapBinary.UnitsInsideBlock.TryGetValue(block, out var units))
+            {
+                units.RemoveUnit(target);
+            }
+        }
+        
+        if (target.AttachedTo is not null)
+        {
+            MapBinary.DetachFromBlock(target, target.AttachedTo.Value);
+            target.AttachedTo = null;
+        }
+
+        if (target.SpawnId is not null)
+        {
+            _playerSpawnPoints.Remove(target.SpawnId.Value);
+            _zoneData.RemoveSpawn(target.SpawnId.Value);
+        }
+
+        if (target.PlayerId != null)
+        {
+            if (killerPlayer is not null && targetTeam != killerPlayer.Team)
+            {
+                killerPlayer.UpdateStat(ScoreType.Kills, 1);
+                
+                var playerData = target.PlayerUnitData;
+                if (playerData?.Class == CatalogueHelper.BrawnClassKey)
+                {
+                    killerPlayer.UpdateStat(ScoreType.KillBrawn, 1);
+                }
+                else if (playerData?.Class == CatalogueHelper.SkillsClassKey)
+                {
+                    killerPlayer.UpdateStat(ScoreType.KillSkills, 1);
+                }
+                else if (playerData?.Class == CatalogueHelper.BrainsClassKey)
+                {
+                    killerPlayer.UpdateStat(ScoreType.KillBrains, 1);
+                }
+            }
+            
+            target.UpdateStat(ScoreType.Deaths, 1);
+            
+            if (killerPlayer is not null && killerPlayer == killer)
+            {
+                target.UpdateStat(ScoreType.KilledByHero, 1);
+                if (targetTeam != killerPlayer.Team)
+                { 
+                    killerPlayer.UpdateStat(ScoreType.KillPlayerByHero, 1); 
+                }
+            }
+            else if (killer is null || killer.UnitCard?.DeviceType == DeviceType.Device ||
+                     killer.UnitCard?.DeviceType == DeviceType.Block)
+            {
+                target.UpdateStat(ScoreType.KilledByBlock, 1);
+                if (killerPlayer is not null && targetTeam != killerPlayer.Team)
+                {
+                    killerPlayer.UpdateStat(ScoreType.KillPlayerByBlock, 1);
+                }
+            }
+            else
+            {
+                target.UpdateStat(ScoreType.KilledByOther, 1);
+            }
+            
+            var killerData = killerPlayer?.PlayerUnitData;
+            if (killerData?.Class == CatalogueHelper.BrawnClassKey)
+            {
+                target.UpdateStat(ScoreType.KilledByBrawn, 1);
+            }
+            else if (killerData?.Class == CatalogueHelper.SkillsClassKey)
+            {
+                target.UpdateStat(ScoreType.KilledBySkills, 1);
+            }
+            else if (killerData?.Class == CatalogueHelper.BrainsClassKey)
+            {
+                target.UpdateStat(ScoreType.KilledByBrains, 1);
+            }
+
+            foreach (var assister in assists
+                         .Where(i => _playerIdToUnitId.ContainsKey(i) && _playerUnits.ContainsKey(_playerIdToUnitId[i]))
+                         .Select(i => _playerUnits[_playerIdToUnitId[i]]))
+            {
+                assister.UpdateStat(ScoreType.Assists, 1);
+            }
+            target.RecentDamagers.Clear();
+            
+            UpdateRespawnTime(target);
+        }
+        
+        if (target.UnitCard?.IsObjective ?? false)
+        {
+            killerPlayer?.UpdateStat(ScoreType.KillBase, 1);
+        }
+        
+        killer ??= killerPlayer;
+        var killerTeam = killer?.Team;
+        
+        switch (target.UnitCard?.Data)
+        {
+            case UnitDataBomb { TriggerEffect: not null } unitDataBomb when target.IsFuseExpired:
+                var tImpact1 = target.CreateImpactData();
+                ApplyInstEffect(target.GetSelfSource(tImpact1), [], unitDataBomb.TriggerEffect, tImpact1, BlockShift.Top);
+                break;
+            
+            case UnitDataDrill { DeathEffect: not null } unitDataDrill:
+                var tImpact2 = target.CreateImpactData();
+                ApplyInstEffect(target.GetSelfSource(tImpact2), [], unitDataDrill.DeathEffect, tImpact2);
+                break;
+            
+            case UnitDataLandmine { TriggerEffect: not null, HitOnTimeout: true } unitDataLandmine:
+                var tImpact3 = target.CreateImpactData();
+                ApplyInstEffect(target.GetSelfSource(tImpact3),
+                    _unitOctree.GetColliding(new BoundingSphere(target.GetMidpoint(),
+                        unitDataLandmine.TriggerRadius)), unitDataLandmine.TriggerEffect,
+                    tImpact3);
+                break;
+            
+            case UnitDataLandmine { TriggerEffect: not null } unitDataLandmine when !target.IsExpired:
+                var tImpact4 = target.CreateImpactData();
+                ApplyInstEffect(target.GetSelfSource(tImpact4), _unitOctree.GetColliding(new BoundingSphere(target.GetMidpoint(),
+                    unitDataLandmine.TriggerRadius)), unitDataLandmine.TriggerEffect, tImpact4);
+                break;
+            
+            case UnitDataPickup { TakeEffect: not null } unitDataPickup when killer is not null:
+                target.Team = killer.Team;
+                var tImpact5 = target.CreateImpactData();
+                ApplyInstEffect(target.GetSelfSource(tImpact5), [killer], unitDataPickup.TakeEffect, tImpact5);
+                break;
+            
+            case UnitDataPiggyBank unitDataPiggyBank when killerPlayer is not null:
+                var resourceCount = (float)(target.TimeSinceCreated.TotalSeconds *
+                                            unitDataPiggyBank.ResourcePerInterval /
+                                            unitDataPiggyBank.GenerationInterval);
+            
+                foreach(var player in _playerUnits.Values.Where(p => p.Team == killerPlayer.Team && p != killerPlayer))
+                {
+                    player.AddResource(resourceCount, ResourceType.General);
+                }
+                break;
+            
+            case UnitDataPortal when target.PortalLinked.LinkedPortalUnitId is not null:
+                var otherPortal = _units.GetValueOrDefault(target.PortalLinked.LinkedPortalUnitId.Value);
+                otherPortal?.UpdateData(new UnitUpdate
+                {
+                    PortalLink = new PortalLink
+                    {
+                        LinkedPortalUnitId = null
+                    }
+                });
+                break;
+            
+            case UnitDataProjectile { DeathEffect: not null } unitDataProjectile:
+                var tImpact6 = target.CreateImpactData();
+                ApplyInstEffect(target.GetSelfSource(tImpact6), [], unitDataProjectile.DeathEffect, tImpact6);
+                break;
+        }
+        
+        if (target.UnitCard?.Health?.KillReward is {} reward && killerPlayer is not null && (!reward.Mining || mining))
+        {
+            if (reward.TeamReward is not null && (target.PlayerId == null || killerPlayer.Team != targetTeam))
+            {
+                foreach(var player in _playerUnits.Values.Where(p => p.Team == killerPlayer.Team && p != killerPlayer))
+                {
+                    player.AddResource(reward.TeamReward.Value,
+                        target.PlayerId != null ? ResourceType.TeamKill :
+                        isObjective ? ResourceType.Objective : ResourceType.General);
+                }
+            }
+            if (reward.EnemyReward is not null && killerPlayer.Team != targetTeam)
+            {
+                killerPlayer.AddResource(reward.EnemyReward.Value,
+                    target.PlayerId != null ? ResourceType.Kill :
+                    isObjective ? ResourceType.Objective :
+                    mining ? ResourceType.Mining : ResourceType.General);
+            }
+            else if (reward.PlayerReward is not null)
+            {
+                killerPlayer.AddResource(reward.PlayerReward.Value,
+                    target.PlayerId != null ? ResourceType.Kill :
+                    isObjective ? ResourceType.Objective :
+                    mining ? ResourceType.Mining : ResourceType.General);
+            }
+        }
+
+        if (isObjective && _objectiveConquest[(int)target.Team].Count > 0 &&
+            target.UnitCard?.Labels?.Contains(_objectiveConquest[(int)target.Team].Peek()) is true)
+        {
+            _objectiveConquest[(int)target.Team].Dequeue();
+            if (_objectiveConquest[(int)target.Team].Count > 0)
+            {
+                var nextLabel = _objectiveConquest[(int)target.Team].Peek();
+                foreach (var obj in _units.Values.Where(u => u.Team == target.Team && u.UnitCard?.Labels?.Contains(nextLabel) is true))
+                {
+                    obj.ActiveEffects = obj.ActiveEffects.RemoveAll(e => CatalogueHelper.ObjectiveShieldKeys.Contains(e.Key));
+                }
+            }
+            
+            foreach (var mapSpawnPoint in
+                     _mapSpawnPoints.Where(s => s.Value.Label is SpawnPointLabel.Objective1))
+            {
+                _zoneData.UpdateSpawn(mapSpawnPoint.Key, IsMapSpawnRequirementsMet(mapSpawnPoint.Value));
+            }
+        }
+        
+        if (target.UnitCard?.Loot is not { LootItem: not null } loot) return;
+        if (killer is null)
+        {
+            if (!loot.SpawnOnUndefinedKill) 
+                return;
+        }
+        else if ((killerTeam == targetTeam && !loot.SpawnOnFriendlyKill) || (killerTeam != targetTeam && !loot.SpawnOnEnemyKill)) 
+            return;
+
+        var lootPos = ZoneTransformHelper.ToZoneTransform(target.Transform.Position, Quaternion.Identity);
+
+        switch (loot.LootItem)
+        {
+            case LootItemCommon lootItemCommon:
+                var lootItem = killerTeam == targetTeam
+                    ? lootItemCommon.Item
+                    : lootItemCommon.OpponentItem ?? lootItemCommon.Item;
+
+                if (lootItem is null) return;
+                
+                CreateLootUnit(lootItem, lootPos, killer);
+                break;
+            
+            case LootItemCondition lootItemCondition:
+                var lootItems = killerTeam == targetTeam
+                    ? lootItemCondition.ItemsByCondition
+                    : lootItemCondition.OpponentItemsByCondition ?? lootItemCondition.ItemsByCondition;
+
+                if (lootItems is null) return;
+                
+                if (killer is null)
+                {
+                    if (lootItems.TryGetValue(LootConditionType.Always, out var alwaysItem))
+                    {
+                        CreateLootUnit(alwaysItem, lootPos, killer);
+                    }
+                }
+                else
+                {
+                    if (lootItems.TryGetValue(LootConditionType.LowHealth, out var lowHpLoot) && killer.IsLowHealth)
+                    {
+                        CreateLootUnit(lowHpLoot, lootPos, killer);
+                    }
+                    else if (lootItems.TryGetValue(LootConditionType.LowAmmo, out var lowAmmoLoot) && killer.IsLowAmmo)
+                    {
+                        CreateLootUnit(lowAmmoLoot, lootPos, killer);
+                    }
+                    else if (lootItems.TryGetValue(LootConditionType.FriendlySide, out var friendSideLoot) &&
+                             MapBinary.OnFriendlySide(target.Transform.Position, killer.Team))
+                    {
+                        CreateLootUnit(friendSideLoot, lootPos, killer);
+                    }
+                    else if (lootItems.TryGetValue(LootConditionType.EnemySide, out var enemySideLoot) &&
+                             MapBinary.OnEnemySide(target.Transform.Position, killer.Team))
+                    {
+                        CreateLootUnit(enemySideLoot, lootPos, killer);
+                    }
+                    else if (lootItems.TryGetValue(LootConditionType.Always, out var alwaysLoot))
+                    {
+                        CreateLootUnit(alwaysLoot, lootPos, killer);
+                    }
+                }
+                break;
+            
+            case LootItemRandom lootItemRandom:
+                var lootItemsRand = killerTeam == targetTeam
+                    ? lootItemRandom.ItemsByWeight
+                    : lootItemRandom.OpponentItemsByWeight ?? lootItemRandom.ItemsByWeight;
+                
+                if (lootItemsRand is null) return;
+                
+                var randSelector = new Random();
+                var randVal = randSelector.NextSingle();
+                var accumulatedWeight = 0.0f;
+
+                foreach (var weightedLootItem in lootItemsRand)
+                {
+                    accumulatedWeight += weightedLootItem.Weight;
+                    if (randVal <= accumulatedWeight && weightedLootItem.Item is not null)
+                    {
+                        CreateLootUnit(weightedLootItem.Item, lootPos, killer);
+                        break;
+                    }
+                }
+                break;
+            
+            default:
+                return;
+        }
+    }
+
+    private void DropUnit(Unit unit)
+    {
+        if (unit.PlayerId is null)
+        {
+            RemoveUnit(unit.Id); 
+        }
+        _serviceZone.SendUnitDrop(unit.Id);
+    }
+
+    private void LinkPortal(Unit unit, bool unlink = false)
+    {
+        if (unlink)
+        {
+            if (unit.PortalLinked.LinkedPortalUnitId is null) return;
+            var linkedPortal = _units.GetValueOrDefault(unit.PortalLinked.LinkedPortalUnitId.Value);
+            if (linkedPortal is null) return;
+            var blankLink = new PortalLink
+            {
+                LinkedPortalUnitId = null
+            };
+            
+            unit.UpdateData(new UnitUpdate
+            {
+                PortalLink = blankLink
+            });
+            linkedPortal.UpdateData(new UnitUpdate
+            {
+                PortalLink = blankLink
+            });
+        }
+        else
+        {
+            var portalCandidate = _units.Values.FirstOrDefault(u =>
+                u.UnitCard?.Data is UnitDataPortal && u.Key == unit.Key && u.Id != unit.Id &&
+                u.PortalLinked.LinkedPortalUnitId is null && u.OwnerPlayerId == unit.OwnerPlayerId &&
+                !u.IsBuff(BuffType.Disabled));
+        
+            if (portalCandidate is null) return;
+        
+            var thisPortalLink = unit.PortalLinked;
+            thisPortalLink.LinkedPortalUnitId = portalCandidate.Id;
+            var thatPortalLink = portalCandidate.PortalLinked;
+            thatPortalLink.LinkedPortalUnitId = unit.Id;
+            unit.UpdateData(new UnitUpdate
+            {
+                PortalLink = thisPortalLink
+            });
+            portalCandidate.UpdateData(new UnitUpdate
+            {
+                PortalLink = thatPortalLink
+            });
+        }
+    }
+
+    private void OnPull(Unit unit, ManeuverPull maneuverPull)
+    {
+        _serviceZone.SendUnitManeuver(unit.Id, maneuverPull);
+    }
+
+    private void OnShower(Unit unit, UnitDataShower shower, Random rand)
+    {
+        var r = shower.Radius * MathF.Sqrt(rand.NextSingle());
+        var theta = rand.NextSingle() * 2 * MathF.PI;
+        
+        var xVal = (int)float.FusedMultiplyAdd(r, MathF.Cos(theta), unit.Transform.Position.X);
+        var zVal = (int)float.FusedMultiplyAdd(r, MathF.Sin(theta), unit.Transform.Position.Z);
+        
+        if (xVal == (int)unit.Transform.Position.X && zVal == (int)unit.Transform.Position.Z) return;
+        
+        var blockPos = MapBinary.GetGroundBlockFromSky(xVal, zVal);
+        if (blockPos is null || shower.HitEffect is null) return;
+
+        var blockBottom = CoordsHelper.BlockBottom(blockPos.Value);
+        var placeImpact = unit.CreateImpactData(insidePoint: blockBottom with { Y = blockBottom.Y + 0.99f });
+        ApplyInstEffect(unit.GetSelfSource(placeImpact), [], shower.HitEffect, placeImpact, BlockShift.Top);
+    }
+    
+    private void UpdateSpawnPoint(Unit unit)
+    {
+        if (unit.SpawnId is null) return;
+        
+        _zoneData.UpdateSpawn(unit.SpawnId.Value, CheckSpawn(unit, unit.Transform.Position), unit.OwnerPlayerId, true,
+            unit.Transform.Position, unit.Team);
+    }
+
+    private static void OnMatchContextChanged(Unit unit, TeamType oldTeam, TeamType newTeam, ConstEffectOnMatchContext effect)
+    {
+        if (oldTeam == newTeam || unit.Team == TeamType.Neutral) return;
+
+        var source = unit.GetSelfSource(unit.CreateImpactData());
+        if (oldTeam == unit.Team && effect.EffectsOnLeading is { Count: > 0 })
+        {
+            unit.RemoveEffects(effect.EffectsOnLeading.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+        }
+        else if (oldTeam != unit.Team && oldTeam != TeamType.Neutral && effect.EffectsOnLosing is { Count: > 0 })
+        {
+            unit.RemoveEffects(effect.EffectsOnLosing.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+        }
+
+        if (newTeam == unit.Team && effect.EffectsOnLeading is { Count: > 0 })
+        {
+            unit.AddEffects(effect.EffectsOnLeading.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+        }
+        else if (newTeam != unit.Team && newTeam != TeamType.Neutral && effect.EffectsOnLosing is { Count: > 0 })
+        {
+            unit.AddEffects(effect.EffectsOnLosing.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+        }
+    }
+    
     private OnUnitInit GetUnitInitAction(IServiceZone? creatorService = null) =>
         (unit, init) => UnitCreated(unit, init, creatorService);
 
@@ -583,7 +1907,7 @@ public partial class GameZone
             ? _playerUnits.Values.Where(p => p.Team == attacker.Team).ToList()
             : [attacker];
         
-        totalRes *= matchCard.FallingBlocksLogic?.ResourceCoeff ?? 1.0f;
+        totalRes *= MathF.Pow(matchCard.FallingBlocksLogic?.ResourceCoeff ?? 1.0f, 2);
 
         if (matchCard.FallingBlocksLogic?.ResourceCap is { } cap)
         {
@@ -591,6 +1915,25 @@ public partial class GameZone
         }
         
         affectedPlayers.ForEach(p => p.AddResource(totalRes, ResourceType.Mining));
+    }
+
+    private void OnMined(uint attackerId, Key blockKey)
+    {
+        _serviceZone.SendBlockMined(attackerId, blockKey);
+    }
+
+    private static void OnDetached(Unit unit)
+    {
+        unit.AttachedTo = null;
+        if (unit.UnitCard?.BlockBinding == UnitBlockBindingType.Destroy)
+        {
+            var impact = unit.CreateBlankImpactData();
+            unit.Killed(impact);
+        }
+        else
+        {
+            MovementActive(unit);
+        }
     }
     
     private void ZoneUpdated(ZoneUpdate update)

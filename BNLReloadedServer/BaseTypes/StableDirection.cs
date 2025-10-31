@@ -26,10 +26,10 @@ public static class StableHelper
         };
 
     public static StableDirection ToStableDirection(this Vector3s stable, Vector3s attached) =>
-        attached.x > stable.x ? StableDirection.Left :
-        attached.x < stable.x ? StableDirection.Right :
-        attached.y > stable.y ? StableDirection.Below :
-        attached.y < stable.y ? StableDirection.Above :
-        attached.z > stable.z ? StableDirection.Back :
-        attached.z < stable.z ? StableDirection.Forward : StableDirection.Inherent;
+        attached.x > stable.x ? StableDirection.Right :
+        attached.x < stable.x ? StableDirection.Left :
+        attached.y > stable.y ? StableDirection.Above :
+        attached.y < stable.y ? StableDirection.Below :
+        attached.z > stable.z ? StableDirection.Forward :
+        attached.z < stable.z ? StableDirection.Back : StableDirection.Inherent;
 }

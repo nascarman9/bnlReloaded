@@ -130,7 +130,10 @@ public class ServiceZone(ISender sender) : IServiceZone
 
     private void ReceiveZoneReady(BinaryReader reader)
     {
-        GameInstance?.PlayerZoneReady(sender.AssociatedPlayerId!.Value);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.PlayerZoneReady(sender.AssociatedPlayerId.Value);
+        }
     }
 
     private void ReceiveZoneLeave(BinaryReader reader)
@@ -525,16 +528,28 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var rpcId = reader.ReadUInt16();
         var data = ChannelData.ReadRecord(reader);
+        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.CreateChannel(rpcId, sender.AssociatedPlayerId.Value, data, this);
+        }
     }
 
     private void ReceiveEndChannel(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.EndChannel(sender.AssociatedPlayerId.Value);
+        }
     }
 
     private void ReceiveDashStartCharge(BinaryReader reader)
     {
         var toolIndex = reader.ReadByte();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.DashChargeStart(sender.AssociatedPlayerId.Value, toolIndex);
+        }
     }
 
     public void SendDashEndChargeSuccess(ushort rpcId, bool? isMaxCharge)
@@ -561,22 +576,40 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var rpcId = reader.ReadUInt16();
         var toolIndex = reader.ReadByte();
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.DashChargeEnd(rpcId, sender.AssociatedPlayerId.Value, toolIndex, this);
+        }
     }
 
     private void ReceiveDashCast(BinaryReader reader)
     {
         var toolIndex = reader.ReadByte();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.DashCast(sender.AssociatedPlayerId.Value, toolIndex);
+        }
     }
 
     private void ReceiveDashHit(BinaryReader reader)
     {
         var toolIndex = reader.ReadByte();
         var data = HitData.ReadRecord(reader);
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.DashHit(sender.AssociatedPlayerId.Value, toolIndex, data);
+        }
     }
 
     private void ReceiveToolStartCharge(BinaryReader reader)
     {
         var toolIndex = reader.ReadByte();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.ToolChargeStart(sender.AssociatedPlayerId.Value, toolIndex);
+        }
     }
 
     public void SendToolEndChargeSuccess(ushort rpcId, bool accepted, float? charge)
@@ -604,17 +637,32 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var rpcId = reader.ReadUInt16();
         var toolIndex = reader.ReadByte();
+        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.ToolChargeEnd(rpcId, sender.AssociatedPlayerId.Value, toolIndex, this);
+        }
     }
 
     private void ReceiveGroundSlamCast(BinaryReader reader)
     {
         var toolIndex = reader.ReadByte();
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.GroundSlamCast(sender.AssociatedPlayerId.Value, toolIndex);
+        }
     }
 
     private void ReceiveGroundSlamHit(BinaryReader reader)
     {
         var toolIndex = reader.ReadByte();
         var data = HitData.ReadRecord(reader);
+        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.GroundSlamHit(sender.AssociatedPlayerId.Value, toolIndex, data);
+        }
     }
 
     public void SendStartBuild(ushort rpcId, bool? accepted, string? error = null)
@@ -675,6 +723,11 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var rpcId = reader.ReadUInt16();
         var data = AbilityCastData.ReadRecord(reader);
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.AbilityCast(rpcId, sender.AssociatedPlayerId.Value, data, this);
+        }
     }
     
     public void SendDoCastAbility(uint unitId, AbilityCastData data)
@@ -690,6 +743,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var shotId = reader.ReadUInt64();
         var info = ProjectileInfo.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.CreateProj(sender.AssociatedPlayerId.Value, shotId, info);
+        }
     }
 
     private void ReceiveMoveProjectile(BinaryReader reader)
@@ -697,20 +754,29 @@ public class ServiceZone(ISender sender) : IServiceZone
         var shotId = reader.ReadUInt64();
         var time = reader.ReadUInt64();
         var transform = ZoneTransform.ReadRecord(reader);
+        GameInstance?.MoveProj(shotId, time, transform);
     }
 
     private void ReceiveDropProjectile(BinaryReader reader)
     {
         var shotId = reader.ReadUInt64();
+        GameInstance?.DropProj(shotId);
     }
     
-    public void SendCreateProjectile(ulong shotId, ProjectileInfo info)
+    public void SendCreateProjectile(ulong shotId, ProjectileInfo info, Guid? creatingSession = null)
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceZoneId.MessageCreateProjectile);
         writer.Write(shotId);
         ProjectileInfo.WriteRecord(writer, info);
-        sender.Send(writer);
+        if (creatingSession.HasValue)
+        {
+            sender.SendExcept(writer, [creatingSession.Value]);
+        }
+        else
+        {
+            sender.Send(writer);
+        }
     }
 
     public void SendMoveProjectile(ulong shotId, ulong time, ZoneTransform transform)
@@ -734,6 +800,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceivePickup(BinaryReader reader)
     {
         var pickupId = reader.ReadUInt32();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.Pickup(sender.AssociatedPlayerId.Value, pickupId);
+        }
     }
 
     private void ReceiveUpdateDrown(BinaryReader reader)
@@ -746,6 +816,8 @@ public class ServiceZone(ISender sender) : IServiceZone
         var unitId = reader.ReadUInt32();
         var height = reader.ReadSingle();
         var force = reader.ReadBoolean();
+        
+        GameInstance?.Fall(unitId, height, force);
     }
 
     private void ReceiveEmitZoneEvent(BinaryReader reader)
@@ -777,11 +849,20 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceivePlayerCommand(BinaryReader reader)
     {
         var commandKey = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.PlayerCommand(sender.AssociatedPlayerId.Value, commandKey);
+        }
     }
 
     private void ReceiveSetSpawnPoint(BinaryReader reader)
     {
         var spawnPointId = reader.ReadOptionValue(reader.ReadUInt32);
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.SelectSpawnPoint(sender.AssociatedPlayerId.Value, spawnPointId);
+        }
     }
 
     public void SendKill(KillInfo info)
@@ -947,6 +1028,7 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var turretId = reader.ReadUInt32();
         var targetId = reader.ReadUInt32();
+        GameInstance?.TurretTarget(turretId, targetId);
     }
 
     private void ReceiveTurretAttack(BinaryReader reader)
@@ -954,6 +1036,7 @@ public class ServiceZone(ISender sender) : IServiceZone
         var turretId = reader.ReadUInt32();
         var shotPos = reader.ReadVector3();
         var shots = reader.ReadList<ShotData, List<ShotData>>(ShotData.ReadRecord);
+        GameInstance?.TurretAttack(turretId, shotPos, shots);
     }
 
     public void SendTurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots)
@@ -980,6 +1063,7 @@ public class ServiceZone(ISender sender) : IServiceZone
         var mortarId = reader.ReadUInt32();
         var shotPos = reader.ReadVector3();
         var shots =  reader.ReadList<ShotData, List<ShotData>>(ShotData.ReadRecord);
+        GameInstance?.MortarAttack(mortarId, shotPos, shots);
     }
 
     public void SendMortarAttack(uint mortarId, Vector3 shotPos, List<ShotData> shots)
@@ -997,6 +1081,8 @@ public class ServiceZone(ISender sender) : IServiceZone
         var teslaId = reader.ReadUInt32();
         var targetId = reader.ReadOptionValue(reader.ReadUInt32);
         var teslasInRange = reader.ReadList<uint, List<uint>>(reader.ReadUInt32);
+        
+        GameInstance?.UpdateTesla(teslaId, targetId, teslasInRange);
     }
 
     public void SendTeslaAttack(uint teslaId, uint targetId, List<uint> chargePath)
@@ -1014,6 +1100,7 @@ public class ServiceZone(ISender sender) : IServiceZone
         var drillId = reader.ReadUInt32();
         var shotPos = reader.ReadVector3();
         var shots = reader.ReadList<ShotData, List<ShotData>>(ShotData.ReadRecord);
+        GameInstance?.DrillAttack(drillId, shotPos, shots);
     }
 
     public void SendDrillAttack(uint drillId, Vector3 shotPos, List<ShotData> shots)
@@ -1030,12 +1117,14 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var unitId = reader.ReadUInt32();
         var data = HitData.ReadRecord(reader);
+        GameInstance?.UnitProjectileHit(unitId, data);
     }
 
     private void ReceiveSkybeamHit(BinaryReader reader)
     {
         var unitId = reader.ReadUInt32();
         var data = HitData.ReadRecord(reader);
+        GameInstance?.SkybeamHit(unitId, data);
     }
 
     private void ReceiveExecuteMapEditorCommand(BinaryReader reader)
