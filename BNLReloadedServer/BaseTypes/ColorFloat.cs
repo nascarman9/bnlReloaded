@@ -1,6 +1,6 @@
 ﻿namespace BNLReloadedServer.BaseTypes;
 
-public struct ColorFloat(float r, float g, float b, float a)
+public struct ColorFloat(float r, float g, float b, float a) : IEquatable<ColorFloat>
 {
     public float r = r;
     public float g = g;
@@ -49,5 +49,20 @@ public struct ColorFloat(float r, float g, float b, float a)
     public static bool operator !=(ColorFloat a, ColorFloat b)
     {
       return !(a == b);
+    }
+
+    public bool Equals(ColorFloat other)
+    {
+      return r.Equals(other.r) && g.Equals(other.g) && b.Equals(other.b) && a.Equals(other.a);
+    }
+
+    public override bool Equals(object? obj)
+    {
+      return obj is ColorFloat other && Equals(other);
+    }
+
+    public override int GetHashCode()
+    {
+      return HashCode.Combine(r, g, b, a);
     }
 }

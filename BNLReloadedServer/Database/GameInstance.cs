@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Numerics;
 using System.Timers;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Servers;
@@ -234,7 +235,7 @@ public class GameInstance : IGameInstance
         
         if (MapData != null)
         {
-            MatchKey = CatalogueHelper.GetMatch(MapData.Match)?.Key ?? gameMode.MatchMode;
+            MatchKey = CatalogueHelper.GetMatch(MapData.Match, gameMode.Key)?.Key ?? gameMode.MatchMode;
         }
         else
         {
@@ -353,7 +354,7 @@ public class GameInstance : IGameInstance
                 {
                     var tempBufferedSender = new BufferSender();
                     var tempSessionSender = new SessionSender(Server, playerGuid, Server.FindSession(playerGuid));
-                    Zone?.SendLoadZone(new ServiceZone(tempBufferedSender), playerId);
+                    Zone?.SendLoadZone(new ServiceZone(tempBufferedSender), zoneService, playerId);
                     tempSessionSender.Send(tempBufferedSender.GetBuffer());
                     player.LoadStage = ZoneLoadStage.Finished;
                     _zoneSender.Subscribe(playerGuid);
@@ -400,9 +401,87 @@ public class GameInstance : IGameInstance
     public void ReloadCancel(uint playerId) =>
         Zone?.EnqueueAction(() => Zone?.ReceivedReloadCancelRequest(playerId));
 
-    public void CastRequest(uint playerId, CastData castData) => Zone?.EnqueueAction(() => Zone?.ReceivedCastRequest(playerId, castData));
+    public void CreateProj(uint playerId, ulong shotId, ProjectileInfo projInfo) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedProjCreateRequest(shotId, projInfo,
+            _connectedUsers.TryGetValue(playerId, out var value) ? value.Guid : null));
 
-    public void Hit(ulong time, Dictionary<ulong, HitData> hits) => Zone?.EnqueueAction(() => Zone?.ReceivedHit(time, hits));
+    public void MoveProj(ulong shotId, ulong time, ZoneTransform transform) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedProjMoveRequest(shotId, time, transform));
+
+    public void DropProj(ulong shotId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedProjDropRequest(shotId));
+
+    public void CreateChannel(ushort rpcId, uint playerId, ChannelData channelData, IServiceZone channelService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedCreateChannelRequest(rpcId, playerId, channelData, channelService));
+
+    public void EndChannel(uint playerId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedEndChannelRequest(playerId));
+
+    public void ToolChargeStart(uint playerId, byte toolIndex) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedToolChargeStartRequest(playerId, toolIndex));
+
+    public void ToolChargeEnd(ushort rpcId, uint playerId, byte toolIndex, IServiceZone chargeService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedToolChargeEndRequest(rpcId, playerId, toolIndex, chargeService));
+
+    public void DashChargeStart(uint playerId, byte toolIndex) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedDashChargeStartRequest(playerId, toolIndex));
+
+    public void DashChargeEnd(ushort rpcId, uint playerId, byte toolIndex, IServiceZone dashService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedDashChargeEndRequest(rpcId, playerId, toolIndex, dashService));
+
+    public void DashCast(uint playerId, byte toolIndex) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedDashCastRequest(playerId, toolIndex));
+
+    public void DashHit(uint playerId, byte toolIndex, HitData hitData) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedDashHitRequest(playerId, toolIndex, hitData));
+
+    public void GroundSlamCast(uint playerId, byte toolIndex) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedGroundSlamCastRequest(playerId, toolIndex));
+
+    public void GroundSlamHit(uint playerId, byte toolIndex, HitData hitData) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedGroundSlamHitRequest(playerId, toolIndex, hitData));
+
+    public void AbilityCast(ushort rpcId, uint playerId, AbilityCastData castData, IServiceZone abilityService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedAbilityCastRequest(rpcId, playerId, castData, abilityService));
+
+    public void UnitProjectileHit(uint unitId, HitData hitData) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedUnitProjectileHit(unitId, hitData));
+
+    public void SkybeamHit(uint unitId, HitData hitData) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedSkybeamHit(unitId, hitData));
+
+    public void CastRequest(uint playerId, CastData castData) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedCastRequest(playerId, castData));
+
+    public void Hit(ulong time, Dictionary<ulong, HitData> hits) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedHit(time, hits));
+
+    public void Fall(uint unitId, float height, bool force) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedFall(unitId, height, force)); 
+
+    public void Pickup(uint playerId, uint pickupId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedPickup(playerId, pickupId));
+
+    public void SelectSpawnPoint(uint playerId, uint? spawnId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedSelectSpawnPoint(playerId, spawnId));
+
+    public void TurretTarget(uint turretId, uint targetId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedTurretTarget(turretId, targetId));
+
+    public void TurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedTurretAttack(turretId, shotPos, shots));
+
+    public void MortarAttack(uint mortarId, Vector3 shotPos, List<ShotData> shots) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedMortarAttack(mortarId, shotPos, shots));
+
+    public void DrillAttack(uint drillId, Vector3 shotPos, List<ShotData> shots) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedDrillAttack(drillId, shotPos, shots));
+
+    public void UpdateTesla(uint teslaId, uint? targetId, List<uint> teslasInRange) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedUpdateTesla(teslaId, targetId, teslasInRange));
+
+    public void PlayerCommand(uint playerId, Key command) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedPlayerCommand(playerId, command));
 
     private void OnLoadTimerElapsed(object? sender, ElapsedEventArgs e)
     {

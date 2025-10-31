@@ -31,7 +31,7 @@ public static class PrefabBuilder
       return false;
     
     var dir1 = TransformFace(dir, visual, (byte) block.VData);
-    return GetPrefabFaceFlag(visual.Prefabs[GetPrefabIndex((byte) block.VData)], dir1);
+    return GetPrefabFaceFlag(visual.Prefabs[GetPrefabIndex((byte) block.VData)], dir1, block.Card);
   }
 
   private static BlockFace TransformFace(BlockFace dir, BlockVisual info, byte data)
@@ -45,11 +45,11 @@ public static class PrefabBuilder
     return PrefabFaces[index1, (int) index2, (int) dir];
   }
 
-  private static bool GetPrefabFaceFlag(BlockPrefab prefab, BlockFace dir) =>
+  private static bool GetPrefabFaceFlag(BlockPrefab prefab, BlockFace dir, CardBlock block) =>
     dir switch
     {
       BlockFace.Top => prefab.IsTop,
-      BlockFace.Bottom => prefab.IsBottom,
+      BlockFace.Bottom => prefab.IsBottom || block.Grounded,
       BlockFace.Right => prefab.IsRight,
       BlockFace.Left => prefab.IsLeft,
       BlockFace.Forward => prefab.IsForward,

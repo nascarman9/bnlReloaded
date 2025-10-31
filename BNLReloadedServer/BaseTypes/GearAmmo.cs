@@ -27,9 +27,9 @@ public class GearAmmo
 
     public bool IsMag => GearCard.Ammo?[AmmoIndex].MagSize != null;
 
-    public float MagSize => Unit.MagazineSize(GearCard.Ammo[AmmoIndex].MagSize.Value);
+    public float MagSize => Unit.MagazineSize(GearCard.Ammo?[AmmoIndex].MagSize ?? 0);
 
-    public float PoolSize => Unit.PoolSize(GearCard.Ammo[AmmoIndex].Pool.PoolSize);
+    public float PoolSize => Unit.PoolSize(GearCard.Ammo?[AmmoIndex].Pool?.PoolSize ?? 0);
 
     public void ServerUpdateAmmo(Ammo ammo)
     {

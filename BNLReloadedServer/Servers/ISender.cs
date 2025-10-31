@@ -6,6 +6,7 @@ public interface ISender
     public int SenderCount { get; }
     public void Send(BinaryWriter writer);
     public void Send(byte[] buffer);
+    public void SendExcept(BinaryWriter writer, List<Guid> excluded);
     public void SendSync(BinaryWriter writer);
     public void SendSync(byte[] buffer);
     public void Subscribe(Guid sessionId);

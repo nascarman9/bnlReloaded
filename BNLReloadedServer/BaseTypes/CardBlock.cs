@@ -33,6 +33,9 @@ public class CardBlock : Card, IKillscoreIcon, IInternalDevice
     [JsonIgnore]
     public bool IsVisualSlope => Visual?.Type == BlockVisualType.Slope;
 
+    [JsonIgnore] 
+    public bool CanFloat => BlockId is 10 or 44 || CanStayInAir;
+
     public string? GetName(int index = 0)
     {
       return IsVisualPrefab ? Visual?.Prefabs?[index].Name?.Text : Visual?.Name?.Text;

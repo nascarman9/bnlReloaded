@@ -41,4 +41,6 @@ public readonly struct BoundingBoxEx : IBoundingShape
                                                         _min.Z <= (double)max.Z && _max.Z >= (double)min.Z;
 
     public (Vector3s max, Vector3s min) GetSquareBounds() => ((Vector3s) _max, (Vector3s) _min);
+    
+    public IBoundingShape GetShapeAtNewPosition(Vector3 position) => new BoundingBoxEx(position, _max - _min);
 }

@@ -43,7 +43,7 @@ public interface IServiceZone : IService
     public void SendStartBuild(ushort rpcId, bool? accepted, string? error = null);
     public void SendCastAbility(ushort rpcId, bool? accepted, string? error = null);
     public void SendDoCastAbility(uint unitId, AbilityCastData data);
-    public void SendCreateProjectile(ulong shotId, ProjectileInfo info);
+    public void SendCreateProjectile(ulong shotId, ProjectileInfo info, Guid? creatingSession = null);
     public void SendMoveProjectile(ulong shotId, ulong time, ZoneTransform transform);
     public void SendDropProjectile(ulong shotId);
     public void SendBroadcastZoneEvent(ZoneEvent data);

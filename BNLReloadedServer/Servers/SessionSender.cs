@@ -43,6 +43,13 @@ public class SessionSender : ISender
             session.SendAsync(buffer);
     }
 
+    public void SendExcept(BinaryWriter writer, List<Guid> excluded)
+    {
+        var message = AppendMessageLength(writer);
+        foreach (var session in _sessions.Values.Where(e => !excluded.Contains(e.Id)))
+            session.SendAsync(message);
+    }
+
     public void SendSync(BinaryWriter writer)
     {
         var message = AppendMessageLength(writer);

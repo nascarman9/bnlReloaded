@@ -6,6 +6,8 @@ public abstract class Updater
 {
     private readonly BlockingCollection<Action> _updateActions = new();
 
+    private bool BlockEnqueuing { get; set; }
+
     protected Updater()
     {
         Task.Run(RunUpdater);
@@ -22,19 +24,29 @@ public abstract class Updater
             }
             catch (InvalidOperationException) { }
 
-            updateAction?.Invoke();
+            try
+            {
+                updateAction?.Invoke();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
         }
         
         _updateActions.Dispose();
     }
     
-    public void EnqueueAction(Action func)
+    public bool EnqueueAction(Action func)
     {
+        if (BlockEnqueuing) return false;
         _updateActions.Add(func);
+        return true;
     }
 
     public void Stop()
     {
         _updateActions.CompleteAdding();
+        BlockEnqueuing = true;
     }
 }

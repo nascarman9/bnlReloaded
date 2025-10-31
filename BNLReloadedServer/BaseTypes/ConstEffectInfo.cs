@@ -19,15 +19,28 @@ public record ConstEffectInfo(Key Key, ulong? TimestampEnd)
     
     public CardEffect Card => Databases.Catalogue.GetCard<CardEffect>(Key);
 
-    public bool HasDuration => Card.Duration.HasValue && TimestampEnd.HasValue;
+    public bool HasDuration => Card.Duration.HasValue && ExpirationTime.HasValue;
 
-    public float DurationPercent => Card.Duration.HasValue && TimestampEnd.HasValue
+    public ulong? ExpirationTime { get; private set; } = TimestampEnd;
+
+    public float DurationPercent => Card.Duration.HasValue && ExpirationTime.HasValue
         ? Math.Clamp(
-            (float)(1.0 - (double)(TimestampEnd.Value - (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds()) /
+            (float)(1.0 - (double)(ExpirationTime.Value - (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds()) /
                 Card.Duration.Value), 0, 1)
         : 0.0f;
     
-    public bool IsExpired => Card.Duration.HasValue && TimestampEnd.HasValue && TimestampEnd.Value < (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds();
+    public bool IsExpired => Card.Duration.HasValue && ExpirationTime.HasValue &&
+                             ExpirationTime.Value < (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+    public void UpdateDuration(float? duration = null)
+    {
+        var dur = duration ?? Databases.Catalogue.GetCard<CardEffect>(Key)?.Duration;
+        if (dur is null) return;
+
+        ExpirationTime = (ulong)DateTimeOffset.Now.AddSeconds(dur.Value).ToUnixTimeMilliseconds();
+    }
+    
+    public void UpdateDuration(ulong timeStampEnd) => ExpirationTime = timeStampEnd;
 
     public static ImmutableList<ConstEffectInfo> Convert(IDictionary<Key, ulong?> effects)
     {

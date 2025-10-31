@@ -32,4 +32,7 @@ public readonly struct BoundingEllipsoid(Vector3 center, float xRadius, float yR
 
     public (Vector3s max, Vector3s min) GetSquareBounds() => 
         ((Vector3s)(Center + new Vector3(xRadius, yRadius, zRadius)), (Vector3s)(Center - new Vector3(xRadius, yRadius, zRadius)));
+
+    public IBoundingShape GetShapeAtNewPosition(Vector3 position) =>
+        new BoundingEllipsoid(position, xRadius, yRadius, zRadius);
 }

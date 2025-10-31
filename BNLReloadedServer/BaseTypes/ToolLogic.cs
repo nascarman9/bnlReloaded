@@ -17,9 +17,9 @@ public class ToolLogic(GearData data, byte index)
         return Tool?.Ammo != null ? Gear.Ammo[Tool.Ammo.AmmoIndex] : null;
     }
 
-    public void TakeAmmo() => GetAmmoData()?.TakeAmmo(Tool?.Ammo?.Rate ?? 0);
+    public void TakeAmmo(float? rate = null) => GetAmmoData()?.TakeAmmo(rate ?? Tool?.Ammo?.Rate ?? 0);
     
-    public Ammo? TakeAmmoUpdate() => GetAmmoData()?.TakeAmmoUpdate(Tool?.Ammo?.Rate ?? 0);
+    public Ammo? TakeAmmoUpdate(float? rate = null) => GetAmmoData()?.TakeAmmoUpdate(rate ?? Tool?.Ammo?.Rate ?? 0);
 
     public bool IsEnoughAmmoToUse()
     {

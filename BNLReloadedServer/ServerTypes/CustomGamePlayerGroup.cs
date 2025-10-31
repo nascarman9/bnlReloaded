@@ -323,6 +323,11 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
         return startTime.AddSeconds((long) _gameInfo.BuildTime).ToUnixTimeMilliseconds();
     }
 
+    public float GetRespawnMultiplier()
+    {
+        return _gameInfo.RespawnTimeMod;
+    }
+
     public CustomGameUpdate GetCustomGameUpdate()
     {
         var settings = new CustomGameSettings
