@@ -1,4 +1,5 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.Servers;
 
 namespace BNLReloadedServer.Service;
@@ -31,7 +32,10 @@ public class ServiceScene(ISender sender) : IServiceScene
 
     private void ReceiveEnterScene(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            Databases.RegionServerDatabase.UserEnterScene(sender.AssociatedPlayerId.Value);
+        }
     }
 
     public void SendEnterInstance(string host, int port, string auth)
@@ -60,7 +64,12 @@ public class ServiceScene(ISender sender) : IServiceScene
         {
             sceneEnum = (ServiceSceneId)serviceSceneId;
         }
-        Console.WriteLine($"ServiceSceneId: {sceneEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceSceneId: {sceneEnum.ToString()}");
+        }
+
         switch (sceneEnum)
         {
             case ServiceSceneId.MessageEnterScene:

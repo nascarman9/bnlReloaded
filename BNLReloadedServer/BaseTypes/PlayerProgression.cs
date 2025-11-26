@@ -36,4 +36,19 @@ public class PlayerProgression
         playerProgression.Read(reader);
         return playerProgression;
     }
+
+    public static byte[] WriteByteRecord(PlayerProgression playerProgression)
+    {
+        var memStream = new MemoryStream();
+        using var writer = new BinaryWriter(memStream);
+        WriteRecord(writer, playerProgression);
+        return memStream.ToArray();
+    }
+
+    public static PlayerProgression ReadByteRecord(byte[] bytes)
+    {
+        var memStream = new MemoryStream(bytes);
+        using var reader = new BinaryReader(memStream);
+        return ReadRecord(reader);
+    }
 }

@@ -7,23 +7,28 @@ namespace BNLReloadedServer.Servers;
 public class MatchSession : TcpSession
     {
         private readonly MatchServiceDispatcher _serviceDispatcher;
-        private readonly SessionSender _sender;
 
         public MatchSession(TcpServer server) : base(server)
         {
-            _sender = new SessionSender(server, Id, this);
-            _serviceDispatcher = new MatchServiceDispatcher(_sender, Id);
+            var sender = new SessionSender(server, Id, this);
+            _serviceDispatcher = new MatchServiceDispatcher(sender, Id);
         }
 
         protected override void OnConnected()
         {
-            Console.WriteLine($"Match TCP session with Id {Id} connected!");
+            if (Databases.ConfigDatabase.DebugMode())
+            {
+                Console.WriteLine($"Match TCP session with Id {Id} connected!");
+            }
         }
 
         protected override void OnDisconnected()
         {
             Databases.RegionServerDatabase.RemoveMatchServices(Id);
-            Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
+            if (Databases.ConfigDatabase.DebugMode())
+            {
+                Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
+            }
         }
 
         protected override void OnReceived(byte[] buffer, long offset, long size)
@@ -33,6 +38,7 @@ public class MatchSession : TcpSession
             var memStream = new MemoryStream(buffer, (int)offset, (int)size);
             using var reader = new BinaryReader(memStream);
 
+            var debugMode = Databases.ConfigDatabase.DebugMode();
             try
             {
                 while (reader.BaseStream.Position < reader.BaseStream.Length)
@@ -42,9 +48,16 @@ public class MatchSession : TcpSession
                     var currentPosition = reader.BaseStream.Position;
                     if (reader.BaseStream.Position + packetLength <= reader.BaseStream.Length)
                     {
-                        Console.WriteLine($"Packet length: {packetLength}");
-                        _serviceDispatcher.Dispatch(reader);
-                        Console.WriteLine();
+                        if (debugMode)
+                        {
+                            Console.WriteLine($"Packet length: {packetLength}");
+                            _serviceDispatcher.Dispatch(reader);
+                            Console.WriteLine();
+                        }
+                        else
+                        {
+                            _serviceDispatcher.Dispatch(reader);
+                        }
                     }
                     else
                         break;

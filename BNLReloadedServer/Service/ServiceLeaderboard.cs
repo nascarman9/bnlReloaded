@@ -1,4 +1,5 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 
@@ -86,7 +87,12 @@ public class ServiceLeaderboard(ISender sender) : IServiceLeaderboard
         {
             leaderboardEnum = (ServiceLeaderboardId)serviceLeaderboardId;
         }
-        Console.WriteLine($"ServiceLeaderboardId: {leaderboardEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceLeaderboardId: {leaderboardEnum.ToString()}");
+        }
+
         switch (leaderboardEnum)
         {
             case ServiceLeaderboardId.MessageGetTimeTrialLeaderboard:

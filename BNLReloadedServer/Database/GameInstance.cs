@@ -36,6 +36,8 @@ public class GameInstance : IGameInstance
     private GameLobby? Lobby { get; set; }
     
     private GameZone? Zone { get; set; }
+
+    private readonly ConcurrentBag<Action> _preZoneActions = [];
     
     private readonly ConcurrentDictionary<uint, MatchConnectionInfo> _connectedUsers = new();
     
@@ -88,7 +90,9 @@ public class GameInstance : IGameInstance
         var bothChatRoom = new ChatRoom(bothRoom, new SessionSender(server));
         return new InstanceChatRooms(team1ChatRoom, team2ChatRoom, bothChatRoom);
     }
-    
+
+    public bool HasLobby() => Lobby != null;
+
     public void LinkGuidToPlayer(uint userId, Guid guid, Guid regionGuid)
     {
         var playerTeam = GameInitiator.GetTeamForPlayer(userId);
@@ -154,15 +158,16 @@ public class GameInstance : IGameInstance
     {
         RemoveFromChat(_connectedUsers[userId]);
         Lobby?.EnqueueAction(() => Lobby?.PlayerDisconnected(userId));
+        Zone?.EnqueueAction(() => Zone?.PlayerDisconnected(userId));
     }
     
-    public void PlayerLeftInstance(uint userId)
+    public void PlayerLeftInstance(uint userId, KickReason reason)
     {
         _connectedUsers.TryRemove(userId, out var player);
         RemoveFromChat(player);
         
         Lobby?.EnqueueAction(() => Lobby?.PlayerLeft(userId));
-        Zone?.EnqueueAction(() => Zone?.PlayerLeft(userId));
+        Zone?.EnqueueAction(() => Zone?.PlayerLeft(userId, reason));
 
         _serverDatabase.RemoveFromGameInstance(userId, GameInstanceId);
 
@@ -177,10 +182,15 @@ public class GameInstance : IGameInstance
         _serverDatabase.RemoveGameInstance(GameInstanceId);
     }
 
-    public void SetMap(MapInfo mapInfo, MapData map)
+    public void SetMap(MapInfo? mapInfo, MapData map)
     {
         MapInfo = mapInfo;
         MapData = map;
+    }
+
+    public void SetMatchKey(Key matchKey)
+    {
+        MatchKey = matchKey;
     }
 
     public void RegisterServices(Guid sessionId, Dictionary<ServiceId, IService> services)
@@ -190,11 +200,11 @@ public class GameInstance : IGameInstance
 
     public void RemoveService(Guid sessionId)
     {
-        var player = _connectedUsers.Select(kv => (kv.Key, kv.Value)).FirstOrDefault(p => p.Value.Guid == sessionId);
-        if (player != default)
+        foreach (var (playerId, _) in _connectedUsers.Where(p => p.Value.Guid == sessionId))
         {
-            PlayerDisconnected(player.Key);
+            PlayerDisconnected(playerId);
         }
+
         _services.Remove(sessionId);
         _lobbySender.Unsubscribe(sessionId);
         _zoneSender.Unsubscribe(sessionId);
@@ -271,13 +281,14 @@ public class GameInstance : IGameInstance
 
     public void PlayerReady(uint playerId) => Lobby?.EnqueueAction(() => Lobby?.PlayerReady(playerId));
 
-    public void LoadProgressUpdate(uint playerId, float progress)
-    {
+    public void LoadProgressUpdate(uint playerId, float progress) =>
         Lobby?.EnqueueAction(() => Lobby?.LoadProgressUpdate(playerId, progress));
+
+    public void PlayerEnterScene(uint playerId)
+    {
         if (!_connectedUsers.TryGetValue(playerId, out var player)) return;
-        if (player.LoadStage != ZoneLoadStage.None || progress < 0.64) return;
         player.LoadStage = ZoneLoadStage.InitZone;
-        UploadZoneData(playerId, player);
+        UploadZoneData(playerId, player);   
     }
 
     public void PlayerZoneReady(uint playerId)
@@ -291,6 +302,11 @@ public class GameInstance : IGameInstance
     {
         if (MapData == null) return;
         GameInitiator.StartIntoMatch();
+        foreach (var playerId in playerList.Select(p => p.PlayerId).Distinct().ToList())
+        {
+            SendUserToZone(playerId);
+        }
+        
         var bufferedSender = new BufferSender();
         Key? mapKey = null;
         if (MapInfo is MapInfoCard mapInfoCard)
@@ -300,16 +316,19 @@ public class GameInstance : IGameInstance
         
         Zone = new GameZone(new ServiceZone(bufferedSender), new ServiceZone(_zoneSender), bufferedSender, _zoneSender,
             MapData, GameInitiator, playerList, mapKey);
-        
-        foreach (var playerId in _connectedUsers.Keys)
+
+        while (_preZoneActions.TryTake(out var action))
         {
-            SendUserToZone(playerId);
+            Zone.EnqueueAction(action);
         }
 
-        _startGameTimer = new Timer(TimeSpan.FromMinutes(2));
-        _startGameTimer.AutoReset = false;
-        _startGameTimer.Elapsed += OnLoadTimerElapsed;
-        _startGameTimer.Start();
+        if (HasLobby())
+        {
+            _startGameTimer = new Timer(TimeSpan.FromMinutes(2));
+            _startGameTimer.AutoReset = false;
+            _startGameTimer.Elapsed += OnLoadTimerElapsed;
+            _startGameTimer.Start();
+        }
     }
 
     private bool TryBeginGame()
@@ -327,13 +346,26 @@ public class GameInstance : IGameInstance
 
     public void SendUserToZone(uint playerId)
     {
-        if (!_connectedUsers.TryGetValue(playerId, out var player)) return;
+        if (Lobby != null)
+        {
+            var playerDatabase = Databases.PlayerDatabase;
+            var lobbyData = Lobby.GetPlayerLobbyState(playerId);
+            playerDatabase.UpdateLastPlayedHero(playerId, lobbyData.Hero);
+            playerDatabase.UpdateLoadout(playerId, lobbyData.Hero, new LobbyLoadout
+            {
+                Devices = lobbyData.Devices,
+                HeroKey = lobbyData.Hero,
+                Perks = lobbyData.Perks,
+                SkinKey = lobbyData.SkinKey
+            });
+        }
+        
         var scene = new SceneZone
         {
             GameMode = GameInitiator.GetGameMode(),
             MatchKey = MatchKey,
-            MyTeam = player.Team,
-            IsSpectator = player.IsSpectator,
+            MyTeam = GameInitiator.GetTeamForPlayer(playerId),
+            IsSpectator = GameInitiator.IsPlayerSpectator(playerId),
             IsMapEditor = GameInitiator.IsMapEditor(),
             Restart = false
         };
@@ -347,7 +379,14 @@ public class GameInstance : IGameInstance
         switch (player.LoadStage)
         {
             case ZoneLoadStage.InitZone:
-                Zone?.EnqueueAction(() => Zone?.SendInitializeZone(zoneService));
+                if (Zone is null)
+                {
+                    _preZoneActions.Add(() => Zone?.SendInitializeZone(zoneService));
+                }
+                else
+                {
+                    Zone.EnqueueAction(() => Zone.SendInitializeZone(zoneService));
+                }
                 break;
             case ZoneLoadStage.LoadZone:
                 Zone?.EnqueueAction(() =>
@@ -360,6 +399,12 @@ public class GameInstance : IGameInstance
                     _zoneSender.Subscribe(playerGuid);
                     if (IsStarted)
                     {
+                        if (Zone?.BeginningZoneInitData.Updates is not null &&
+                            Zone.BeginningZoneInitData.Updates.Count > 0)
+                        {
+                            zoneService.SendBlockUpdates(Zone.BeginningZoneInitData.Updates);
+                        }
+                            
                         Zone?.JoinedInProgress(playerId);
                     }
                     else
@@ -482,6 +527,18 @@ public class GameInstance : IGameInstance
 
     public void PlayerCommand(uint playerId, Key command) =>
         Zone?.EnqueueAction(() => Zone?.ReceivedPlayerCommand(playerId, command));
+
+    public void StartRecall(uint playerId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedStartRecallRequest(playerId));
+
+    public void Surrender(ushort rpcId, uint playerId, IServiceZone surrenderService) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedSurrenderRequest(rpcId, playerId, surrenderService));
+
+    public void SurrenderVote(uint playerId, bool accept) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedSurrenderVoteRequest(playerId, accept));
+
+    public void EditorCommand(uint playerId, MapEditorCommand command) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedEditorCommand(playerId, command));
 
     private void OnLoadTimerElapsed(object? sender, ElapsedEventArgs e)
     {

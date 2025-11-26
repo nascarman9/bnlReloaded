@@ -129,7 +129,12 @@ public class ServiceChat(ISender sender) : IServiceChat
         {
             chatEnum = (ServiceChatId)serviceChatId;
         }
-        Console.WriteLine($"ServiceChatId: {chatEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceChatId: {chatEnum.ToString()}");
+        }
+
         switch (chatEnum)
         {
             case ServiceChatId.MessageIgnore:

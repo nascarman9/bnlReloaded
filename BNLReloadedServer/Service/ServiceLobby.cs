@@ -31,6 +31,7 @@ public class ServiceLobby(ISender sender) : IServiceLobby
         MessageExitToMenuAsSquad = 19
     }
     
+    private readonly IRegionServerDatabase _serverDatabase = Databases.RegionServerDatabase;
     private IGameInstance? GameInstance => Databases.RegionServerDatabase.GetGameInstance(sender.AssociatedPlayerId);
     
     private static BinaryWriter CreateWriter()
@@ -160,17 +161,27 @@ public class ServiceLobby(ISender sender) : IServiceLobby
 
     private void ReceiveExitToMenu(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.RemoveFromCustomGame(sender.AssociatedPlayerId.Value);
+            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);  
+        }
     }
 
     private void ReceiveExitToCustomGame(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);    
+        }
     }
 
     private void ReceiveExitToMenuAsSquad(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);    
+        }
     }
     
     public void Receive(BinaryReader reader)
@@ -181,7 +192,12 @@ public class ServiceLobby(ISender sender) : IServiceLobby
         {
             lobbyEnum = (ServiceLobbyId)serviceLobbyId;
         }
-        Console.WriteLine($"Service Lobby ID: {lobbyEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"Service Lobby ID: {lobbyEnum.ToString()}");
+        }
+
         switch (lobbyEnum)
         {
             case ServiceLobbyId.MessageSwitchHero:

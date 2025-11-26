@@ -1,6 +1,10 @@
-﻿using BNLReloadedServer.BaseTypes;
+﻿using System.Text.Json;
+using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace BNLReloadedServer.Service;
 
@@ -17,6 +21,8 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
         MessagePlayMapData = 6,
         MessagePlayMapKey = 7
     }
+    
+    private readonly IRegionServerDatabase _serverDatabase = Databases.RegionServerDatabase;
     
     private static BinaryWriter CreateWriter()
     {
@@ -50,6 +56,9 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
     {
         var rpcId = reader.ReadUInt16();
         var key = reader.ReadString();
+
+        var mapData = Databases.MapDatabase.LoadMapData(new Key(key));
+        SendLoadMap(rpcId, mapData, mapData?.BlocksData, mapData?.ColorsData);
     }
 
     public void SendSaveMap(ushort rpcId, string? error = null)
@@ -153,6 +162,16 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
     {
         var rpcId = reader.ReadUInt16();
         var signedMap = reader.ReadString();
+        
+        var handler = new JsonWebTokenHandler();
+        var jsonWebToken = handler.ReadJsonWebToken(signedMap);
+            
+        var rawPayload = jsonWebToken.EncodedPayload;
+        var mapJson = Base64UrlEncoder.Decode(rawPayload);
+            
+        var mapData = JsonSerializer.Deserialize<MapData>(mapJson, JsonHelper.DefaultSerializerSettings);
+        
+        SendDecodeMap(rpcId, mapData, mapData?.BlocksData, mapData?.ColorsData);
     }
 
     public void SendCheckMap(ushort rpcId, EMapValidation? mapValidation = null, string? error = null)
@@ -181,6 +200,8 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
     {
         var rpcId = reader.ReadUInt16();
         var map = MapData.ReadRecord(reader);
+        
+        SendCheckMap(rpcId);
     }
 
     public void SendPlayMapData(ushort rpcId, EMapValidation? mapValidation = null, string? error = null)
@@ -211,6 +232,12 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
         var map = MapData.ReadRecord(reader);
         var hero = Key.ReadRecord(reader);
         var team = reader.ReadByteEnum<TeamType>();
+        
+        SendPlayMapData(rpcId);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.StartMapEditorGame(sender.AssociatedPlayerId.Value, map, hero, team);
+        }
     }
 
     private void ReceivePlayMapKey(BinaryReader reader)
@@ -218,6 +245,12 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
         var mapKey = Key.ReadRecord(reader);
         var hero = Key.ReadRecord(reader);
         var team = reader.ReadByteEnum<TeamType>();
+
+        var mapData = Databases.MapDatabase.LoadMapData(mapKey);
+        if (sender.AssociatedPlayerId.HasValue && mapData != null)
+        {
+            _serverDatabase.StartMapEditorGame(sender.AssociatedPlayerId.Value, mapData, hero, team);
+        }
     }
     
     public void Receive(BinaryReader reader)
@@ -228,7 +261,12 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
         {
             mapEditorEnum = (ServiceMapEditorId)serviceMapEditorId;
         }
-        Console.WriteLine($"ServiceMapEditorId: {mapEditorEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceMapEditorId: {mapEditorEnum.ToString()}");
+        }
+
         switch (mapEditorEnum)
         {
             case ServiceMapEditorId.MessageLoadMap:

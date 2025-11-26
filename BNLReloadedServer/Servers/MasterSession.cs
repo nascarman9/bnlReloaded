@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using BNLReloadedServer.Database;
 using NetCoreServer;
 
 namespace BNLReloadedServer.Servers
@@ -16,12 +17,20 @@ namespace BNLReloadedServer.Servers
 
         protected override void OnConnected()
         {
-            Console.WriteLine($"Master TCP session with Id {Id} connected!");
+            if (Databases.ConfigDatabase.DebugMode())
+            {
+                Console.WriteLine($"Master TCP session with Id {Id} connected!");
+            }
         }
 
         protected override void OnDisconnected()
         {
-            Console.WriteLine($"Master TCP session with Id {Id} disconnected!");
+            if (Databases.ConfigDatabase.DebugMode())
+            {
+                Console.WriteLine($"Master TCP session with Id {Id} disconnected!");
+            }
+
+            Databases.MasterServerDatabase.RemoveRegionServer(Id.ToString());
         }
 
         protected override void OnReceived(byte[] buffer, long offset, long size)
@@ -31,6 +40,7 @@ namespace BNLReloadedServer.Servers
             var memStream = new MemoryStream(buffer, (int)offset, (int)size);
             using var reader = new BinaryReader(memStream);
 
+            var debugMode = Databases.ConfigDatabase.DebugMode();
             try
             {
                 while (reader.BaseStream.Position < reader.BaseStream.Length)
@@ -40,9 +50,16 @@ namespace BNLReloadedServer.Servers
                     var currentPosition = reader.BaseStream.Position;
                     if (reader.BaseStream.Position + packetLength <= reader.BaseStream.Length)
                     {
-                        Console.WriteLine($"Packet length: {packetLength}");
-                        _serviceDispatcher.Dispatch(reader);
-                        Console.WriteLine();
+                        if (debugMode)
+                        {
+                            Console.WriteLine($"Packet length: {packetLength}");
+                            _serviceDispatcher.Dispatch(reader);
+                            Console.WriteLine();
+                        }
+                        else
+                        {
+                            _serviceDispatcher.Dispatch(reader);
+                        }
                     }
                     else
                         break;

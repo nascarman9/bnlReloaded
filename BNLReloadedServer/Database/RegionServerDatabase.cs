@@ -58,14 +58,11 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         gameInstance.RegisterServices(sessionId, matchServices);
         gameInstance.RegisterServices(player.Guid, new Dictionary<ServiceId, IService>(_services[player.Guid].Where(s => s.Key == ServiceId.ServiceChat)));
         gameInstance.LinkGuidToPlayer(userId, sessionId, player.Guid);
-        switch (scene.Type)
+        if (scene.Type == SceneType.Lobby || (scene.Type == SceneType.Zone && gameInstance.HasLobby()))
         {
-            case SceneType.Lobby:
-                gameInstance.UserEnteredLobby(userId);
-                break;
-            case SceneType.Zone:
-                break;
+            gameInstance.UserEnteredLobby(userId);
         }
+
         return true;
     }
 
@@ -168,6 +165,12 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             case SceneType.Lobby:
                 break;
             case SceneType.Zone:
+                if (player.GameInstanceId != null &&
+                    _gameInstances.TryGetValue(player.GameInstanceId, out var instance))
+                {
+                    instance.PlayerEnterScene(userId);
+                }
+
                 break;
         }
     }
@@ -198,7 +201,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
     public void RemoveMatchServices(Guid sessionId)
     {
         _matchServices.Remove(sessionId);
-        var player = _connectedUsers.Select(kv => kv.Value).FirstOrDefault(p => p.MatchGuid == sessionId);
+        var player = _connectedUsers.Values.FirstOrDefault(p => p.MatchGuid == sessionId);
         if (player?.GameInstanceId == null) return;
         _gameInstances.TryGetValue(player.GameInstanceId, out var gameInstance);
         gameInstance?.RemoveService(sessionId);
@@ -380,7 +383,7 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         }
         else if (customGame.custom.GameInfo.MapInfo is MapInfoCard mapCard)
         {
-            map = Databases.Catalogue.GetCard<CardMap>(mapCard.MapKey)?.Data;
+            map = Databases.MapDatabase.LoadMapData(mapCard.MapKey);
         }
         
         if (map == null || customGame.custom.GameInfo.MapInfo == null) return false;
@@ -406,6 +409,21 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             };
             UpdateScene(player.Id, scene, sceneService, true);
         }
+        return true;
+    }
+
+    public bool StartMapEditorGame(uint playerId, MapData map, Key heroKey, TeamType team)
+    {
+        if (!UserConnected(playerId)) return false;
+        var playerInfo = _connectedUsers[playerId];
+        var dummyInitiator = new DummyGameInitiator(CatalogueHelper.ModeCustom, map, team, true);
+        var gameInstance = new GameInstance(matchServer, server, Guid.NewGuid().ToString(), dummyInitiator);
+        dummyInitiator.GameInstanceId = gameInstance.GameInstanceId;
+        gameInstance.SetMap(null, map);
+        gameInstance.SetMatchKey(dummyInitiator.MatchCard.Key);
+        _gameInstances.TryAdd(gameInstance.GameInstanceId, gameInstance);
+        playerInfo.GameInstanceId = gameInstance.GameInstanceId;
+        gameInstance.StartMatch([Databases.PlayerDatabase.GetDummyPlayerLobbyInfo(playerId, heroKey, team)]);
         return true;
     }
 

@@ -3,12 +3,11 @@
 public class BitField
 {
     private byte[] _bytes;
-    private readonly int _count;
     private readonly int _byteCount;
 
     public BitField(int count)
     {
-        _count = count;
+        Count = count;
         _byteCount = (count >> 3) + (count % 8 == 0 ? 0 : 1);
         _bytes = new byte[_byteCount]; 
     } 
@@ -23,7 +22,7 @@ public class BitField
         }
     }
 
-    public int Count => _count;
+    public int Count { get; }
 
     public bool this[int index]
     {

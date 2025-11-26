@@ -110,6 +110,7 @@ public class ServiceZone(ISender sender) : IServiceZone
         MessageExecuteMapEditorCommand = 97
     }
     
+    private readonly IRegionServerDatabase _serverDatabase = Databases.RegionServerDatabase;
     private IGameInstance? GameInstance => Databases.RegionServerDatabase.GetGameInstance(sender.AssociatedPlayerId);
     
     private static BinaryWriter CreateWriter()
@@ -161,7 +162,8 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         if (sender.AssociatedPlayerId.HasValue)
         {
-            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value);    
+            _serverDatabase.RemoveFromCustomGame(sender.AssociatedPlayerId.Value);
+            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);    
         }
     }
 
@@ -942,7 +944,10 @@ public class ServiceZone(ISender sender) : IServiceZone
 
     private void ReceiveStartRecall(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.StartRecall(sender.AssociatedPlayerId.Value);
+        }
     }
 
     public void SendDoStartRecall(uint unitId, float duration, ulong endTime)
@@ -992,6 +997,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveSurrenderStart(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.Surrender(rpcId, sender.AssociatedPlayerId.Value, this);
+        }
     }
 
     public void SendSurrenderBegin(ulong endTime)
@@ -1005,6 +1014,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveSurrenderVote(BinaryReader reader)
     {
         var accept = reader.ReadBoolean();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.SurrenderVote(sender.AssociatedPlayerId.Value, accept);
+        }
     }
 
     public void SendSurrenderProgress(Dictionary<uint, bool?> votes)
@@ -1130,6 +1143,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     private void ReceiveExecuteMapEditorCommand(BinaryReader reader)
     {
         var command = reader.ReadByteEnum<MapEditorCommand>();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, command);
+        }
     }
     
     public void Receive(BinaryReader reader)
@@ -1140,7 +1157,12 @@ public class ServiceZone(ISender sender) : IServiceZone
         {
             zoneEnum = (ServiceZoneId)serviceZoneId;
         }
-        Console.WriteLine($"ServiceZoneId: {zoneEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceZoneId: {zoneEnum.ToString()}");
+        }
+
         switch (zoneEnum)
         {
             case ServiceZoneId.MessageZoneReady:

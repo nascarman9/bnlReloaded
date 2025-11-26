@@ -4,13 +4,26 @@ namespace BNLReloadedServer.Database;
 
 public static class Databases
 {
-    private static readonly Lazy<IPlayerDatabase> LazyPlayer = new(() => new DummyPlayerDatabase());
+    public static string BaseFolderPath { get; } = 
+        Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.FullName;
+    public static string ConfigsFolderPath { get; } = Path.Combine(BaseFolderPath, "Configs");
+    public static string ConfigsFilePath { get; } = Path.Combine(ConfigsFolderPath, "configs.json");
+    public static string CacheFolderPath { get; } = Path.Combine(BaseFolderPath, "Cache");
+    public static string PlayerDatabaseFile { get; } = Path.Combine(BaseFolderPath, "PlayerData", "playerData.db");
+    
+    private static readonly Lazy<IPlayerDatabase> LazyPlayer = new(() => new PlayerDatabase());
     private static readonly Lazy<IMasterServerDatabase> LazyServer = new(() => new MasterServerDatabase());
     private static readonly Lazy<Catalogue> LazyCatalogue = new(() => new ServerCatalogue());
+    private static readonly Lazy<IMapDatabase> LazyMapDatabase = new(() => new MapDatabase());
+    private static readonly Lazy<IConfigDatabase> LazyConfigDatabase = new(() => new ConfigDatabase());
+    
     public static IPlayerDatabase PlayerDatabase => LazyPlayer.Value;
+    public static IMapDatabase MapDatabase => LazyMapDatabase.Value;
+    public static IConfigDatabase ConfigDatabase => LazyConfigDatabase.Value;
     public static IMasterServerDatabase MasterServerDatabase => LazyServer.Value;
-
-    public static IRegionServerDatabase RegionServerDatabase { get; set; }
-
+    public static IRegionServerDatabase RegionServerDatabase { get; private set; }
     public static Catalogue Catalogue => LazyCatalogue.Value;
+    
+    public static void SetRegionDatabase(IRegionServerDatabase regionServerDatabase) => 
+        RegionServerDatabase = regionServerDatabase;
 }

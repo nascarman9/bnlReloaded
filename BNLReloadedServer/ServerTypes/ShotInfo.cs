@@ -11,7 +11,6 @@ public record ShotInfo(
     GearData? SourceGear = null,
     byte? ToolIndex = null,
     Key? SourceAbility = null,
-    float ChargeLength = 0.0f,
-    bool SendCreateToCaster = false)
+    float ChargeLength = 0.0f)
 {
 }

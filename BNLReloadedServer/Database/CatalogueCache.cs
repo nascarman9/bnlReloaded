@@ -5,7 +5,7 @@ namespace BNLReloadedServer.Database;
 
 public static class CatalogueCache
 {
-    public static string CachePath => Path.Combine(Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.FullName, "Cache/cdb");
+    public static string CachePath { get; } = Path.Combine(Databases.CacheFolderPath, Databases.ConfigDatabase.CdbName());
 
     public static uint Hash()
     {

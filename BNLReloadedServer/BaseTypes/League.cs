@@ -54,4 +54,19 @@ public class League
         league.Read(reader);
         return league;
     }
+
+    public static byte[] WriteByteRecord(League league)
+    {
+        var memStream = new MemoryStream();
+        using var writer = new BinaryWriter(memStream);
+        WriteRecord(writer, league);
+        return memStream.ToArray();
+    }
+
+    public static League ReadByteRecord(byte[] bytes)
+    {
+        var memStream = new MemoryStream(bytes);
+        using var reader = new BinaryReader(memStream);
+        return ReadRecord(reader);
+    }
 }

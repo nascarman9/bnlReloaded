@@ -26,13 +26,14 @@ public partial class Unit
     private bool _isCommonMovementActive;
     public float Resource;
     public uint? PlayerId;
-    private readonly Key _skinKey = Key.None;
+    public readonly Key SkinKey = Key.None;
     public Key? AbilityKey;
     public int AbilityCharges;
     private long _abilityChargeCooldownEnd;
     public uint? SpawnId;
     public bool IsRecall;
     public bool IsDead = false;
+    public bool IsActive = true;
     public readonly List<GearData> Gears = [];
     private int _currentGearIndex = -1;
     public readonly Dictionary<int, DeviceData> Devices = new();
@@ -58,9 +59,11 @@ public partial class Unit
     private readonly DateTimeOffset? _expirationTime;
     private DateTimeOffset? _rechargeForcefieldTime;
     public DateTimeOffset? StartChargeTime;
-    private DateTimeOffset? _timeTillNextAbilityCharge;
+    public DateTimeOffset? TimeTillNextAbilityCharge;
     public DateTimeOffset? AbilityTriggerTimeEnd;
     public DateTimeOffset? RespawnTime;
+    public DateTimeOffset? RecallTime;
+    public DateTimeOffset? SpawnProtectionTime;
 
     public ulong TicksPerChannel = 0;
     public ChannelData? CurrentChannelData;
@@ -73,6 +76,7 @@ public partial class Unit
     public DateTimeOffset? LastTeleport;
 
     private bool _sendDrop;
+    public bool IsDropped;
     public bool CanPickUp = true;
 
     private bool _wasDisabled;
@@ -81,7 +85,7 @@ public partial class Unit
     private uint? PermaOwnerPlayerId { get; }
     private TeamType PermaTeam { get; }
 
-    public Dictionary<ConstEffectInfo, PersistOnDeathSource>? ReturnOnRevive;
+    private Dictionary<ConstEffectInfo, PersistOnDeathSource>? _returnOnRevive;
 
     public readonly EffectArea? CloudEffect;
     public readonly EffectArea? DamageCaptureEffect;
@@ -104,11 +108,15 @@ public partial class Unit
         StartChargeTime is null ? 0.0f : (float)(DateTimeOffset.Now - StartChargeTime.Value).TotalSeconds; 
     
     public bool IsNewAbilityChargeReady =>
-        _timeTillNextAbilityCharge is not null && DateTimeOffset.Now >= _timeTillNextAbilityCharge;
+        TimeTillNextAbilityCharge is not null && DateTimeOffset.Now >= TimeTillNextAbilityCharge;
 
     public bool IsTriggerTimeUp => AbilityTriggered && (AbilityTriggerTimeEnd is null || DateTimeOffset.Now >= AbilityTriggerTimeEnd);
+
+    public bool DoRecall => IsRecall && RecallTime is not null && RecallTime < DateTimeOffset.Now;
     
     public bool CanTeleport => !JustTeleported && (LastTeleport is null || DateTimeOffset.Now - LastTeleport > TimeSpan.FromSeconds(1));
+
+    public bool HasSpawnProtection => SpawnProtectionTime is not null && SpawnProtectionTime > DateTimeOffset.Now;
     
     public IServiceZone? ZoneService { get; set; }
 
@@ -172,6 +180,7 @@ public partial class Unit
             0, 1));
     
     private Vector3 GetExactPositionInFuture(float futureSeconds) => GetExactPositionInFuture(Transform.Position, futureSeconds);
+    
     private Vector3 GetExactPositionInFuture(Vector3 position, float futureSeconds) => Vector3.Lerp(position,
         position + Transform.GetLocalVelocity(),
         Math.Clamp(((ulong)DateTimeOffset.Now.AddSeconds(futureSeconds).ToUnixTimeMilliseconds() - LastMoveUpdateTime) / 1000f,
@@ -226,7 +235,7 @@ public partial class Unit
                units.Exists(u => u == uCard.Data?.Type);
     }
 
-    private bool DoesEffectApply(ConstEffectInfo effect, TeamType sourceTeam) =>
+    public bool DoesEffectApply(ConstEffectInfo effect, TeamType sourceTeam) =>
         effect.Card.Effect?.Targeting is not { } targeting || DoesEffectApply(targeting, sourceTeam);
 
     public bool DoesEffectApply(EffectTargeting targeting, TeamType sourceTeam) =>
@@ -276,6 +285,15 @@ public partial class Unit
             {
                 _effectSources.Add(effect.Key, [source]);
             }
+        }
+        
+        if (source is not null && effect.Card.Effect is ConstEffectBuff)
+        {
+            var buffer = source.Impact?.CasterPlayerId is not null
+                ? _updater.GetPlayerFromPlayerId(source.Impact.CasterPlayerId.Value)
+                : null;
+            
+            BuffStatsUpdate(!effect.Card.Positive, source, buffer);
         }
         
         if(ActiveEffects.Contains(effect)) return;
@@ -335,6 +353,19 @@ public partial class Unit
         }
 
         var actualEffects = appliedEffects.Where(e => !ActiveEffects.Contains(e)).ToList();
+
+        if (source is not null)
+        {
+            foreach (var effect in actualEffects.Select(e => e.Card).Where(e => e.Effect is ConstEffectBuff))
+            {
+                var buffer = source.Impact?.CasterPlayerId is not null
+                    ? _updater.GetPlayerFromPlayerId(source.Impact.CasterPlayerId.Value)
+                    : null;
+                
+                BuffStatsUpdate(!effect.Positive, source, buffer);
+            }
+        }
+        
         if (actualEffects.Count == 0)
         {
             if (doUpdate)
@@ -557,7 +588,7 @@ public partial class Unit
 
     public bool IsInsideUnit(Vector3s blockPos) => UnitSizeHelper.IsInsideUnit(blockPos, this);
 
-    public CardSkin? SkinCard => Databases.Catalogue.GetCard<CardSkin>(_skinKey);
+    public CardSkin? SkinCard => Databases.Catalogue.GetCard<CardSkin>(SkinKey);
 
     public CardAbility? AbilityCard =>
         AbilityKey.HasValue ? Databases.Catalogue.GetCard<CardAbility>(AbilityKey.Value) : null;
@@ -671,7 +702,7 @@ public partial class Unit
         PermaTeam = unitInit.Team;
         PlayerId = unitInit.PlayerId;
         if (unitInit.SkinKey.HasValue)
-            _skinKey = unitInit.SkinKey.Value;
+            SkinKey = unitInit.SkinKey.Value;
         if (unitInit.Gears != null)
             Gears = unitInit.Gears.Select((key, index) => new GearData(this, key, index)).ToList();
 
@@ -759,9 +790,9 @@ public partial class Unit
             PlayerId = PlayerId
         };
         
-        if (_skinKey != Key.None)
+        if (SkinKey != Key.None)
         {
-            newUnit.SkinKey = _skinKey;
+            newUnit.SkinKey = SkinKey;
         }
 
         if (Gears.Count > 0)
@@ -834,6 +865,24 @@ public partial class Unit
                             RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), Team, SelfSource);
                         }
                     }
+
+                    if (currHealthPercentage >= 0.9999f)
+                    {
+                        TimeAtMaxHp.Start();
+                    }
+                    else
+                    {
+                        TimeAtMaxHp.Stop();
+                    }
+
+                    if (IsLowHealth)
+                    {
+                        TimeAtLowHp.Start();
+                    }
+                    else
+                    {
+                        TimeAtLowHp.Stop();
+                    }
                 }
             }
         }
@@ -899,6 +948,7 @@ public partial class Unit
         if (!_sendDrop) return;
         _updater.OnUnitDrop(this);
         _sendDrop = false;
+        IsDropped = true;
     }
 
     public UnitUpdate GetUpdateData()
@@ -1030,6 +1080,11 @@ public partial class Unit
                 }
             }
         }
+
+        if (PlayerId is not null)
+        {
+            MoveStatsUpdate(transform, oldPosition);
+        }
         
         _updater.OnUnitMove(this, moveTime, transform, oldPosition);
         return true;
@@ -1122,7 +1177,7 @@ public partial class Unit
         {
             RecentDamagers.Remove(assister.Key);
         }
-        
+
         if (_rechargeForcefieldTime is not null && UnitCard?.Health?.Forcefield is { } forcefield &&
             DateTimeOffset.Now > _rechargeForcefieldTime)
         {
@@ -1136,13 +1191,18 @@ public partial class Unit
                 _rechargeForcefieldTime = DateTimeOffset.Now.AddSeconds(forcefield.HitRechargeDelay);
             }
         }
-        
+
         if (IsExpired || IsFuseExpired)
         {
             var impact = CreateBlankImpactData();
             Killed(impact);
         }
-    }
+
+        if (SpawnProtectionTime is not null && !HasSpawnProtection)
+        {
+            SpawnProtectionTime = null;
+        }
+}
 
     private Dictionary<BuffType, float> ExtractBuffs(IEnumerable<Key> effects)
     {
@@ -1191,6 +1251,28 @@ public partial class Unit
             else if (_wasDisabled && !IsBuff(BuffType.Disabled))
             {
                 OnReEnabled();
+            }
+
+            if (PlayerId is not null)
+            {
+                if (IsBuff(BuffType.VisionMark))
+                {
+                    TimeSpotted.Start();
+                }
+                else
+                {
+                    TimeSpotted.Stop();
+                }
+
+                if (IsBuff(BuffType.Confusion) || IsBuff(BuffType.Disarm) || IsBuff(BuffType.Disabled) ||
+                    IsBuff(BuffType.Sway) || IsBuff(BuffType.Root))
+                {
+                    TimeControlled.Start();
+                }
+                else
+                {
+                    TimeControlled.Stop();
+                }
             }
             
             switch (_wasConfused)

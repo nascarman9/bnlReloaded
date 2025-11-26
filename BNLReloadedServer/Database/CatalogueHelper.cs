@@ -73,9 +73,15 @@ public static class CatalogueHelper
     public static Key SkillsClassKey { get; } = new("hero_class_skills");
     public static Key BrainsClassKey { get; } = new("hero_class_brains");
     public static Key DefaultSource { get; } = new("damage_source_default");
+    public static Key FallSource { get; } = new("damage_source_fall");
+    public static Key LavaSource { get; } = new("damage_source_lava");
+    public static Key AcidSource { get; } = new("damage_source_acid");
     public static Key SmokeBomb { get; } = new("unit_device_generic_smoketrap");
-
     public static Key FallImpact { get; } = new("impact_falling");
+    public static Key SupplyDrop { get; } = new("unit_supply_resource");
+    public static Key SuperSupplyDrop { get; } = new("unit_supply_super_resource");
+    public static Key ClassicBlockbuster { get; } = new("unit_supply_blockbuster_classic");
+    public static Key SpecialBadge { get; } = new("badge_icon_community_representative");
 
     public static readonly List<Key> ObjectiveShieldKeys =
     [
@@ -95,8 +101,11 @@ public static class CatalogueHelper
         new("gear_doc_eliza_chem_grenade_perk_splashing_damage"),
         new("gear_doc_eliza_chem_grenade_beautiful_bubbles_1"),
         new("gear_doc_eliza_chem_grenade_beautiful_bubbles_2"),
-        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_3")
+        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_3"),
+        new("gear_trondson_kobold_lamps_nerve_gas")
     ];
+
+    public static IEnumerable<Key> GetHeroes() => GlobalLogic.AvailableHeroes ?? [];
 
     public static Dictionary<int, Key>? GetDefaultDevices(Key heroKey)
     {
@@ -112,44 +121,50 @@ public static class CatalogueHelper
             { 6, heroData.DefaultDevices[4] }
         };
     }
-    public static T GetCategory<T>(this ShopData shop) where T : ShopCategory
+    extension(ShopData shop)
     {
-        return shop.Categories!.Find((Predicate<ShopCategory>) (c => c is T)) as T;
-    }
-
-    public static List<T> GetCategories<T>(this ShopData shop) where T : ShopCategory
-    {
-        return shop.Categories!.FindAll((Predicate<ShopCategory>) (c => c is T)).ConvertAll((Converter<ShopCategory, T>) (c => c as T));
-    }
-
-    public static ShopItemPromotion? GetPromotion(this CardShopItem item)
-    {
-        var promotion = item.Promotion;
-        if (promotion != null) return promotion;
-        foreach (var category in ShopLogic.Shop!.Categories)
+        public T GetCategory<T>() where T : ShopCategory
         {
-            if (promotion != null) continue;
-            var shopCategoryBundles = category as ShopCategoryBundles;
-            var shopItemPromotion = category is not ShopCategoryCommon shopCategoryCommon ? shopCategoryBundles?.Promotion : shopCategoryCommon.Promotion;
-            if (shopItemPromotion == null) continue;
-            if (category.Items!.Any(key => key == item.Key))
-            {
-                promotion = shopItemPromotion;
-            }
+            return shop.Categories!.Find((Predicate<ShopCategory>) (c => c is T)) as T;
         }
-        return promotion;
+
+        public List<T> GetCategories<T>() where T : ShopCategory
+        {
+            return shop.Categories!.FindAll((Predicate<ShopCategory>) (c => c is T)).ConvertAll((Converter<ShopCategory, T>) (c => c as T));
+        }
     }
 
-    public static float? GetRealDiscount(this CardShopItem item)
+    extension(CardShopItem item)
     {
-        var promotion = item.GetPromotion();
-        return promotion != null && InTimeInterval(promotion.From, promotion.To) ? promotion.RealDiscount : null;
-    }
+        public ShopItemPromotion? GetPromotion()
+        {
+            var promotion = item.Promotion;
+            if (promotion != null) return promotion;
+            foreach (var category in ShopLogic.Shop!.Categories)
+            {
+                if (promotion != null) continue;
+                var shopCategoryBundles = category as ShopCategoryBundles;
+                var shopItemPromotion = category is not ShopCategoryCommon shopCategoryCommon ? shopCategoryBundles?.Promotion : shopCategoryCommon.Promotion;
+                if (shopItemPromotion == null) continue;
+                if (category.Items!.Any(key => key == item.Key))
+                {
+                    promotion = shopItemPromotion;
+                }
+            }
+            return promotion;
+        }
 
-    public static float? GetVirtualDiscount(this CardShopItem item)
-    {
-        var promotion = item.GetPromotion();
-        return promotion != null && InTimeInterval(promotion.From, promotion.To) ? promotion.VirtualDiscount : null;
+        public float? GetRealDiscount()
+        {
+            var promotion = item.GetPromotion();
+            return promotion != null && InTimeInterval(promotion.From, promotion.To) ? promotion.RealDiscount : null;
+        }
+
+        public float? GetVirtualDiscount()
+        {
+            var promotion = item.GetPromotion();
+            return promotion != null && InTimeInterval(promotion.From, promotion.To) ? promotion.VirtualDiscount : null;
+        }
     }
 
     private static bool InTimeInterval(DateTime? from, DateTime? to)
@@ -174,6 +189,34 @@ public static class CatalogueHelper
         }
         return skinsInShop;
     }
+    
+    public static PlayerProgression GetDefaultProgression() => 
+        new()
+        {
+            PlayerProgress = new XpInfo
+            {
+                Level = 6,
+                LevelXp = 0f,
+                XpForNextLevel = PlayerXpForLevel(7)
+            },
+            HeroesProgress = GetHeroes().ToDictionary(k => k, _ => new XpInfo
+            {
+                Level = 15,
+                LevelXp = 0f,
+                XpForNextLevel = HeroXpForLevel(16)
+            })
+        };
+
+    public static League GetDefaultLeague() =>
+        new()
+        {
+            Tier = 0,
+            Division = 0,
+            Points = 0,
+            JoinedTime = DateTime.UtcNow,
+            LastPlayedTime = DateTime.UtcNow,
+            Status = null
+        };
 
     public static float PlayerXpForLevel(int level)
     {
@@ -191,25 +234,70 @@ public static class CatalogueHelper
         return (float) (heroXp!.FlatCoeff + heroXp.MultCoeff * Math.Pow((float) (level - 1), heroXp.PowerCoeff));
     }
 
-    public static float PriceFactorReal(this CardShopItem card)
+    public static XpInfo LeveLUp(XpInfo xpInfo, float xpAmount)
     {
-        var realDiscount = card.GetRealDiscount();
-        return realDiscount.HasValue ? 1f - realDiscount.Value : 1f;
+        var xp = xpAmount;
+        var newXp = new XpInfo
+        {
+            Level = xpInfo.Level,
+            LevelXp = xpInfo.LevelXp,
+            XpForNextLevel = xpInfo.XpForNextLevel
+        };
+        
+        while (xp >= newXp.XpForNextLevel)
+        {
+            xp -= newXp.LevelXp;
+            newXp.Level++;
+            newXp.LevelXp = 0;
+            newXp.XpForNextLevel = PlayerXpForLevel(newXp.Level);
+        }
+        
+        return newXp;
+    }
+    
+    public static XpInfo LeveLUpHero(XpInfo xpInfo, float xpAmount)
+    {
+        var xp = xpAmount;
+        var newXp = new XpInfo
+        {
+            Level = xpInfo.Level,
+            LevelXp = xpInfo.LevelXp,
+            XpForNextLevel = xpInfo.XpForNextLevel
+        };
+        
+        while (xp >= newXp.XpForNextLevel)
+        {
+            xp -= newXp.LevelXp;
+            newXp.Level++;
+            newXp.LevelXp = 0;
+            newXp.XpForNextLevel = HeroXpForLevel(newXp.Level);
+        }
+        
+        return newXp;
     }
 
-    public static float PriceFactorVirtual(this CardShopItem card)
+    extension(CardShopItem card)
     {
-        var virtualDiscount = card.GetVirtualDiscount();
-        return virtualDiscount.HasValue ? 1f - virtualDiscount.Value : 1f;
-    }
+        public float PriceFactorReal()
+        {
+            var realDiscount = card.GetRealDiscount();
+            return realDiscount.HasValue ? 1f - realDiscount.Value : 1f;
+        }
 
-    public static float TotalPriceVirtual(this CardShopItem card)
-    {
-        return (float) Math.Ceiling(card.PriceVirtual!.Value * card.PriceFactorVirtual());
-    }
+        public float PriceFactorVirtual()
+        {
+            var virtualDiscount = card.GetVirtualDiscount();
+            return virtualDiscount.HasValue ? 1f - virtualDiscount.Value : 1f;
+        }
 
-    public static float TotalPriceReal(this CardShopItem card)
-    {
-        return (float) Math.Ceiling(card.PriceReal!.Value * card.PriceFactorReal());
+        public float TotalPriceVirtual()
+        {
+            return (float) Math.Ceiling(card.PriceVirtual!.Value * card.PriceFactorVirtual());
+        }
+
+        public float TotalPriceReal()
+        {
+            return (float) Math.Ceiling(card.PriceReal!.Value * card.PriceFactorReal());
+        }
     }
 }

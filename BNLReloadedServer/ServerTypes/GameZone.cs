@@ -20,6 +20,7 @@ public partial class GameZone : Updater
     private const int TicksForBuffCheck = 200 / TickRate;
     private const int TicksForDmgCaptureCheck = 1000 / TickRate;
     private const float BuffMultiplier = SecondsPerTick * TicksForBuffCheck;
+    private const float UnitSpawnYOffset = 0.08f;
     
     public CancellationTokenSource GameCanceler { get; } = new();
     
@@ -49,19 +50,26 @@ public partial class GameZone : Updater
     private readonly Dictionary<uint, Unit> _playerSpawnPoints = new();
     private readonly uint[] _defaultSpawnId = new uint[Enum.GetValues<TeamType>().Length];
     private readonly Queue<UnitLabel>[] _objectiveConquest = new Queue<UnitLabel>[Enum.GetValues<TeamType>().Length];
+    private readonly DateTimeOffset?[] _lastSurrenderTime = new DateTimeOffset?[Enum.GetValues<TeamType>().Length];
     private TeamType _winningTeam = TeamType.Neutral;
     
     private readonly Dictionary<ulong, ShotInfo> _shotInfo = new();
     private readonly HashSet<ulong> _keepShotAlive = [];
+
+    private DateTimeOffset? _attackStartTime;
     
     private Task? _gameLoop;
+    private Task? _endMatchTask;
 
     private Timer? _build1Timer;
     private Timer? _build2Timer;
 
     private float _respawnTime;
-    private int increaseTimes;
+    private int _increaseTimes;
     private Timer? _respawnIncreaseTimer;
+
+    private int _supplyTimes;
+    private Timer? _supplyTimer;
 
     private readonly UnitUpdater _defaultUnitUpdater;
 
@@ -71,7 +79,8 @@ public partial class GameZone : Updater
     private uint NewUnitId() => _newUnitId++;
     private uint NewSpawnId() => _newSpawnId++;
 
-    public GameZone(IServiceZone serviceZone, IServiceZone unbufferedZone, IBuffer sendBuffer, ISender sessionsSender, MapData mapData, IGameInitiator gameInitiator, List<PlayerLobbyState> players, Key? mapKey = null)
+    public GameZone(IServiceZone serviceZone, IServiceZone unbufferedZone, IBuffer sendBuffer, ISender sessionsSender,
+        MapData mapData, IGameInitiator gameInitiator, List<PlayerLobbyState> players, Key? mapKey = null)
     {
         _serviceZone = serviceZone;
         _unbufferedZone = unbufferedZone;
@@ -79,6 +88,11 @@ public partial class GameZone : Updater
         _sessionsSender = sessionsSender;
         _gameInitiator = gameInitiator;
         _playerLobbyInfo = players;
+        
+        foreach (var team in Enum.GetValues<TeamType>())
+        {
+            _objectiveConquest[(int)team] = new Queue<UnitLabel>();
+        }
 
         _defaultUnitUpdater = new UnitUpdater(GetUnitInitAction(),
             UnitUpdated,
@@ -97,6 +111,7 @@ public partial class GameZone : Updater
             LinkPortal,
             OnPull,
             UnitCreated,
+            GetPlayerFromPlayerId,
             EnqueueAction);
         
         var spawns = new Dictionary<uint, SpawnPoint>();
@@ -144,8 +159,8 @@ public partial class GameZone : Updater
             GameModeKey = gameInitiator.GetGameMode(),
             MapData = mapData,
             MapKey = mapKey,
-            BlocksData = new MapBinary(mapData.Schema, mapData.BlocksData ?? MapLoader.GetBlockData(mapKey) ?? [],
-                mapData.Size, mapData.Properties?.PlanePosition ?? 0, new MapUpdater(OnCut, OnMined, OnDetached)),
+            BlocksData = new MapBinary(mapData.Schema, mapData.BlocksData ?? [],
+                mapData.Size, mapData.Properties?.PlanePosition ?? 0, new MapUpdater(OnCut, OnMined, OnDetached, EnqueueAction)),
             CanSwitchHero = gameInitiator.CanSwitchHero(),
             Phase = new ZonePhase
             {
@@ -184,7 +199,7 @@ public partial class GameZone : Updater
     {
         zoneService.SendUpdateZone(GetInitialZoneUpdate());
         zoneService.SendUpdateBarriers(GetBarriersForPhase(_zoneData.Phase.PhaseType));
-        foreach (var unit in _units)
+        foreach (var unit in _units.Where(u => u.Value.PlayerId is null && !u.Value.IsDead))
         {
             if (unit.Value.OwnerPlayerId == playerId)
             {
@@ -203,16 +218,13 @@ public partial class GameZone : Updater
         {
             if (player.Value.PlayerId == playerId)
             {
-                var init = player.Value.GetInitData();
-                init.Controlled = true;
                 player.Value.ZoneService = savedService;
-                zoneService.SendUnitCreate(player.Key, init);
             }
-            else
+            else if (!player.Value.IsDead)
             {
                 zoneService.SendUnitCreate(player.Key, player.Value.GetInitData());
+                zoneService.SendUnitUpdate(player.Key, player.Value.GetUpdateData());
             }
-            zoneService.SendUnitUpdate(player.Key, player.Value.GetUpdateData());
         }
 
         if (_playerUnits.Values.Any(player => player.PlayerId == playerId) || _gameInitiator.IsPlayerSpectator(playerId)) return;
@@ -321,9 +333,23 @@ public partial class GameZone : Updater
         CatalogueFactory.CreateUnit(NewUnitId(), projectileKey, transform, creator?.Team ?? TeamType.Neutral, creator, updater, speed);
     }
 
+    private void CreateSupplyUnit(Key supplyKey, Vector3 position)
+    {
+        if (_zoneData.MatchCard.SupplyLogic is not { } supplyLogic) return;
+        var spawnPoint = position with { Y = position.Y + supplyLogic.SpawnHeight };
+        var transform = ZoneTransformHelper.ToZoneTransform(spawnPoint, Quaternion.Identity);
+
+        if (_gameInitiator.IsSuperSupplies() && supplyKey == CatalogueHelper.SupplyDrop)
+        {
+            supplyKey = CatalogueHelper.SuperSupplyDrop;
+        }
+        
+        CatalogueFactory.CreateUnit(NewUnitId(), supplyKey, transform, TeamType.Neutral, null, _defaultUnitUpdater);
+    }
+
     private Vector3 GetSpawnPosition(Vector3 spawnPoint, float spawnRadius)
     {
-        if (spawnRadius < 1) return spawnPoint;
+        if (spawnRadius < 1) return spawnPoint with { Y = spawnPoint.Y + UnitSpawnYOffset };
         
         var spawnBlocks = (int)float.Floor(spawnRadius);
         var blockedPositions = MapBinary.GetContainedInUnits(
@@ -335,7 +361,7 @@ public partial class GameZone : Updater
         {
             for (var z = spawnPoint.Z - spawnBlocks; z <= spawnPoint.Z + spawnBlocks; z++)
             {
-                var pos = new Vector3(x, spawnPoint.Y, z);
+                var pos = new Vector3(x, spawnPoint.Y + UnitSpawnYOffset, z);
                 if (!blockedPositions.Contains((Vector3s)pos) &&
                     MapBinary[(Vector3s)pos].Card.Passable is BlockPassableType.Any &&
                     (!MapBinary.ContainsBlock((Vector3s)(pos + Vector3.UnitY)) ||
@@ -352,14 +378,22 @@ public partial class GameZone : Updater
         var spawnX = rand.Next(-spawnBlocks, spawnBlocks + 1);
         var spawnZ = rand.Next(-spawnBlocks, spawnBlocks + 1);
         
-        return spawnPoint + new Vector3(spawnX, 0, spawnZ);
+        return spawnPoint + new Vector3(spawnX, UnitSpawnYOffset, spawnZ);
     }
 
     private SpawnPointLockType IsMapSpawnRequirementsMet(MapSpawnPoint spawnPoint)
     {
         if (spawnPoint.Label != SpawnPointLabel.Objective1) return SpawnPointLockType.Free;
+
+        var checkTeam = spawnPoint.Team switch
+        {
+            TeamType.Neutral => TeamType.Team1,
+            TeamType.Team1 => TeamType.Team2,
+            TeamType.Team2 => TeamType.Team1,
+            _ => TeamType.Neutral
+        };
         
-        if (_objectiveConquest[(int)spawnPoint.Team].TryPeek(out var currObj))
+        if (_objectiveConquest[(int)checkTeam].TryPeek(out var currObj))
         {
             return currObj != UnitLabel.Line1 ? SpawnPointLockType.Free : SpawnPointLockType.ServerBlocked;
         }
@@ -397,6 +431,28 @@ public partial class GameZone : Updater
         return SpawnPointLockType.Free;
     }
 
+    private Vector3? GetSupplyPosition(SupplySequenceItem supply)
+    {
+        var dropPoints = _units.Values.Where(u => u.UnitCard?.Labels?.Contains(supply.DropPointLabel) ?? false).Select(u => u.Transform.Position).ToArray();
+        if (dropPoints.Length == 0)
+        {
+            return null;
+        }
+        
+        var rand = new Random();
+        var dropPoint = rand.GetItems(dropPoints, 1)[0];
+        var offset = _zoneData.MatchCard.SupplyLogic?.RandomPosOffset;
+        if (!(offset > 0)) return dropPoint;
+        
+        var spawnX = (rand.NextSingle() * 2 - 1) * offset.Value;
+        var spawnZ = (rand.NextSingle() * 2 - 1) * offset.Value;
+
+        dropPoint.X += spawnX;
+        dropPoint.Z += spawnZ;
+
+        return dropPoint;
+    }
+
     private float GetRespawnLength() => _respawnTime * (1 + _gameInitiator.GetRespawnMultiplier());
 
     private void UpdateRespawnTime(Unit unit)
@@ -410,11 +466,6 @@ public partial class GameZone : Updater
     private void SetUpObjectives()
     {
         if (_zoneData.MatchCard.Data?.Type == MatchType.TimeTrial) return;
-
-        foreach (var team in Enum.GetValues<TeamType>())
-        {
-            _objectiveConquest[(int)team] = new Queue<UnitLabel>();
-        }
 
         foreach (var objLabel in (UnitLabel[])[UnitLabel.Line1, UnitLabel.Line2, UnitLabel.Line3, UnitLabel.LineBase])
         {
@@ -483,6 +534,8 @@ public partial class GameZone : Updater
             }
             case ZonePhaseType.Build:
                 nextPhase = ZonePhaseType.Assault;
+                _attackStartTime = DateTimeOffset.Now;
+                
                 var i = 0;
                 var respTimes = _zoneData.MatchCard.RespawnLogic?.IncrementSequence;
                 while (i < respTimes?.Count && respTimes[i].MatchSeconds == 0)
@@ -506,6 +559,23 @@ public partial class GameZone : Updater
                     _respawnIncreaseTimer.Elapsed += OnRespawnTimerIncreased;
                     _respawnIncreaseTimer.AutoReset = false;
                     _respawnIncreaseTimer.Start();
+                }
+
+                if (_zoneData.MatchCard.SupplyLogic?.Sequence is { Count: > 0 } supplySequence)
+                { 
+                    _zoneData.UpdateSupplyTime(supplySequence[0], GetSupplyPosition(supplySequence[0]));
+                    _supplyTimer = new Timer(TimeSpan.FromSeconds(supplySequence[0].Seconds).TotalMilliseconds);
+                    _supplyTimer.Elapsed += OnSupplyTimerElapsed;
+                    _supplyTimer.AutoReset = false;
+                    _supplyTimer.Start();
+                }
+                else if (_zoneData.MatchCard.SupplyLogic?.RepeatSequence is { Count: > 0 } repSequence)
+                {
+                    _zoneData.UpdateSupplyTime(repSequence[0], GetSupplyPosition(repSequence[0]));
+                    _supplyTimer = new Timer(TimeSpan.FromSeconds(repSequence[0].Seconds).TotalMilliseconds); 
+                    _supplyTimer.Elapsed += OnSupplyTimerElapsed;
+                    _supplyTimer.AutoReset = false;
+                    _supplyTimer.Start();
                 }
                 break;
             case ZonePhaseType.Assault:
@@ -629,32 +699,26 @@ public partial class GameZone : Updater
         _gameLoop = RunGameLoop();
     }
 
-    public void IncreaseSpawnTime(Timer? timer = null)
+    private void IncreaseSpawnTime(Timer? timer = null)
     {
         var respTimes = _zoneData.MatchCard.RespawnLogic?.IncrementSequence;
         var repRespTimes = _zoneData.MatchCard.RespawnLogic?.IncrementRepeatSequence;
-        if (respTimes is { Count: > 0 } && increaseTimes < respTimes.Count)
+        if (respTimes is { Count: > 0 } && _increaseTimes < respTimes.Count)
         {
-            var resp = respTimes[increaseTimes];
+            var resp = respTimes[_increaseTimes];
             _respawnTime += resp.RespawnTimeIncSeconds;
-            increaseTimes++;
-            if (timer is not null)
-            {
-                timer.Interval = TimeSpan.FromSeconds(resp.MatchSeconds).TotalMilliseconds;
-            }
+            _increaseTimes++;
+            timer?.Interval = TimeSpan.FromSeconds(resp.MatchSeconds).TotalMilliseconds;
         }
         else if (repRespTimes is { Count: > 0 } && (_zoneData.MatchCard.RespawnLogic?.IncrementRepeatLimit is null ||
-                                                    increaseTimes - (respTimes?.Count ?? 0) <
+                                                    _increaseTimes - (respTimes?.Count ?? 0) <
                                                     _zoneData.MatchCard.RespawnLogic.IncrementRepeatLimit))
         {
-            var incTimes = increaseTimes - (respTimes?.Count ?? 0);
+            var incTimes = _increaseTimes - (respTimes?.Count ?? 0);
             var resp = repRespTimes[incTimes % repRespTimes.Count];
             _respawnTime += resp.RespawnTimeIncSeconds;
-            increaseTimes++;
-            if (timer is not null)
-            {
-                timer.Interval = TimeSpan.FromSeconds(resp.MatchSeconds).TotalMilliseconds;
-            }
+            _increaseTimes++;
+            timer?.Interval = TimeSpan.FromSeconds(resp.MatchSeconds).TotalMilliseconds;
         }
     }
 
@@ -684,19 +748,24 @@ public partial class GameZone : Updater
                 Team1Stats = _zoneData.GetTeamScores(TeamType.Team1),
                 Team2Stats = _zoneData.GetTeamScores(TeamType.Team2)
             },
-            PlayerSpawnPoints = _zoneData.PlayerSpawnPoints
+            PlayerSpawnPoints = _zoneData.PlayerSpawnPoints,
+            Phase = _zoneData.Phase
         };
         
         _serviceZone.SendUpdateZone(matchZoneUpdate);
-        
         var playerUnit = _playerUnits.FirstOrDefault(p => p.Value.PlayerId == playerId).Value;
-        MovementActive(playerUnit);
+        playerUnit.RespawnTime = DateTimeOffset.Now.AddSeconds(-1);
+        playerUnit.IsActive = true;
     }
 
-    public void PlayerLeft(uint playerId)
+    public void PlayerDisconnected(uint playerId)
     {
-        var unitId = _playerIdToUnitId[playerId];
-        var player = _playerUnits[unitId];
+        if (!_playerIdToUnitId.TryGetValue(playerId, out var unitId) ||
+            !_playerUnits.TryGetValue(unitId, out var player))
+        {
+            return;
+        }
+
         var impact = new ImpactData
         {
             Crit = false,
@@ -704,8 +773,33 @@ public partial class GameZone : Updater
             ShotPos = player.GetMidpoint(),
             Normal = Vector3s.Zero
         };
+        
+        player.IsActive = false;
         player.Killed(impact);
+        _serviceZone.SendKickPlayer(playerId, KickReason.MatchQuit);
+        _zoneData.UpdatePlayerSelectedSpawn(playerId, _defaultSpawnId[(int) player.Team]);
+    }
 
+    public void PlayerLeft(uint playerId, KickReason reason)
+    {
+        if (!_playerIdToUnitId.TryGetValue(playerId, out var unitId) ||
+            !_playerUnits.TryGetValue(unitId, out var player))
+        {
+            return;
+        }
+        
+        var impact = new ImpactData
+        {
+            Crit = false,
+            InsidePoint = player.GetMidpoint(),
+            ShotPos = player.GetMidpoint(),
+            Normal = Vector3s.Zero
+        };
+        
+        player.IsActive = false;
+        player.Killed(impact);
+        _serviceZone.SendKickPlayer(playerId, reason);
+        
         foreach (var unit in _units.Values.Where(u => u.OwnerPlayerId == playerId).ToList())
         {
             impact.InsidePoint = unit.GetMidpoint();
@@ -725,7 +819,7 @@ public partial class GameZone : Updater
 
         if (blkUpdates.Count > 0)
         { 
-            _unbufferedZone.SendBlockUpdates(blkUpdates);
+            DoBlockUpdate(blkUpdates);
         }
         
         _playerUnits.Remove(unitId);
@@ -802,6 +896,17 @@ public partial class GameZone : Updater
             _unitOctree.Remove(unit);
     }
 
+    private void DoBlockUpdate(Dictionary<Vector3s, BlockUpdate> updates)
+    {
+        BeginningZoneInitData.Updates ??= new Dictionary<Vector3s, BlockUpdate>();
+        foreach (var update in updates)
+        {
+            BeginningZoneInitData.Updates[update.Key] = update.Value;
+        }
+        
+        _unbufferedZone.SendBlockUpdates(updates);
+    }
+
     private static void MovementActive(Unit unit) => unit.UpdateData(new UnitUpdate { MovementActive = true });
 
     private static List<BarrierLabel> GetBarriersForPhase(ZonePhaseType phase)
@@ -840,6 +945,222 @@ public partial class GameZone : Updater
             <= -WinningThreshold => TeamType.Team2,
             _ => TeamType.Neutral
         };
+    }
+
+    private bool CheckIfMatchOver(TeamType targetTeam, Unit? killer) =>
+        _zoneData.MatchCard.Data?.Type switch
+        {
+            MatchType.ShieldRush2 or MatchType.ShieldCapture => _objectiveConquest[(int)targetTeam].Count == 0,
+            MatchType.Tutorial or MatchType.TimeTrial => _zoneData.Objectives
+                .Where(obj => obj.Team == (killer?.Team ?? TeamType.Neutral))
+                .All(obj => obj.Counter >= obj.RequiredCounter),
+            _ => false
+        };
+
+    private async Task BeginEndOfGame(TeamType winner, bool doWait = true)
+    {
+        EnqueueAction(() =>
+        {
+            _zoneData.EndMatch(winner);
+        });
+
+        if (doWait)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(_zoneData.MatchCard.Data switch
+            {
+                MatchDataShieldCapture matchDataShieldCapture => matchDataShieldCapture.EndMatchDelay,
+                MatchDataShieldRush2 matchDataShieldRush2 => matchDataShieldRush2.EndMatchDelay,
+                _ => 0
+            }));
+        }
+        
+        EnqueueAction(() => EndGame(winner));
+    }
+
+    private void EndGame(TeamType winner)
+    {
+        _unbufferedZone.SendEndMatch(winner);
+        var matchStats = new List<EndMatchPlayerData>();
+        var gameEnd = DateTimeOffset.Now;
+        var gameLength = _attackStartTime.HasValue ? gameEnd - _attackStartTime.Value : TimeSpan.Zero;
+
+        var cardGlobalLogic = CatalogueHelper.GlobalLogic;
+        var positiveMedals = cardGlobalLogic.Medals?.PositiveMedals
+            ?.Select(m => m.GetCard<CardMatchMedal>()).OfType<CardMatchMedal>().ToList() ?? [];
+        var negativeMedals = cardGlobalLogic.Medals?.NegativeMedals
+            ?.Select(m => m.GetCard<CardMatchMedal>()).OfType<CardMatchMedal>().ToList() ?? [];
+        
+        // Grab match stats
+        foreach (var player in _playerUnits.Values)
+        {
+            if (player.Stats is null || player.PlayerId is null)
+                continue;
+            
+            player.UpdateStatsFromTimers();
+            if (player.Team == winner)
+            {
+                player.UpdateStatsFromWin();
+            }
+            
+            var positiveMedal = positiveMedals.MaxBy(medal =>
+                medal.ServerCounters?.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
+            
+            var negativeMedal = negativeMedals.MaxBy(medal =>
+                medal.ServerCounters?.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
+            
+            var zoneDataMatchCard = _zoneData.MatchCard;
+            var statInfo = zoneDataMatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
+                v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
+            var totalInfo = zoneDataMatchCard.Stats?.Total;
+            
+            var playerInfo = _playerLobbyInfo.Find(u => u.PlayerId == player.PlayerId);
+            matchStats.Add(new EndMatchPlayerData
+            {
+                PlayerId = player.PlayerId.Value,
+                SquadId = playerInfo?.SquadId,
+                Backfiller = _gameInitiator.IsPlayerBackfill(player.PlayerId.Value),
+                Noob = playerInfo?.PlayerLevel <= 15,
+                Stats = new EndMatchPlayerStats
+                {
+                    Stats = statInfo,
+                    Total = (int)(totalInfo?.Sum(score => statInfo?[score.Key] * score.Value) ?? 0)
+                },
+                MedalPositive = positiveMedal?.Key ?? Key.None,
+                MedalNegative = negativeMedal?.Key ?? Key.None
+            });
+        }
+        
+        // Send match stats
+        var zoneDataGameModeCard = _zoneData.GameModeCard;
+        var winners = new List<uint>();
+        var losers = new List<uint>();
+        var exclude = new HashSet<uint>();
+        foreach (var player in _playerUnits.Values)
+        {
+            var wasInactive = player.IsActive;
+            player.IsActive = false;
+            if (player.PlayerId is null)
+                continue;
+
+            var endMatchData = new EndMatchData
+            {
+                MatchSeconds = (float)gameLength.TotalSeconds,
+                PlayersData = matchStats,
+                IsWinner = player.Team == winner,
+                IsBackfiller = _gameInitiator.IsPlayerBackfill(player.PlayerId.Value),
+                IsAfk = wasInactive,
+                HeroKey = player.Key,
+                SkinKey = player.SkinKey
+            };
+
+            if (!endMatchData.IsAfk)
+            {
+                if (endMatchData.IsWinner)
+                {
+                    winners.Add(player.PlayerId.Value);
+                }
+                else
+                {
+                    losers.Add(player.PlayerId.Value);
+                }
+
+                if (endMatchData.IsBackfiller)
+                {
+                    exclude.Add(player.PlayerId.Value);
+                }
+            }
+            
+            var profileData = Databases.PlayerDatabase.GetPlayerProfile(player.PlayerId.Value);
+            
+            endMatchData.OldPlayerXp = profileData.Progression?.PlayerProgress;
+            endMatchData.OldHeroXp = profileData.Progression?.HeroesProgress?.GetValueOrDefault(player.Key);
+
+            var xpAmount = zoneDataGameModeCard.XpLogic is not null
+                ? float.Clamp(zoneDataGameModeCard.XpLogic.XpPerMinute * (float)gameLength.TotalMinutes,
+                    zoneDataGameModeCard.XpLogic.MinXpCap, zoneDataGameModeCard.XpLogic.MaxXpCap)
+                : 0;
+
+            endMatchData.RewardXp = _gameInitiator.IsMapEditor() ? 0 : xpAmount;
+            endMatchData.NewHeroXp = endMatchData.OldHeroXp;
+            if (endMatchData.OldHeroXp is not null && xpAmount > 0)
+            {
+                endMatchData.NewHeroXp = CatalogueHelper.LeveLUpHero(endMatchData.OldHeroXp, xpAmount);
+            }
+
+            var currencyAmountVirtual = 0f;
+            var currencyAmountReal = 0f;
+            if (!_gameInitiator.IsMapEditor() && (zoneDataGameModeCard.CurrencyLogic?.CurrencyPerMinute?.TryGetValue(CurrencyType.Virtual,
+                    out var currPerMinVir) ?? false))
+            {
+                currencyAmountVirtual = currPerMinVir * (float)gameLength.TotalMinutes;
+                if
+                    (zoneDataGameModeCard.CurrencyLogic.MinCap?.TryGetValue(CurrencyType.Virtual,
+                         out var currMinCapVir) ?? false)
+                {
+                    currencyAmountVirtual = MathF.Min(currencyAmountVirtual, currMinCapVir);
+                }
+
+                if (zoneDataGameModeCard.CurrencyLogic.MaxCap?.TryGetValue(CurrencyType.Virtual,
+                        out var currMaxCapVir) ?? false)
+                {
+                    currencyAmountVirtual = MathF.Min(currencyAmountVirtual, currMaxCapVir);
+                }
+            }
+            
+            if (!_gameInitiator.IsMapEditor() && (zoneDataGameModeCard.CurrencyLogic?.CurrencyPerMinute?.TryGetValue(CurrencyType.Real,
+                    out var currPerMinReal) ?? false))
+            {
+                currencyAmountReal = currPerMinReal * (float)gameLength.TotalMinutes;
+                if
+                    (zoneDataGameModeCard.CurrencyLogic.MinCap?.TryGetValue(CurrencyType.Real,
+                         out var currMinCapReal) ?? false)
+                {
+                    currencyAmountReal = MathF.Min(currencyAmountReal, currMinCapReal);
+                }
+
+                if (zoneDataGameModeCard.CurrencyLogic.MaxCap?.TryGetValue(CurrencyType.Virtual,
+                        out var currMaxCapReal) ?? false)
+                {
+                    currencyAmountReal = MathF.Min(currencyAmountReal, currMaxCapReal);
+                }
+            }
+            
+            endMatchData.OldCurrency = Databases.PlayerDatabase.GetCurrency(player.PlayerId.Value);
+            endMatchData.RewardCurrency = new Dictionary<CurrencyType, float>
+            {
+                { CurrencyType.Virtual, currencyAmountVirtual },
+                { CurrencyType.Real, currencyAmountReal }
+            };
+            endMatchData.RewardBonuses = zoneDataGameModeCard.RewardLogic?.Bonuses;
+            endMatchData.ChallengesData = [];
+
+            if (!_gameInitiator.IsMapEditor() && zoneDataGameModeCard.Ranking is GameRankingType.Friendly or GameRankingType.Ranked)
+            {
+                Databases.PlayerDatabase.UpdateMatchStats(new EndMatchResults
+                {
+                    PlayerId = player.PlayerId.Value,
+                    GameInstanceId = _gameInitiator.GameInstanceId ?? string.Empty,
+                    MatchEndTime = (ulong)gameEnd.ToUnixTimeMilliseconds(),
+                    MapKey = _zoneData.MapKey ?? Key.None,
+                    GameModeKey = _zoneData.GameModeKey,
+                    MatchData = endMatchData
+                });
+            }
+
+            player.ZoneService?.SendEndMatchResult(endMatchData);
+        }
+
+        if (!_gameInitiator.IsMapEditor() && zoneDataGameModeCard.Ranking is GameRankingType.Friendly or GameRankingType.Ranked)
+        {
+            Databases.PlayerDatabase.UpdateRatings(winners, losers, exclude);
+        }
+        
+        var unitsToClean = _units.Values.Where(u => u.UnitCard?.Labels?.Contains(UnitLabel.DestroyOnMatchEnd) is true).ToList();
+
+        foreach (var unit in unitsToClean)
+        {
+            unit.Killed(unit.CreateBlankImpactData());
+        }
     }
 
     private DamageData ConvertToDamageData(Damage damage, Vector3 targetPos, Vector3 shotPos, Unit? source = null,
@@ -969,17 +1290,24 @@ public partial class GameZone : Updater
     private async Task RunGameLoop()
     {
         var tickTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(TickRate));
-        var token = GameCanceler.Token;
-        var tickNumber = 0UL;
-        EnqueueAction(() =>
+        try
         {
-            foreach (var mapSpawnPoint in
-                     _mapSpawnPoints.Where(s => s.Value.Label is SpawnPointLabel.Objective1))
+            var token = GameCanceler.Token;
+            var tickNumber = 0UL;
+            EnqueueAction(() =>
             {
-                _zoneData.UpdateSpawn(mapSpawnPoint.Key, IsMapSpawnRequirementsMet(mapSpawnPoint.Value));
-            }
-        });
-        while (await tickTimer.WaitForNextTickAsync(token)) EnqueueAction(OnTick(tickNumber++));
+                foreach (var mapSpawnPoint in
+                         _mapSpawnPoints.Where(s => s.Value.Label is SpawnPointLabel.Objective1))
+                {
+                    _zoneData.UpdateSpawn(mapSpawnPoint.Key, IsMapSpawnRequirementsMet(mapSpawnPoint.Value));
+                }
+            });
+            while (await tickTimer.WaitForNextTickAsync(token)) EnqueueAction(OnTick(tickNumber++));
+        }
+        finally
+        {
+            tickTimer.Dispose();
+        }
     }
 
     private Action OnTick(ulong tickNumber) =>
@@ -1125,7 +1453,7 @@ public partial class GameZone : Updater
                         }
                         break;
                     
-                    case UnitDataDamageCapture unitDataDamageCapture when doDmgCaptureCheck && unit.DamageCaptureEffect is not null:
+                    case UnitDataDamageCapture unitDataDamageCapture when unit.DamageCaptureEffect is not null:
                         var nearby = _unitOctree.GetColliding(unit.DamageCaptureEffect.Shape);
                         var prevBaddies = unit.DamageCaptureEffect.NearbyUnits;
                         var nearbyBaddies = nearby.Where(u =>
@@ -1161,19 +1489,22 @@ public partial class GameZone : Updater
                             });
                         }
 
-                        for (var i = nearbyBaddies.Length; i > 0; i--)
+                        if (doDmgCaptureCheck)
                         {
-                            if (!unitDataDamageCapture.DamagePerCapturer.TryGetValue(i, out var dmg)) continue;
-                            var dData = new DamageData(0, 0, 0, 0, 0, 0, 0,
-                                dmg, false, false, false, true);
-                            foreach (var enemy in nearbyBaddies)
+                            for (var i = nearbyBaddies.Length; i > 0; i--)
                             {
-                                var enemyImpact = enemy.CreateImpactData(sourceKey: unitDataDamageCapture.DamageSource);
-                                enemyImpact.Impact = unitDataDamageCapture.DamageImpact;
-                                enemyImpact.HitUnits = [unit.Id];
-                                unit.TakeDamage(dData, enemyImpact, false, enemy, null);
+                                if (!unitDataDamageCapture.DamagePerCapturer.TryGetValue(i, out var dmg)) continue;
+                                var dData = new DamageData(0, 0, 0, 0, 0, 0, 0,
+                                    dmg, false, false, false, true);
+                                foreach (var enemy in nearbyBaddies)
+                                {
+                                    var enemyImpact = enemy.CreateImpactData(sourceKey: unitDataDamageCapture.DamageSource);
+                                    enemyImpact.Impact = unitDataDamageCapture.DamageImpact;
+                                    enemyImpact.HitUnits = [unit.Id];
+                                    unit.TakeDamage(dData, enemyImpact, false, enemy, null);
+                                }
+                                break;
                             }
-                            break;
                         }
                         break;
                     
@@ -1275,7 +1606,7 @@ public partial class GameZone : Updater
                         break;
                     
                     case UnitDataPlayer:
-                        if (unit is { RespawnTime: not null, IsDead: true, PlayerId: not null } &&
+                        if (unit is { RespawnTime: not null, IsDead: true, PlayerId: not null, IsActive: true, IsDropped: true } &&
                             unit.RespawnTime < DateTimeOffset.Now &&
                             _zoneData.PlayerSpawnPoints.TryGetValue(unit.PlayerId.Value, out var spawn) &&
                             spawn is not null && _zoneData.SpawnPoints.TryGetValue(spawn.Value, out var spawnPoint) && 
@@ -1287,6 +1618,9 @@ public partial class GameZone : Updater
                                 var spawnRot = Direction2dHelper.Rotation(mapSpawnPoint.Direction);
                                 if (unit.Respawn(spawnPos, spawnRot))
                                 {
+                                    unit.SpawnProtectionTime =
+                                        DateTimeOffset.Now.AddSeconds(_zoneData.MatchCard.RespawnLogic
+                                            ?.SpawnProtectionSeconds ?? 0);
                                     _zoneData.UpdateSpawnTime(unit.PlayerId.Value, null);
                                 }
                             }
@@ -1295,8 +1629,7 @@ public partial class GameZone : Updater
                                 var spawnMidpoint = playerSpawnPoint.GetMidpoint();
                                 var spawnPos = spawnMidpoint with
                                 {
-                                    Y = spawnMidpoint.Y - (playerSpawnPoint.UnitCard?.Size?.y ?? 0) / 2.0f +
-                                        0.08f
+                                    Y = spawnMidpoint.Y - (playerSpawnPoint.UnitCard?.Size?.y ?? 0) / 2.0f
                                 };
 
                                 spawnPos = GetSpawnPosition(spawnPos, playerSpawnPoint.UnitCard?.SpawnPoint?.SideShift ?? 0);
@@ -1306,18 +1639,31 @@ public partial class GameZone : Updater
                                 }
                             }
                         }
-                        if (doBuffCheck)
+                        
+                        if (unit.DoRecall)
                         {
-                            if (unit.IsNewAbilityChargeReady && !isDisabled)
-                                unit.AbilityChargeGained();
-                            if (unit.IsTriggerTimeUp)
+                            unit.EndRecall();
+                            if (_mapSpawnPoints.TryGetValue(_defaultSpawnId[(int)unit.Team], out var mapSpawnPoint))
                             {
-                                unit.AbilityUsed();
-                                unit.AbilityTriggered = false;
-                                unit.AbilityTriggerTimeEnd = null;
-                                unit.RemoveTriggerEffects();
+                                var spawnPos = GetSpawnPosition(mapSpawnPoint.Position, 2);
+                                _serviceZone.SendUnitManeuver(unit.Id, new ManeuverTeleport
+                                {
+                                    Position = spawnPos
+                                });
+                                _serviceZone.SendDoRecall(unit.Id);
                             }
                         }
+                        
+                        if (unit.IsNewAbilityChargeReady && !isDisabled)
+                            unit.AbilityChargeGained();
+                        if (unit.IsTriggerTimeUp)
+                        {
+                            unit.AbilityUsed();
+                            unit.AbilityTriggered = false;
+                            unit.AbilityTriggerTimeEnd = null;
+                            unit.RemoveTriggerEffects();
+                        }
+                        
                         break;
                     
                     case UnitDataShower showerData when !unit.ShowerStarted:
@@ -1364,6 +1710,21 @@ public partial class GameZone : Updater
                     }
                 }
             }
+
+            foreach (var (_, idx) in
+                     _zoneData.SurrenderEndTime.Select((s, idx) => (s, idx))
+                         .Where(time => time.s.HasValue && time.s < DateTimeOffset.Now).ToList())
+            {
+                _serviceZone.SendSurrenderEnd((TeamType)idx, false);
+                _zoneData.IsSurrenderRequest[idx] = false;
+                _zoneData.SurrenderEndTime[idx] = null;
+                _lastSurrenderTime[idx] = DateTimeOffset.Now;
+            }
+            
+            if (_endMatchTask?.Status is TaskStatus.Created)
+            {
+                _endMatchTask.Start();
+            }
             
             FlushBuffer();
         };
@@ -1384,7 +1745,8 @@ public partial class GameZone : Updater
 
         try
         {
-            EnqueueAction(UpdatePhase);
+            if (_zoneData.Phase.PhaseType is ZonePhaseType.Build)
+                EnqueueAction(UpdatePhase);
         } 
         catch (ObjectDisposedException)
         {
@@ -1400,7 +1762,8 @@ public partial class GameZone : Updater
         
         try
         {
-            EnqueueAction(UpdatePhase);
+            if (_zoneData.Phase.PhaseType is ZonePhaseType.Build2)
+                EnqueueAction(UpdatePhase);
         } 
         catch (ObjectDisposedException)
         {
@@ -1417,15 +1780,17 @@ public partial class GameZone : Updater
         _respawnIncreaseTimer.Stop();
         try
         {
-            if (EnqueueAction(() => IncreaseSpawnTime(_respawnIncreaseTimer)))
+            if (EnqueueAction(() =>
+                {
+                    IncreaseSpawnTime(_respawnIncreaseTimer);
+                    _respawnIncreaseTimer.Start();
+                }))
             {
-                _respawnIncreaseTimer.Start();
+                return;
             }
-            else
-            {
-                _respawnIncreaseTimer.Dispose();
-                _respawnIncreaseTimer = null;
-            }
+                
+            _respawnIncreaseTimer.Dispose();
+            _respawnIncreaseTimer = null;
         }
         catch (ObjectDisposedException)
         {
@@ -1435,6 +1800,52 @@ public partial class GameZone : Updater
                 _respawnIncreaseTimer = null;
             }
         }
+    }
+
+    private void OnSupplyTimerElapsed(object? sender, ElapsedEventArgs e)
+    {
+        if (_supplyTimer == null || _zoneData.MatchCard.SupplyLogic is null)
+        {
+            return;
+        }
         
+        _supplyTimer.Stop();
+        try
+        {
+            var supplyDrop = _zoneData.SupplyInfo.NextSupplyDrop;
+            var position = _zoneData.SupplyInfo.Position;
+            if (supplyDrop is null || position is null ||
+                EnqueueAction(() => CreateSupplyUnit(supplyDrop.Value, position.Value)))
+            {
+                _supplyTimes++;
+                if (_zoneData.MatchCard.SupplyLogic.Sequence is { Count: > 0 } sequence &&
+                    _supplyTimes < sequence.Count)
+                {
+                    _zoneData.UpdateSupplyTime(sequence[_supplyTimes], GetSupplyPosition(sequence[_supplyTimes]));
+                    _supplyTimer.Interval = TimeSpan.FromSeconds(sequence[_supplyTimes].Seconds).TotalMilliseconds;
+                    _supplyTimer.Start();
+                }
+                else if (_zoneData.MatchCard.SupplyLogic.RepeatSequence is { Count: > 0 } repeatSequence)
+                {
+                    var repIndex = (_supplyTimes - (_zoneData.MatchCard.SupplyLogic.Sequence?.Count ?? 0)) % repeatSequence.Count;
+                    _zoneData.UpdateSupplyTime(repeatSequence[repIndex], GetSupplyPosition(repeatSequence[repIndex]));
+                    _supplyTimer.Interval = TimeSpan.FromSeconds(repeatSequence[repIndex].Seconds).TotalMilliseconds;
+                    _supplyTimer.Start();
+                }
+            }
+            else
+            {
+                _supplyTimer.Dispose();
+                _supplyTimer = null;
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            if (_supplyTimer != null)
+            {
+                _supplyTimer.Dispose();
+                _supplyTimer = null;
+            }
+        }
     }
 }

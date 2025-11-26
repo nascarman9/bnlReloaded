@@ -1,4 +1,5 @@
-﻿using BNLReloadedServer.Servers;
+﻿using BNLReloadedServer.Database;
+using BNLReloadedServer.Servers;
 
 namespace BNLReloadedServer.Service;
 
@@ -52,7 +53,12 @@ public class ServicePing(ISender sender) : IServicePing
         {
             pingEnum = (ServicePingId)servicePingId;
         }
-        Console.WriteLine($"ServicePingId: {pingEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServicePingId: {pingEnum.ToString()}");
+        }
+
         switch (pingEnum)
         {
             case ServicePingId.MessageServerPong:

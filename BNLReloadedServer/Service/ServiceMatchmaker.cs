@@ -285,7 +285,12 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
         {
             matchEnum = (ServiceMatchmakerId)serviceMatchmakerId;
         }
-        Console.WriteLine($"ServiceMatchmakerId: {matchEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceMatchmakerId: {matchEnum.ToString()}");
+        }
+
         switch (matchEnum)
         {
             case ServiceMatchmakerId.MessageEnterQueue:

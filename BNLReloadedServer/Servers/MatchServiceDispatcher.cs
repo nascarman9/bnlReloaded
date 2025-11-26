@@ -33,7 +33,12 @@ public class MatchServiceDispatcher : IServiceDispatcher
         {
             serviceEnum = (ServiceId)serviceId;
         }
-        Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
+        }
+
         switch (serviceEnum)
         {
             case ServiceId.ServiceLogin:

@@ -28,6 +28,7 @@ public interface IRegionServerDatabase
     public bool UpdateCustomSettings(uint playerId, CustomGameSettings settings);
     public CustomGameUpdate? GetFullCustomGameUpdate(uint playerId);
     public bool StartCustomGame(uint playerId, string? signedMap);
+    public bool StartMapEditorGame(uint playerId, MapData map, Key heroKey, TeamType team);
     public bool SendMessage(uint playerId, RoomId roomId, string message);
     public PrivateMessageFailReason? SendMessage(uint playerId, uint receiver, string message);
     public IGameInstance? GetGameInstance(uint? playerId);
