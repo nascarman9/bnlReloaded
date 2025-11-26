@@ -23,6 +23,7 @@ public delegate void OnUnitDrop(Unit target);
 public delegate void LinkPortal(Unit unit, bool unlink = false);
 public delegate void OnPull(Unit unit, ManeuverPull maneuverPull);
 public delegate void OnRespawn(Unit unit, UnitInit unitInit, IServiceZone creatorService);
+public delegate Unit? GetPlayerFromPlayerId(uint playerId);
 public delegate bool EnqueueAction(Action action);
 
 public record UnitUpdater(
@@ -43,4 +44,5 @@ public record UnitUpdater(
     LinkPortal LinkPortal,
     OnPull OnPull,
     OnRespawn OnRespawn,
+    GetPlayerFromPlayerId GetPlayerFromPlayerId,
     EnqueueAction EnqueueAction);

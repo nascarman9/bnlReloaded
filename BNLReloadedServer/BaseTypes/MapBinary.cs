@@ -38,7 +38,7 @@ internal readonly struct SplashDamagePropagation(Vector3s pos, bool[] dirCheck)
     public bool[] CanGoDir { get; } = dirCheck;
 }
 
-public record MapUpdater(Action<uint, float> OnCut, Action<uint, Key> OnMined, Action<Unit> OnDetached);
+public record MapUpdater(Action<uint, float> OnCut, Action<uint, Key> OnMined, Action<Unit> OnDetached, Func<Action, bool> EnqueueAction);
 
 public class MapBinary
 {
@@ -209,7 +209,7 @@ public class MapBinary
     public BlockArrayMap3D ToMap3D()
     {
         var map3D = new BlockArrayMap3D(Size);
-        map3D.Change((ref Block value, ref Vector3s pos) => value = this[pos].ToBlock());
+        map3D.Change((ref value, ref pos) => value = this[pos].ToBlock());
         return map3D;
     }
 
@@ -948,15 +948,18 @@ public class MapBinary
         return dict;
     }
 
-    public Dictionary<Vector3s, BlockUpdate> DamageBlock(Vector3s location, DamageData damage, Unit? attacker)
+    // This expects the target block to exist
+    public Dictionary<Vector3s, BlockUpdate> DamageBlock(Vector3s location, DamageData damage, Unit? attacker, bool ignoreToughness = false)
     {
         var block = this[location];
         var blockCard = block.Card;
         var dict = new Dictionary<Vector3s, BlockUpdate>();
         if (block.IsAir || block.IsLocked || (!blockCard.Destructible && !damage.IgnoreInvincibility) ||
             !(blockCard.Health?.MaxHealth > 0)) return dict;
+
+        var toughness = ignoreToughness ? 0 : blockCard.Health.Toughness;
         
-        var dmgAmount = MathF.Max(damage.BlockDamage - blockCard.Health.Toughness, 0) *
+        var dmgAmount = MathF.Max(damage.BlockDamage - toughness, 0) *
                         (byte.MaxValue / blockCard.Health.MaxHealth);
 
         if (block.Damage + dmgAmount >= byte.MaxValue)
@@ -968,10 +971,12 @@ public class MapBinary
                     if (attacker.Team != block.Team && blockCard.Reward.EnemyReward is not null)
                     {
                         attacker.AddResource(blockCard.Reward.EnemyReward.Value, ResourceType.Mining);   
+                        attacker.DestroyedBlock(blockCard.DeviceType, blockCard.Reward.EnemyReward.Value);
                     }
                     else if (blockCard.Reward.PlayerReward is not null)
                     {
                         attacker.AddResource(blockCard.Reward.PlayerReward.Value, ResourceType.Mining);
+                        attacker.DestroyedBlock(blockCard.DeviceType, blockCard.Reward.PlayerReward.Value);
                     }
                 }
             }
@@ -1047,7 +1052,7 @@ public class MapBinary
                 {
                     if (!dmg.IsZeroDamage())
                     {
-                        unit.TakeDamage(dmg, impact, true, attacker, attackingTeam);
+                        _mapUpdater.EnqueueAction(() => unit.TakeDamage(dmg, impact, true, attacker, attackingTeam));
                     }
                     hitUnits.Add(unit);
                     foreach (var block in blocksForUnit[unit])
@@ -1172,25 +1177,25 @@ public class MapBinary
         return (dict, hitUnits);
     }
 
-    public Dictionary<Vector3s, BlockUpdate> HealBlock(Vector3s location, float amount, Unit? healer)
+    public Dictionary<Vector3s, BlockUpdate> HealBlock(Vector3s location, float amount, out float heals)
     {
         var block = this[location];
         var blockCard = block.Card;
+        heals = 0;
         var dict = new Dictionary<Vector3s, BlockUpdate>();
         if (block.Damage == 0 || block.IsAir || block.IsLocked || !blockCard.Destructible ||
             !(blockCard.Health?.MaxHealth > 0)) return dict;
         
         var healAmount = amount * (byte.MaxValue / blockCard.Health.MaxHealth);
-        byte heal;
         if (float.Truncate(healAmount) > block.Damage)
         {
-            heal = block.Damage;
+            heals = block.Damage;
             block.Damage = 0;
         }
         else
         {
-            heal = (byte)float.Truncate(healAmount);
-            block.Damage -= heal;
+            block.Damage -= (byte)float.Truncate(healAmount);
+            heals = healAmount;
         }
         
         dict[location] = block.ToUpdate();

@@ -103,9 +103,28 @@ public static class PerkHelper
             foreach (var mod in cp.PerkMods)
             {
                 if (mod is not PerkModDevice { ReplaceFrom: not null } deviceMod) continue;
-                foreach (var device in deviceMod.ReplaceFrom.Where(device => devices.ContainsValue(device) && result.ContainsValue(device)))
+                if (deviceMod.ReplaceFrom is { Count: > 0 })
                 {
-                    result[result.First(kv => kv.Value == device).Key] = deviceMod.ReplaceTo;
+                   var keyCount = 0;
+                   foreach (var device in deviceMod.ReplaceFrom.Where(device => devices.ContainsValue(device) && result.ContainsValue(device)))
+                   {
+                       foreach (var devs in result.Where(kv => kv.Value == device).OrderBy(kv => kv.Key))
+                       {
+                           if (keyCount == 0)
+                           {
+                               result[devs.Key] = deviceMod.ReplaceTo;
+                           }
+                           else
+                           {
+                               result.Remove(devs.Key);
+                           }
+                           keyCount++;
+                       }
+                   } 
+                }
+                else
+                {
+                    result[2] = deviceMod.ReplaceTo;
                 }
             }
         }

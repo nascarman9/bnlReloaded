@@ -18,6 +18,7 @@ public class ServerCatalogue : Catalogue
             card.Key = Key(card.Id);
             tempDict.Add(card.Key, card);
         }
+        
         _db = tempDict.ToFrozenDictionary();
     }
     

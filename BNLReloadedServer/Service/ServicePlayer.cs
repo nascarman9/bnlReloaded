@@ -76,7 +76,13 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
 
     private void ReceiveUpdateSteamInfo(BinaryReader reader)
     {
+        if (!sender.AssociatedPlayerId.HasValue) return;
         var playerSteamInfo = PlayerSteamInfo.ReadRecord(reader);
+        if (playerSteamInfo.Nickname != null)
+        {
+            _playerDatabase.SetPlayerName(sender.AssociatedPlayerId.Value, playerSteamInfo.Nickname);
+        }
+        
         serviceTime.SendSetOrigin(DateTimeOffset.Now.ToUnixTimeMilliseconds());
         serviceScene.SendServerUpdate(new ServerUpdate
         {
@@ -90,10 +96,12 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
             ShopEnabled = true,
             TimeAssaultEnabled = true
         });
-        if (!sender.AssociatedPlayerId.HasValue) return;
+        
         var scene = _serverDatabase.GetLastScene(sender.AssociatedPlayerId.Value);
         _serverDatabase.UpdateScene(sender.AssociatedPlayerId.Value, scene, serviceScene, scene is not SceneMainMenu);
-        SendPlayerUpdate(_playerDatabase.GetFullPlayerUpdate(sender.AssociatedPlayerId.Value));
+        var update = _playerDatabase.GetFullPlayerUpdate(sender.AssociatedPlayerId.Value);
+        if (update == null) return;
+        SendPlayerUpdate(update);
     }
 
     public void SendPlayerUpdate(PlayerUpdate playerUpdate)
@@ -236,6 +244,16 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var rpcId = reader.ReadUInt16();
         var pattern = reader.ReadString();
+        
+        var results = _playerDatabase.GetSearchResults(pattern).Result;
+        if (results != null)
+        {
+            SendSearchUser(rpcId, results);
+        }
+        else
+        {
+            SendSearchUser(rpcId, null, "noData");
+        }
     }
 
     private void ReceiveFriendRequst(BinaryReader reader)
@@ -275,6 +293,13 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var rpcId = reader.ReadUInt16();
         var enable = reader.ReadBoolean();
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _playerDatabase.UpdateLookingForFriends(sender.AssociatedPlayerId.Value, enable);
+        }
+
+        SendLookingForFriends(rpcId);
     }
 
     private void ReceiveReportPlayer(BinaryReader reader)
@@ -293,11 +318,54 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     private void ReceiveSelectBadge(BinaryReader reader)
     {
         var badgeKey = Key.ReadRecord(reader);
+        
+        var badgeCard = badgeKey.GetCard<CardBadge>();
+        if (!sender.AssociatedPlayerId.HasValue || badgeCard is null) return;
+        
+        var playerData = _playerDatabase.GetPlayerData(sender.AssociatedPlayerId.Value).Result;
+        if (badgeKey != CatalogueHelper.SpecialBadge || playerData.Role is PlayerRole.Core)
+        {
+            var currBadges = playerData.Badges;
+            if (currBadges.TryGetValue(badgeCard.BadgeType, out var badgeList))
+            {
+                if (badgeList.Count >= CatalogueHelper.GlobalLogic.MaxBadgesByType?[badgeCard.BadgeType])
+                {
+                    badgeList = badgeList.Append(badgeKey).TakeLast(CatalogueHelper.GlobalLogic.MaxBadgesByType[badgeCard.BadgeType]).ToList();
+                }
+                else
+                {
+                    badgeList.Add(badgeKey);
+                }
+                
+                currBadges[badgeCard.BadgeType] = badgeList;
+                _playerDatabase.UpdateBadges(sender.AssociatedPlayerId.Value, currBadges);
+            }
+            else
+            {
+                currBadges[badgeCard.BadgeType] = [badgeKey];
+                _playerDatabase.UpdateBadges(sender.AssociatedPlayerId.Value, currBadges);
+            }
+            
+            SendPlayerUpdate(new PlayerUpdate
+            {
+                SelectedBadges = currBadges
+            });
+        }
     }
 
     private void ReceiveDeselectBadge(BinaryReader reader)
     {
         var badgeType = reader.ReadByteEnum<BadgeType>();
+        
+        if (!sender.AssociatedPlayerId.HasValue) return;
+        
+        var playerData = _playerDatabase.GetPlayerData(sender.AssociatedPlayerId.Value).Result;
+        playerData.Badges.Remove(badgeType);
+        _playerDatabase.UpdateBadges(sender.AssociatedPlayerId.Value, playerData.Badges);
+        SendPlayerUpdate(new PlayerUpdate
+        {
+            SelectedBadges = playerData.Badges
+        });
     }
 
     public void SendRequestProfile(ushort rpcId, ProfileData? profile, string? error = null)
@@ -355,6 +423,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     private void ReceiveSetLoadout(BinaryReader reader)
     {
         var loadout = LobbyLoadout.ReadRecord(reader);
+        if (!sender.AssociatedPlayerId.HasValue) return;
+        _playerDatabase.UpdateLoadout(sender.AssociatedPlayerId.Value, loadout.HeroKey, loadout);
     }
 
     public void SendGetAvailableRegions(ushort rpcId, List<string>? regions, string? currentRegion, bool? remember, string? error = null)
@@ -380,6 +450,17 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     private void ReceiveGetAvailableRegions(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
+
+        var regions = _playerDatabase.GetRegions().Result;
+
+        if (regions != null)
+        {
+            SendGetAvailableRegions(rpcId, regions, Databases.ConfigDatabase.GetRegionInfo().Name?.Text ?? string.Empty, false);
+        }
+        else
+        {
+            SendGetAvailableRegions(rpcId, null, null, null, "noData");
+        }
     }
 
     public void SendSwitchRegion(ushort rpcId, bool? accepted, string? error = null)
@@ -405,6 +486,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         var rpcId = reader.ReadUInt16();
         var region = reader.ReadString();
         var remember = reader.ReadBoolean();
+        
+        SendSwitchRegion(rpcId, true);
     }
 
     private void ReceiveVoiceMute(BinaryReader reader)
@@ -518,6 +601,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         var rpcId = reader.ReadUInt16();
         var item = Key.ReadRecord(reader);
         var locale = reader.ReadByteEnum<Locale>();
+        
+        SendSteamMicroTxnInitSuccess(rpcId, null);
     }
 
     private void ReceiveSteamMicroTxnResponse(BinaryReader reader)
@@ -549,6 +634,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         var rpcId = reader.ReadUInt16();
         var item = Key.ReadRecord(reader);
         var isRealPrice = reader.ReadBoolean();
+        
+        SendBuyShopItem(rpcId, false);
     }
 
     public void SendUpgradeDevice(ushort rpcId, string? error = null)
@@ -572,6 +659,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var rpcId = reader.ReadUInt16();
         var groupKey = Key.ReadRecord(reader);
+        
+        SendUpgradeDevice(rpcId);
     }
 
     private void ReceiveFreeCrate(BinaryReader reader)
@@ -601,6 +690,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var rpcId = reader.ReadUInt16();
         var crateKey = Key.ReadRecord(reader);
+        
+        SendOpenCrate(rpcId, []);
     }
 
     private void ReceiveMarkItemAsShown(BinaryReader reader)
@@ -616,7 +707,12 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         {
             playerEnum = (ServicePlayerId)servicePlayerId;
         }
-        Console.WriteLine($"ServicePlayerId: {playerEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServicePlayerId: {playerEnum.ToString()}");
+        }
+
         switch (playerEnum)
         {
             case ServicePlayerId.MessageUpdateSteamInfo:

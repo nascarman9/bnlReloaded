@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 
@@ -315,7 +316,12 @@ public class ServiceDebug(ISender sender) : IServiceDebug
         {
             debugEnum = (ServiceDebugId)serviceDebugId;
         }
-        Console.WriteLine($"ServiceDebugId: {serviceDebugId}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceDebugId: {serviceDebugId}");
+        }
+
         switch (debugEnum)
         {
             case ServiceDebugId.MessageExecute:

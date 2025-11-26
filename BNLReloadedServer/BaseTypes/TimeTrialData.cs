@@ -39,4 +39,19 @@ public class TimeTrialData
         timeTrialData.Read(reader);
         return timeTrialData;
     }
+    
+    public static byte[] WriteByteRecord(TimeTrialData timeTrialData)
+    {
+        var memStream = new MemoryStream();
+        using var writer = new BinaryWriter(memStream);
+        WriteRecord(writer, timeTrialData);
+        return memStream.ToArray();
+    }
+
+    public static TimeTrialData ReadByteRecord(byte[] bytes)
+    {
+        var memStream = new MemoryStream(bytes);
+        using var reader = new BinaryReader(memStream);
+        return ReadRecord(reader);
+    }
 }

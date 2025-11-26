@@ -189,7 +189,7 @@ public class GameLobby : Updater
 
     public void SwapDevices(uint playerId, int slot1, int slot2)
     {
-        if (!LobbyData.Players.TryGetValue(playerId, out var player) || player.Devices == null) return;
+        if (!LobbyData.Players.TryGetValue(playerId, out var player) || player.Devices == null || slot1 == 1 || slot2 == 1) return;
         player.Devices.TryGetValue(slot1, out var dev1);
         player.Devices.TryGetValue(slot2, out var dev2);
         if (dev1 == default && dev2 == default) return;
@@ -431,7 +431,8 @@ public class GameLobby : Updater
         _currentTimer = null;
 
         LobbyData.Timer.TimerType = LobbyTimerType.Requeue;
-        EnqueueAction(() => _gameInstance.StartMatch(LobbyData.Players.Values.ToList()));
+        EnqueueAction(() => 
+            _gameInstance.StartMatch(LobbyData.Players.Values.ToList()));
     }
 
     private void OnRequeueTimerElapsed(object? sender, ElapsedEventArgs e)

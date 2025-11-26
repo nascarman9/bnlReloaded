@@ -14,10 +14,10 @@ public interface IServiceLogin : IService
     public void SendLoginMasterXxx(ushort rpcId, uint? id2, EAuthFailed? authFailed = null, string? error = null);
     public void SendLoginMasterPpp(ushort rpcId, uint? id2, EAuthFailed? authFailed = null, string? error = null);
     public void SendRegions(List<RegionInfo> regions, string? selected = null);
-    public void SendEnterRegion(RegionInfo region);
+    public void SendEnterRegion(RegionInfo region, uint playerId);
     public void SendLoginRegion(ushort rpcId, PlayerRole? role, EAuthFailed? authFailed = null, string? error = null);
     public void SendWait(float waitTime);
     public void SendLoggedIn();
-    public void SendCatalogue(ICollection<Card>? cards);
+    public void SendCatalogue(byte[]? cards);
     public void SendLoginInstance(ushort rpcId, EAuthFailed? authFailed = null, string? error = null);
 }

@@ -8,21 +8,19 @@ namespace BNLReloadedServer.ServerTypes;
 
 public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, IGameInitiator
 {
-    private readonly CustomGameInfo _gameInfo;
     public required string Password { get; init; }
+
     public required CustomGameInfo GameInfo
     {
-        get => _gameInfo;
-
-        [MemberNotNull(nameof(_gameInfo))]
+        get;
         init
         {
-           _gameInfo = value; 
-           CustomGameUpdate(gameName: value.GameName, pass: Password, mapInfo: value.MapInfo, buildTime: value.BuildTime,
-               respawnMod: value.RespawnTimeMod, heroSwitch: value.HeroSwitch, superSupply: value.SuperSupply,
-               allowBackfilling: value.AllowBackfilling, resourceCap: value.ResourceCap, initResources: value.InitResource,
-               players: Players, status: value.Status);
-        } 
+            field = value;
+            CustomGameUpdate(gameName: value.GameName, pass: Password, mapInfo: value.MapInfo, buildTime: value.BuildTime,
+                respawnMod: value.RespawnTimeMod, heroSwitch: value.HeroSwitch, superSupply: value.SuperSupply,
+                allowBackfilling: value.AllowBackfilling, resourceCap: value.ResourceCap, initResources: value.InitResource,
+                players: Players, status: value.Status);
+        }
     }
 
     public List<CustomGamePlayer> Players { get; } = [];
@@ -288,45 +286,26 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
         return player?.Team ?? TeamType.Team1; 
     }
 
-    public bool IsPlayerSpectator(uint playerId)
-    {
-        return Spectators.Contains(playerId);
-    }
+    public bool IsPlayerSpectator(uint playerId) => Spectators.Contains(playerId);
 
-    public Key GetGameMode()
-    {
-        return CatalogueHelper.ModeCustom.Key;
-    }
+    public bool IsPlayerBackfill(uint playerId) => false;
 
-    public bool CanSwitchHero()
-    {
-        return _gameInfo.HeroSwitch;
-    }
+    public Key GetGameMode() => CatalogueHelper.ModeCustom.Key;
 
-    public bool IsMapEditor()
-    {
-        return false;
-    }
+    public bool CanSwitchHero() => GameInfo.HeroSwitch;
 
-    public float GetResourceCap()
-    {
-        return _gameInfo.ResourceCap;
-    }
+    public bool IsMapEditor() => false;
 
-    public float GetResourceAmount()
-    {
-        return _gameInfo.InitResource;
-    }
+    public float GetResourceCap() => GameInfo.ResourceCap;
 
-    public long? GetBuildPhaseEndTime(DateTimeOffset startTime)
-    {
-        return startTime.AddSeconds((long) _gameInfo.BuildTime).ToUnixTimeMilliseconds();
-    }
+    public float GetResourceAmount() => GameInfo.InitResource;
 
-    public float GetRespawnMultiplier()
-    {
-        return _gameInfo.RespawnTimeMod;
-    }
+    public long? GetBuildPhaseEndTime(DateTimeOffset startTime) =>
+        startTime.AddSeconds((long)GameInfo.BuildTime).ToUnixTimeMilliseconds();
+
+    public float GetRespawnMultiplier() => GameInfo.RespawnTimeMod;
+    
+    public bool IsSuperSupplies() => GameInfo.SuperSupply;
 
     public CustomGameUpdate GetCustomGameUpdate()
     {

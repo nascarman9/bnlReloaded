@@ -1,9 +1,11 @@
-﻿using BNLReloadedServer.Service;
+﻿using BNLReloadedServer.Database;
+using BNLReloadedServer.Service;
 
 namespace BNLReloadedServer.Servers;
 public class MasterServiceDispatcher(ISender sender, Guid sessionId) : IServiceDispatcher
 {
     private readonly ServiceLogin _serviceLogin = new(sender, sessionId);
+    private readonly ServiceMasterServer _serviceMasterServer = new(sender, sessionId);
 
     public void Dispatch(BinaryReader reader)
     {
@@ -13,11 +15,19 @@ public class MasterServiceDispatcher(ISender sender, Guid sessionId) : IServiceD
         {
             serviceEnum = (ServiceId)serviceId;
         }
-        Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
+        }
+
         switch (serviceEnum)
         {
             case ServiceId.ServiceLogin: 
                 _serviceLogin.Receive(reader);
+                break;
+            case ServiceId.ServiceServer:
+                _serviceMasterServer.Receive(reader);
                 break;
             default: 
                 Console.WriteLine($"Master TCP session received unsupported serviceId: {serviceId}");

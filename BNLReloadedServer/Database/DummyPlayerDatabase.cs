@@ -1,4 +1,6 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Service;
+using Moserware.Skills;
 
 namespace BNLReloadedServer.Database;
 
@@ -25,7 +27,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
         {
             Level = 100,
             LevelXp = 0f,
-            XpForNextLevel = CatalogueHelper.PlayerXpForLevel(100)
+            XpForNextLevel = CatalogueHelper.PlayerXpForLevel(101)
         },
         HeroesProgress = new Dictionary<Key, XpInfo>
         {
@@ -34,7 +36,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -42,7 +44,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -50,7 +52,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -58,7 +60,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -66,7 +68,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -74,7 +76,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -82,7 +84,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -90,7 +92,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 100f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -98,7 +100,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 100f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -106,7 +108,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 100f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -114,7 +116,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 100f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -122,7 +124,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 100f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -130,7 +132,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 100f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -138,7 +140,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             },
             {
@@ -146,7 +148,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 {
                     Level = 100,
                     LevelXp = 0f,
-                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(100) + 500f
+                    XpForNextLevel = CatalogueHelper.HeroXpForLevel(101)
                 }
             }
         }
@@ -225,7 +227,11 @@ public class DummyPlayerDatabase : IPlayerDatabase
         return lootCrateCards.ToDictionary(lc => lc.Key, lc => 0);
     }
 
-    public uint GetPlayerId(ulong steamId)
+    public bool AddPlayer(PlayerData player) => true;
+
+    public bool RemovePlayer(uint playerId) => true;
+
+    public uint? GetPlayerId(ulong steamId)
     {
         if (_players.TryGetValue(steamId, out var value)) return value;
         value = Interlocked.Increment(ref _playerCounter);
@@ -233,22 +239,28 @@ public class DummyPlayerDatabase : IPlayerDatabase
         return value;
     }
 
-    public string GetAuthTokenForPlayer(uint playerId)
+    public string GetAuthTokenForPlayer(uint playerId) => playerId.ToString();
+
+    public uint? GetPlayerIdFromAuthTokenMaster(string authToken) => uint.Parse(authToken);
+
+    public uint? GetPlayerIdFromAuthTokenRegion(string authToken) => uint.Parse(authToken);
+    public void SetMasterPublicKey(string publicKey)
     {
-        return playerId.ToString();
     }
 
-    public uint? GetPlayerIdFromAuthToken(string authToken)
+    public string GetPublicKey() => "";
+    public void SetRegionServerService(IServiceRegionServer serviceRegionServer)
     {
-        return uint.Parse(authToken);
     }
 
-    public string GetPlayerName(uint playerId)
+    public string GetPlayerName(uint playerId) => TestUserName;
+    
+    public Task<PlayerData> GetPlayerData(uint playerId)
     {
-        return TestUserName;
+        throw new NotImplementedException();
     }
 
-    public PlayerUpdate GetFullPlayerUpdate(uint playerId)
+    public PlayerUpdate? GetFullPlayerUpdate(uint playerId)
     {
         var globalLogic = CatalogueHelper.GlobalLogic;
         return new PlayerUpdate
@@ -279,9 +291,9 @@ public class DummyPlayerDatabase : IPlayerDatabase
             Currency = _testCurrencies,
             Inventory = GetInventory(playerId),
             OneTimeRewards = [],
-            DailyMatchPlayed = false,
-            DailyWinAvailable = true,
-            FullMatchesPlayed = 0,
+            DailyMatchPlayed = true,
+            DailyWinAvailable = false,
+            FullMatchesPlayed = 1,
             TimeTrial = _testTimeTrialData,
             GameModeStates = GetGameModeStates(playerId),
             IsInSquadFinder = false,
@@ -320,20 +332,56 @@ public class DummyPlayerDatabase : IPlayerDatabase
         };
     }
 
-    public Key GetLastPlayedHero(uint playerId)
-    {
-        return Catalogue.Key(TestHero);
-    }
+    public Key GetLastPlayedHero(uint playerId) => Catalogue.Key(TestHero);
 
-    public LobbyLoadout GetLoadoutForHero(uint playerId, Key heroKey)
+    public LobbyLoadout GetLoadoutForHero(uint playerId, Key heroKey, bool defaultLoadout = false)
     {
         var heroData = (UnitDataPlayer) Databases.Catalogue.GetCard<CardUnit>(heroKey)?.Data;
+        if (defaultLoadout)
+        {
+            return new LobbyLoadout
+            {
+                HeroKey = heroKey,
+                Devices = CatalogueHelper.GetDefaultDevices(heroKey),
+                Perks = [],
+                SkinKey = heroData.Skins[0]
+            };
+        }
+        
         return new LobbyLoadout
         {
             HeroKey = heroKey,
             Devices = CatalogueHelper.GetDefaultDevices(heroKey),
             Perks = [],
             SkinKey = heroData.Skins[0]
+        };
+    }
+
+    public PlayerLobbyState GetDummyPlayerLobbyInfo(uint playerId, Key heroKey, TeamType team)
+    {
+        var profileData = Databases.PlayerDatabase.GetPlayerProfile(playerId);
+        var defaultLoadout = GetLoadoutForHero(playerId, heroKey, true);
+        var deviceLevels = Databases.PlayerDatabase.GetDeviceLevels(playerId);
+        return new PlayerLobbyState
+        {
+            PlayerId = playerId,
+            SteamId = profileData.SteamId,
+            Nickname = profileData.Nickname,
+            SquadId = null,
+            Role = PlayerRoleType.None,
+            PlayerLevel = profileData.Progression?.PlayerProgress?.Level ?? 1,
+            SelectedBadges = profileData.SelectedBadges,
+            Team = team,
+            Hero = heroKey,
+            Devices = defaultLoadout.Devices,
+            Perks = defaultLoadout.Perks,
+            RestrictedHeroes = [],
+            SkinKey = defaultLoadout.SkinKey,
+            Ready = true,
+            CanLoadout = true,
+            Status = LobbyStatus.Online,
+            LookingForFriends = profileData.LookingForFriends,
+            DeviceLevels = deviceLevels
         };
     }
 
@@ -348,8 +396,68 @@ public class DummyPlayerDatabase : IPlayerDatabase
         return deviceLevels;
     }
 
-    public List<uint> GetIgnoredUsers(uint playerId)
+    public List<uint> GetIgnoredUsers(uint playerId) => [];
+
+    public Dictionary<CurrencyType, float> GetCurrency(uint playerId) => _testCurrencies;
+    public async Task<List<string>?> GetRegions()
     {
         return [];
+    }
+
+    public async Task<List<SearchResult>?> GetSearchResults(string pattern)
+    {
+        return [];
+    }
+
+    public void SetPlayerName(uint playerId, string name)
+    {
+    }
+
+    public void SetLoadout(uint playerId, Dictionary<Key, LobbyLoadout> loadout)
+    {
+    }
+
+    public void SetHeroStats(uint playerId, List<HeroStats> heroStats)
+    {
+    }
+
+    public void SetMatchHistory(uint playerId, List<MatchHistoryRecord> matchHistory)
+    {
+    }
+
+    public void SetRatings(Dictionary<uint, Rating> ratings)
+    {
+    }
+
+    public void UpdatePlayer(uint playerId, PlayerUpdate update)
+    {
+    }
+
+    public void UpdateLoadout(uint playerId, Key hero, LobbyLoadout loadout)
+    {
+    }
+
+    public void UpdateLookingForFriends(uint playerId, bool lookingForFriends)
+    {
+    }
+
+    public void UpdateLastPlayedHero(uint playerId, Key heroKey)
+    {
+    }
+
+    public void UpdateBadges(uint playerId, Dictionary<BadgeType, List<Key>> badges)
+    {
+    }
+
+    public void UpdateCurrency(uint playerId, Dictionary<CurrencyType, float> currencies)
+    {
+    }
+
+    public void UpdateRatings(List<uint> winners, List<uint> losers, HashSet<uint> excluded)
+    {
+    }
+
+    public void UpdateMatchStats(EndMatchResults endMatchResults)
+    {
     }
 }

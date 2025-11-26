@@ -28,11 +28,10 @@ public class ZoneData(ZoneUpdater updater)
     public List<ZoneObjective> Objectives = [];
     public bool MatchEnded;
     public TeamType Winner;
-    public EndMatchData EndMatchData;
     public float? ResourceCap;
-    public bool IsSurrenderRequest;
+    public readonly bool[] IsSurrenderRequest = new bool[Enum.GetValues<TeamType>().Length];
     public Dictionary<uint, bool?> SurrenderVotes = new();
-    public long? SurrenderEndTime;
+    public readonly DateTimeOffset?[] SurrenderEndTime = new DateTimeOffset?[Enum.GetValues<TeamType>().Length];
     public bool? SurrenderResult;
     public TeamType SurrenderTeam;
     public bool CanSwitchHero;
@@ -90,7 +89,7 @@ public class ZoneData(ZoneUpdater updater)
                 ColorsData = []
             },
             MapData = BlocksData.ToBinary(),
-            ColorData = MapData.ColorsData ?? MapLoader.GetColorData(MapKey) ?? [],
+            ColorData = MapData.ColorsData ?? [],
             Updates = new Dictionary<Vector3s, BlockUpdate>(),
             CanSwitchHero = CanSwitchHero,
             IsCustomGame = GameModeKey == CatalogueHelper.ModeCustom.Key
@@ -219,6 +218,21 @@ public class ZoneData(ZoneUpdater updater)
         updater.OnZoneUpdate(new ZoneUpdate
         {
             RespawnInfo = RespawnInfo
+        });
+    }
+
+    public void UpdateSupplyTime(SupplySequenceItem supply, Vector3? position)
+    {
+        SupplyInfo = new SupplyInfo
+        {
+            NextSupplyDrop = supply.SupplyUnitKey,
+            NextSupplyDropTime = (ulong)DateTimeOffset.Now.AddSeconds(supply.Seconds).ToUnixTimeMilliseconds(),
+            Position = position
+        };
+        
+        updater.OnZoneUpdate(new ZoneUpdate
+        {
+            SupplyInfo = SupplyInfo
         });
     }
 

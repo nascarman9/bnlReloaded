@@ -30,6 +30,17 @@ public partial class GameZone
             return;
         }
         
+        if (player.IsRecall)
+        {
+            player.EndRecall();
+            _serviceZone.SendDoCancelRecall(playerUnitId);
+        }
+
+        if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+        {
+            player.SpawnProtectionTime = null;
+        }
+        
         player.CurrentBuildInfo = buildInfo;
         builderService.SendStartBuild(rpcId, true);
         _unbufferedZone.SendDoStartBuild(playerUnitId, buildInfo);
@@ -100,6 +111,11 @@ public partial class GameZone
             return;
         }
         
+        if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+        {
+            player.SpawnProtectionTime = null;
+        }
+        
         switcherService.SendSwitchGear(rpcId, true);
         
         if (player.CurrentGear?.Card.EquipEffects is { Count: > 0 } effects1)
@@ -128,6 +144,11 @@ public partial class GameZone
         {
             reloaderService.SendStartReload(rpcId, false);
             return;
+        }
+        
+        if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+        {
+            player.SpawnProtectionTime = null;
         }
         
         reloaderService.SendStartReload(rpcId, true);
@@ -239,14 +260,7 @@ public partial class GameZone
     public void ReceivedProjCreateRequest(ulong shotId, ProjectileInfo projectileInfo, Guid? creatingSession)
     {
         _keepShotAlive.Add(shotId);
-        if (_shotInfo.TryGetValue(shotId, out var shotInfo) && !shotInfo.SendCreateToCaster)
-        {
-            _unbufferedZone.SendCreateProjectile(shotId, projectileInfo, creatingSession);
-        }
-        else
-        {
-            _serviceZone.SendCreateProjectile(shotId, projectileInfo);
-        }
+        _unbufferedZone.SendCreateProjectile(shotId, projectileInfo, creatingSession);
     }
 
     public void ReceivedProjMoveRequest(ulong shotId, ulong time, ZoneTransform zoneTransform)
@@ -275,6 +289,15 @@ public partial class GameZone
         {
             player.CurrentChannelData = channelData;
             player.TicksPerChannel = (ulong)MathF.Max(float.Round(channel.Interval / SecondsPerTick), 0.0f);
+            if (player.IsRecall)
+            {
+                player.EndRecall();
+                _serviceZone.SendDoCancelRecall(playerUnitId);
+            }
+            if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+            {
+                player.SpawnProtectionTime = null;
+            }
             channelService.SendStartChannel(rpcId, true);
             _unbufferedZone.SendDoStartChannel(playerUnitId, channelData);
             var ammoUpdate = toolLogic.TakeAmmoUpdate();
@@ -412,6 +435,16 @@ public partial class GameZone
         
         if (tool?.Tool is not ToolDash toolDash || !tool.IsEnoughAmmoToUse()) return;
         
+        if (player.IsRecall)
+        {
+            player.EndRecall();
+            _serviceZone.SendDoCancelRecall(playerUnitId);
+        }
+        if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+        {
+            player.SpawnProtectionTime = null;
+        }
+        
         _serviceZone.SendCast(playerUnitId, new CastData
         {
             ShotPos = player.Transform.Position,
@@ -474,6 +507,16 @@ public partial class GameZone
         var tool = player.CurrentGear?.Tools[toolIndex];
         
         if (tool?.Tool is not ToolGroundSlam toolSlam || !tool.IsEnoughAmmoToUse()) return;
+        
+        if (player.IsRecall)
+        {
+            player.EndRecall();
+            _serviceZone.SendDoCancelRecall(playerUnitId);
+        }
+        if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+        {
+            player.SpawnProtectionTime = null;
+        }
 
         _serviceZone.SendDoGroundSlamCast(playerUnitId, toolIndex);
         
@@ -536,6 +579,16 @@ public partial class GameZone
 
         if (ValidateAbility(player) && !player.IsBuff(BuffType.Disabled))
         {
+            if (player.IsRecall)
+            {
+                player.EndRecall();
+                _serviceZone.SendDoCancelRecall(playerUnitId);
+            }
+            if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+            {
+                player.SpawnProtectionTime = null;
+            }
+            
             abilityService.SendCastAbility(rpcId, true);
             _serviceZone.SendDoCastAbility(playerUnitId, castData);
             switch (aCard.Behavior)
@@ -659,6 +712,17 @@ public partial class GameZone
         {
             return;
         }
+        
+        if (player.IsRecall)
+        {
+            player.EndRecall();
+            _serviceZone.SendDoCancelRecall(playerUnitId);
+        }
+        if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
+        {
+            player.SpawnProtectionTime = null;
+        }
+        
         _serviceZone.SendCast(playerUnitId, castData);
 
         if (castData.Shots is not { Count: > 0 } shots) return;
@@ -1105,14 +1169,199 @@ public partial class GameZone
         }
     }
 
-    public void ReceivedPlayerCommand(uint playerId, Key command)
+    public void ReceivedPlayerCommand(uint playerId, Key command) => _serviceZone.SendPlayerCommand(playerId, command);
+
+    public void ReceivedStartRecallRequest(uint playerId)
     {
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
-            !_playerUnits.TryGetValue(playerUnitId, out var player))
+            !_playerUnits.TryGetValue(playerUnitId, out var player) ||
+            player is not { IsDead: false, IsActive: true, IsRecall: false })
         {
             return;
         }
         
-        _serviceZone.SendPlayerCommand(playerId, command);
+        player.IsRecall = true;
+        player.RecallTime = DateTimeOffset.Now.AddSeconds(_zoneData.MatchCard.RecallDuration);
+        _unbufferedZone.SendDoStartRecall(playerUnitId, _zoneData.MatchCard.RecallDuration, (ulong)player.RecallTime.Value.ToUnixTimeMilliseconds());  
+    }
+
+    public void ReceivedSurrenderRequest(ushort rpcId, uint playerId, IServiceZone surrenderService)
+    {
+        if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
+            !_playerUnits.TryGetValue(playerUnitId, out var player))
+        {
+            surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.Disabled);
+            return;
+        }
+
+        if (_zoneData.Phase.PhaseType is not (ZonePhaseType.Assault or ZonePhaseType.Assault2
+            or ZonePhaseType.SuddenDeath) || (_attackStartTime.HasValue &&
+                                              _attackStartTime.Value.AddSeconds(
+                                                  _zoneData.MatchCard.SurrenderLogic?.TimeBeforeSurrender ?? 0) >
+                                              DateTimeOffset.Now))
+        {
+            surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.TooEarly);
+        }
+
+        if (_lastSurrenderTime[(int)player.Team] is { } surrTime &&
+            surrTime.AddSeconds(_zoneData.MatchCard.SurrenderLogic?.TimeBetweenVoting ?? 0) > DateTimeOffset.Now)
+        {
+            surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.TooFrequent);
+        }
+
+        if (_zoneData.IsSurrenderRequest[(int)player.Team])
+        {
+            surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.InProgress);
+        }
+
+        _zoneData.IsSurrenderRequest[(int)player.Team] = true;
+        var endTime = DateTimeOffset.Now
+            .AddSeconds(_zoneData.MatchCard.SurrenderLogic?.VotingTime ?? 30f);
+        _zoneData.SurrenderEndTime[(int)player.Team] = endTime;
+        foreach (var vote in _zoneData.SurrenderVotes.Keys.ToList())
+        {
+            if (!_playerIdToUnitId.TryGetValue(playerId, out var pUnitId) ||
+                !_playerUnits.TryGetValue(playerUnitId, out var p) || 
+                p.Team == player.Team)
+            {
+                _zoneData.SurrenderVotes[vote] = null;
+            }
+        }
+        surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.Accepted);
+        _serviceZone.SendSurrenderBegin((ulong)endTime.ToUnixTimeMilliseconds());
+        ReceivedSurrenderVoteRequest(playerId, true);
+    }
+
+    public void ReceivedSurrenderVoteRequest(uint playerId, bool accept)
+    {
+        if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
+            !_playerUnits.TryGetValue(playerUnitId, out var player) ||
+            !_zoneData.IsSurrenderRequest[(int)player.Team] ||
+            !_zoneData.SurrenderVotes.TryAdd(playerId, accept))
+        {
+            return;
+        }
+
+        _serviceZone.SendSurrenderProgress(_zoneData.SurrenderVotes);
+        if (_zoneData.MatchCard.SurrenderLogic?.MinVotes is null) return;
+        
+        var yesCount = 0;
+        var noCount = 0;
+
+        foreach (var play in _playerUnits.Values.Where(p => p.Team == player.Team && p.PlayerId.HasValue))
+        {
+            if (_zoneData.SurrenderVotes.TryGetValue(play.PlayerId!.Value, out var vote))
+            {
+                switch (vote)
+                {
+                    case true:
+                        yesCount++;
+                        break;
+                    case false:
+                        noCount++;
+                        break;
+                }
+            }
+        }
+        
+        var maxLogic = _zoneData.MatchCard.SurrenderLogic.MinVotes.Max(k => k.Key);
+        var playerCount = _playerUnits.Values.Count(p => p.Team == player.Team);
+        var voteCount = _zoneData.MatchCard.SurrenderLogic.MinVotes[maxLogic];
+        if (_zoneData.MatchCard.SurrenderLogic.MinVotes.TryGetValue(playerCount, out var actVoteCount))
+        {
+            voteCount = actVoteCount;
+        }
+        
+        if (yesCount >= voteCount)
+        {
+            _serviceZone.SendSurrenderEnd(player.Team, true);
+            _zoneData.IsSurrenderRequest[(int)player.Team] = false;
+            _zoneData.SurrenderEndTime[(int)player.Team] = null;
+            _endMatchTask = BeginEndOfGame(player.Team switch
+            {
+                TeamType.Neutral => TeamType.Team1,
+                TeamType.Team1 => TeamType.Team2,
+                TeamType.Team2 => TeamType.Team1,
+                _ => TeamType.Neutral
+            });
+            
+            _units.Values.Where(u => u.Team == player.Team && u.UnitCard?.IsBase is true).ToList().ForEach(DropUnit);
+        }
+        else if (noCount > playerCount - voteCount)
+        {
+            _serviceZone.SendSurrenderEnd(player.Team, false);
+            _zoneData.IsSurrenderRequest[(int)player.Team] = false;
+            _zoneData.SurrenderEndTime[(int)player.Team] = null;
+            _lastSurrenderTime[(int)player.Team] = DateTimeOffset.Now;
+        }
+    }
+
+    public void ReceivedEditorCommand(uint playerId, MapEditorCommand command)
+    {
+        if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
+            !_playerUnits.TryGetValue(playerUnitId, out var player) ||
+            !_gameInitiator.IsMapEditor())
+        {
+            return;
+        }
+
+        switch (command)
+        {
+            case MapEditorCommand.Respawn:
+                if (!player.IsDead)
+                {
+                    player.Killed(player.CreateBlankImpactData());
+                }
+                player.RespawnTime = DateTimeOffset.Now.AddSeconds(0.5);
+                break;
+            case MapEditorCommand.KillPlayer:
+                player.Killed(player.CreateBlankImpactData());
+                break;
+            case MapEditorCommand.SkipBuildPhase:
+                if (_zoneData.Phase.PhaseType is ZonePhaseType.Build or ZonePhaseType.Build2)
+                {
+                    UpdatePhase();
+                }
+                break;
+            case MapEditorCommand.SpawnSupplyDrop:
+                var supplyPosition = GetSupplyPosition(new SupplySequenceItem
+                {
+                    Seconds = 0,
+                    SupplyUnitKey = CatalogueHelper.SupplyDrop,
+                    DropPointLabel = UnitLabel.DropPointResource
+                });
+
+                if (supplyPosition is not null)
+                {
+                    CreateSupplyUnit(CatalogueHelper.SupplyDrop, supplyPosition.Value);
+                }
+                break;
+            case MapEditorCommand.SpawnBlockbuster:
+                var bbPosition = GetSupplyPosition(new SupplySequenceItem
+                {
+                    Seconds = 0,
+                    SupplyUnitKey = CatalogueHelper.ClassicBlockbuster,
+                    DropPointLabel = UnitLabel.DropPointBlockbuster
+                });
+
+                if (bbPosition is not null)
+                {
+                    CreateSupplyUnit(CatalogueHelper.ClassicBlockbuster, bbPosition.Value);
+                }
+                break;
+            case MapEditorCommand.ResetCooldowns:
+                if (player.TimeTillNextAbilityCharge is not null)
+                {
+                    player.TimeTillNextAbilityCharge = DateTimeOffset.Now;
+                    player.UpdateData(new UnitUpdate
+                    {
+                        AbilityChargeCooldownEnd = 0
+                    });
+                }
+                break;
+            case MapEditorCommand.WinMatch:
+                _endMatchTask = BeginEndOfGame(player.Team, false);
+                break;
+        }
     }
 }

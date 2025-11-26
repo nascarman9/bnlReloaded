@@ -1,4 +1,5 @@
-﻿using BNLReloadedServer.Servers;
+﻿using BNLReloadedServer.Database;
+using BNLReloadedServer.Servers;
 
 namespace BNLReloadedServer.Service;
 
@@ -58,7 +59,12 @@ public class ServiceTime(ISender sender) : IServiceTime
         {
             timeEnum = (ServiceTimeId)serviceTimeId;
         }
-        Console.WriteLine($"ServiceTimeId: {timeEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"ServiceTimeId: {timeEnum.ToString()}");
+        }
+
         switch (timeEnum)
         {
             case ServiceTimeId.MessageSync:

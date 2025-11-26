@@ -59,7 +59,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
     }
@@ -132,7 +132,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
     }
@@ -200,7 +200,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
     }
@@ -235,7 +235,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.SendSync(writer);
         SendRegions(_masterServerDatabase.GetRegionServers());
@@ -245,7 +245,10 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
     {
         var rpcId = reader.ReadUInt16();
         var loginInfo = SteamLoginInfo.ReadRecord(reader);
-        sender.AssociatedPlayerId = _playerDatabase.GetPlayerId(loginInfo.SteamId);
+        var player = _masterServerDatabase.GetPlayer(loginInfo.SteamId).Result;
+        sender.AssociatedPlayerId = player?.PlayerId ??
+                                    _masterServerDatabase.AddPlayer(loginInfo.SteamId, string.Empty, "master").Result
+                                        .PlayerId;
         SendLoginMasterSteam(rpcId, sender.AssociatedPlayerId);
     }
     
@@ -267,7 +270,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
     }
@@ -297,7 +300,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
     }
@@ -323,17 +326,27 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         var region = reader.ReadString();
         var remember = reader.ReadBoolean();
         var regionToEnter = _masterServerDatabase.GetRegionServer(region);
-        if (regionToEnter != null)
-            SendEnterRegion(regionToEnter);
+        if (regionToEnter?.Id == null || !sender.AssociatedPlayerId.HasValue ||
+            _masterServerDatabase.GetPlayer(sender.AssociatedPlayerId.Value).Result is not { } player) return;
+
+        if (!_masterServerDatabase.SetRegionForPlayer(player.PlayerId, regionToEnter.Info?.Name?.Text ?? region).Result) return;
+        
+        _masterServerDatabase.HaveRegionLoadPlayer(regionToEnter.Id, player);
+        SendEnterRegion(regionToEnter, sender.AssociatedPlayerId.Value);
     }
     
-    public void SendEnterRegion(RegionInfo region)
+    public void SendEnterRegion(RegionInfo region, uint playerId)
     {
+        if (region.Host == null)
+        {
+            return;
+        }
+        
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageEnterRegion);
-        writer.Write(region.Host!);
+        writer.Write(region.Host);
         writer.Write(region.Port);
-        writer.Write(_playerDatabase.GetAuthTokenForPlayer(sender.AssociatedPlayerId!.Value));
+        writer.Write(_playerDatabase.GetAuthTokenForPlayer(playerId));
         sender.Send(writer);
     }
 
@@ -355,7 +368,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.SendSync(writer);
     }
@@ -363,7 +376,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
     private void ReceiveLoginRegion(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
-        sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthToken(reader.ReadString());
+        sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthTokenMaster(reader.ReadString());
         var catalogueHash = reader.ReadUInt32();
         if (sender.AssociatedPlayerId == null)
         {
@@ -371,9 +384,10 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
             return;
         }
         _regionServerDatabase.AddUser(sender.AssociatedPlayerId.Value, sessionId);
-        SendLoginRegion(rpcId, PlayerRole.Admin);
+        var player = _playerDatabase.GetPlayerData(sender.AssociatedPlayerId.Value).Result;
+        SendLoginRegion(rpcId, player.Role);
         SendLoggedIn();
-        SendCatalogue(null);
+        SendCatalogue(catalogueHash != CatalogueCache.Hash() ? CatalogueCache.Load() : null);
     }
     
     public void SendWait(float waitTime)
@@ -391,11 +405,11 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.Send(writer);
     }
 
-    public void SendCatalogue(ICollection<Card>? cards)
+    public void SendCatalogue(byte[]? cards)
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServiceLoginId.MessageCatalogue);
-        writer.WriteOption(cards, item => writer.WriteList(item, Card.WriteVariant));
+        writer.WriteOption(cards, item => writer.WriteBinary(item));
         sender.Send(writer);
     }
 
@@ -416,7 +430,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         else
         {
             writer.Write(byte.MaxValue);
-            writer.Write(error!);
+            writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
     }
@@ -425,7 +439,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
     {
         var rpcId = reader.ReadUInt16();
         var auth = reader.ReadString();
-        sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthToken(auth);
+        sender.AssociatedPlayerId = _playerDatabase.GetPlayerIdFromAuthTokenRegion(auth);
         if (sender.AssociatedPlayerId == null)
         {
             SendLoginInstance(rpcId, new EAuthFailed());
@@ -445,7 +459,12 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         {
             loginEnum = (ServiceLoginId)serviceLoginId;
         }
-        Console.WriteLine($"Service Login ID: {loginEnum.ToString()}");
+
+        if (Databases.ConfigDatabase.DebugMode())
+        {
+            Console.WriteLine($"Service Login ID: {loginEnum.ToString()}");
+        }
+
         switch (loginEnum)
         {
             case ServiceLoginId.MessageCheckVersion: 

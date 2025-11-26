@@ -46,45 +46,66 @@ public partial class Unit
     {
         var unitUpdate = new UnitUpdate();
         var hasUpdate = false;
-        var isObjective = UnitCard?.IsObjective is true;
+        var healthType = UnitCard?.Health?.Health?.HealthType;
         foreach (var (buffKey, value) in _buffs)
         {
             // Buff * multiplier
-            switch (buffKey)
+            switch (buffKey, healthType)
             {
-                case BuffType.ResourceProduction:
+                case (BuffType.ResourceProduction, _):
                     AddResource(value * multiplier, ResourceType.General, unitUpdate);
                     hasUpdate = hasUpdate || unitUpdate.Resource != null;
                     break;
                 
-                case BuffType.HealthRegen:
-                    AddHealth(value * multiplier, unitUpdate);
+                case (BuffType.HealthRegen, _):
+                    var healAmount = AddHealth(value * multiplier, unitUpdate);
+
+                    if (healAmount > 0)
+                    {
+                        var healSource = ActiveEffects.Find(e =>
+                        {
+                            var eCard = e.Card;
+                            return eCard.Effect is ConstEffectBuff { Buffs: not null } eff &&
+                                   eff.Buffs.ContainsKey(buffKey);
+                        });
+                        
+                        if (healSource is not null)
+                        {
+                            var sourceList = _effectSources.GetValueOrDefault(healSource.Key);
+                            if (sourceList is { Count: > 0 })
+                            {
+                                var hSource = sourceList.First();
+                                Healed(healAmount, hSource,
+                                    hSource.Impact?.CasterPlayerId is not null
+                                        ? _updater.GetPlayerFromPlayerId(hSource.Impact.CasterPlayerId.Value)
+                                        : null);
+                            }
+                        }
+                    }
                     hasUpdate = hasUpdate || unitUpdate.Health != null;
                     break;
                 
-                case BuffType.ForcefieldRegen:
+                case (BuffType.ForcefieldRegen, _):
                     AddForcefield(value * multiplier, unitUpdate);
                     hasUpdate = hasUpdate || unitUpdate.Forcefield != null;
                     break;
                 
-                case BuffType.AmmoRegen:
+                case (BuffType.AmmoRegen, _):
                     AddAmmo(value * multiplier, unitUpdate);
                     hasUpdate = hasUpdate || unitUpdate.Ammo != null;
                     break;
                 
-                case BuffType.Bleeding:
-                case BuffType.Burning:
-                case BuffType.Poisoned:
-                case BuffType.Decay:
-                    if (isObjective)
-                        break;
-                    
+                case (BuffType.Bleeding, HealthType.Player or HealthType.World):
+                case (BuffType.Burning, HealthType.Player):
+                case (BuffType.Poisoned, HealthType.Player):
+                case (BuffType.Decay, HealthType.World):
                     var effectSource = ActiveEffects.Find(e =>
                     {
                         var eCard = e.Card;
                         return eCard.Effect is ConstEffectBuff { Buffs: not null } eff &&
                                eff.Buffs.ContainsKey(buffKey);
                     });
+                    
                     EffectSource? source = null;
                     if (effectSource is not null)
                     {
@@ -98,9 +119,6 @@ public partial class Unit
                     TakeDamage(value * multiplier, source, unitUpdate);
                     hasUpdate = hasUpdate || unitUpdate.Health != null || unitUpdate.Forcefield != null || unitUpdate.Ammo != null;
                     break;
-                
-                default:
-                    continue;
             }
         }
 
@@ -112,7 +130,7 @@ public partial class Unit
 
     private void AddAmmo(float amount, UnitUpdate update)
     {
-        if (Gears.Count == 0) return;
+        if (Gears.Count == 0 || amount <= 0) return;
         var ammoUpdate = new Dictionary<Key, List<Ammo>>();
         var sendUpdate = false;
         foreach (var gear in Gears)
@@ -151,7 +169,7 @@ public partial class Unit
 
     private void AddAmmoPercent(float percentage, UnitUpdate update)
     {
-        if (Gears.Count == 0) return;
+        if (Gears.Count == 0 || percentage <= 0) return;
         var ammoUpdate = new Dictionary<Key, List<Ammo>>();
         var sendUpdate = false;
         foreach (var gear in Gears)
@@ -253,8 +271,10 @@ public partial class Unit
         }
         if (buffedAmount == 0 || (buffedAmount > 0 && currResource >= _updater.GetResourceCap()) || (buffedAmount < 0 && currResource <= 0)) return;
         
-        update.Resource = float.Min(buffedAmount + currResource, _updater.GetResourceCap());
+        var resourceAmount = float.Min(buffedAmount + currResource, _updater.GetResourceCap());
+        update.Resource = resourceAmount;
         
+        EarnedResource(resourceAmount - currResource, source is ResourceType.Mining);
     }
 
     public void AddResource(float amount, ResourceType source)
@@ -286,22 +306,26 @@ public partial class Unit
         }
     }
 
-    private void AddHealth(float amount, UnitUpdate update)
+    private float AddHealth(float amount, UnitUpdate update)
     {
         var currHealth = update.Health ?? _health;
-        if (amount <= 0 || UnitCard?.Health?.Health is not {} health || currHealth >= this.UnitMaxHealth(health.MaxHealth)) return;
+        if (amount <= 0 || UnitCard?.Health?.Health is not {} health || currHealth >= this.UnitMaxHealth(health.MaxHealth)) return 0;
 
-        update.Health = MathF.Min(currHealth + this.HealthGainAmount(amount), this.UnitMaxHealth(health.MaxHealth));
+        var healAmount = MathF.Min(currHealth + this.HealthGainAmount(amount), this.UnitMaxHealth(health.MaxHealth));
+        update.Health = healAmount;
+        return healAmount;
     }
 
-    public void AddHealth(float amount)
+    public float AddHealth(float amount)
     {
         var update = new UnitUpdate();
-        AddHealth(amount, update);
+        var healAmount = AddHealth(amount, update);
         if (update.Health != null)
         {
             UpdateData(update);
         }
+
+        return healAmount;
     }
 
     private void AddForcefield(float amount, UnitUpdate update)
@@ -386,9 +410,9 @@ public partial class Unit
     {
         if (!IsHealth || IsDead) return;
         if ((!damage.IgnoreInvincibility && GetBuff(BuffType.Invulnerability) > 0) ||
-            ((UnitCard?.Health?.Health?.MeleeOnly ?? false) && !damage.Melee) ||
+            ((((UnitCard?.Health?.Health?.MeleeOnly ?? false) && !damage.Melee) ||
             ((UnitCard?.Health?.Health?.MiningOnly ?? false) && !damage.Mining) ||
-            (UnitCard?.Data?.Type is UnitType.DamageCapture && !damage.IgnoreDefences))
+            UnitCard?.Data?.Type is UnitType.DamageCapture) && !damage.IgnoreDefences) || HasSpawnProtection)
         {
             //_updater.OnUnitDamaged(this, 0, impact);
             return;
@@ -514,8 +538,15 @@ public partial class Unit
                 return;
         }
 
+        dmg = Math.Max(dmg - UnitCard.Health.Health.Toughness, 0.0f);
+        if (dmg <= 0)
+        {
+            return;
+        }
+
         (float Health, float Forcefield, float Shield) status = (update.Health ?? _health,
             update.Forcefield ?? _forcefield, update.Shield ?? _shield);
+        
         switch (status, damage)
         {
             case ({ Forcefield: > 0 }, _):
@@ -614,15 +645,30 @@ public partial class Unit
             _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect.Effect, selfImpact);
         }
 
+        if (DamageCaptureEffect?.NearbyUnits is { Length: > 0 } && UnitCard?.Data is UnitDataDamageCapture
+            { ZoneEffects.Count: > 0 } dataDamageCapture)
+        {
+            DamageCaptureEffect?.NearbyUnits.ToList().ForEach(u =>
+                u.RemoveEffects(
+                    dataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                    Team, GetSelfSource(selfImpact)));
+        }
+        
         OnDestroyed?.Invoke();
         _updater.OnUnitKilled(this, impact, mining);
         IsDead = true;
+        
+        if (IsActive)
+        {
+            TimeRespawning.Start();
+        }
+        
         if (IsHealth)
         {
            update.Health = 0.0f; 
         }
 
-        ReturnOnRevive =
+        _returnOnRevive =
             ActiveEffects
                 .Where(e => _effectSources.GetValueOrDefault(e.Key)?.Any(s => s is PersistOnDeathSource) ?? false)
                 .ToDictionary(k => k, v => (PersistOnDeathSource)_effectSources[v.Key].First(f => f is PersistOnDeathSource));
@@ -686,12 +732,13 @@ public partial class Unit
         if (currCharges == 0) return;
 
         currCharges -= 1;
+        UpdateStat(ScoreType.AbilityUsed, 1);
         
         update.AbilityCharges = currCharges;
-        _timeTillNextAbilityCharge = DateTimeOffset.Now.AddSeconds(this.AbilityCooldownTime(aCard.Charges.ChargeCooldown));
+        TimeTillNextAbilityCharge ??= DateTimeOffset.Now.AddSeconds(this.AbilityCooldownTime(aCard.Charges.ChargeCooldown));
         if (update.AbilityCharges == 0)
         {
-            update.AbilityChargeCooldownEnd = (ulong)_timeTillNextAbilityCharge.Value.ToUnixTimeMilliseconds();
+            update.AbilityChargeCooldownEnd = (ulong)TimeTillNextAbilityCharge.Value.ToUnixTimeMilliseconds();
         }
     }
 
@@ -710,7 +757,7 @@ public partial class Unit
         if (AbilityCard is not { Charges: not null } aCard) return;
         update.AbilityCharges = Math.Min((update.AbilityCharges ?? AbilityCharges) + 1, aCard.Charges.MaxCharges);
 
-        _timeTillNextAbilityCharge = update.AbilityCharges < aCard.Charges.MaxCharges
+        TimeTillNextAbilityCharge = update.AbilityCharges < aCard.Charges.MaxCharges
             ? DateTimeOffset.Now.AddSeconds(this.AbilityCooldownTime(aCard.Charges.ChargeCooldown))
             : null;
     }
@@ -847,7 +894,7 @@ public partial class Unit
         _wasConfused = false;
     }
 
-    public bool DoPull(Unit puller, ConstEffectPull pull)
+    private bool DoPull(Unit puller, ConstEffectPull pull)
     {
         if (pull.Force < _minPullForce && DateTimeOffset.Now - _lastPullTime < TimeSpan.FromSeconds(5)) return false;
         if (Math.Abs(pull.Force - _minPullForce) < 0.01f && _activePuller is not null &&
@@ -884,10 +931,10 @@ public partial class Unit
         if (!doFallDamage || unitCard?.FallHitModifier is 0 || height < min || IsDead || unitCard?.Health?.Health is null) return;
         
         var fallNormal = Vector3.UnitY;
-        var fallImpact = CreateImpactData(insidePoint: Transform.Position + fallNormal, normal: (Vector3s)fallNormal, shotPos: Transform.Position + fallNormal);
+        var fallImpact = CreateImpactData(insidePoint: Transform.Position + fallNormal, normal: (Vector3s)fallNormal,
+            shotPos: Transform.Position + fallNormal, sourceKey: CatalogueHelper.FallSource);
         fallImpact.HitUnits = [Id];
         fallImpact.Impact = CatalogueHelper.FallImpact;
-        fallImpact.SourceKey = null;
         fallImpact.CasterPlayerId = null;
         fallImpact.CasterUnitId = null;
 
@@ -921,11 +968,13 @@ public partial class Unit
         {
             Transform = ZoneTransformHelper.ToZoneTransform(spawnPosition, spawnRotation);
         }
+
+        IsDropped = false;
         _updater.OnRespawn(this, GetInitData(), ZoneService);
         
         var startingEffects = InitialEffects.ToDictionary();
 
-        foreach (var effect in _updater.GetTeamEffects(Team))
+        foreach (var effect in _updater.GetTeamEffects(Team).Where(e => DoesEffectApply(e, Team)))
         {
             if (startingEffects.TryGetValue(effect.Key, out var value))
             {
@@ -940,9 +989,9 @@ public partial class Unit
             }
         }
 
-        if (ReturnOnRevive is not null)
+        if (_returnOnRevive is not null)
         {
-            foreach (var effect in ReturnOnRevive.Keys)
+            foreach (var effect in _returnOnRevive.Keys)
             {
                 if (startingEffects.TryGetValue(effect.Key, out var value))
                 {
@@ -957,7 +1006,7 @@ public partial class Unit
                 }
             }
             
-            foreach (var (effect, source) in ReturnOnRevive)
+            foreach (var (effect, source) in _returnOnRevive)
             {
                 if (_effectSources.TryGetValue(effect.Key, out var sourceEffects))
                 {
@@ -970,7 +1019,7 @@ public partial class Unit
             }
         }
 
-        ReturnOnRevive = null;
+        _returnOnRevive = null;
 
         ActiveEffects = ConstEffectInfo.Convert(startingEffects);
         
@@ -989,6 +1038,8 @@ public partial class Unit
         }
 
         var uCard = UnitCard;
+        
+        TimeRespawning.Stop();
         UpdateData(new UnitUpdate
         {
             Team = Team,
@@ -1004,12 +1055,18 @@ public partial class Unit
             CurrentGear = CurrentGear?.Key,
             Ability = AbilityCard?.Key,
             AbilityCharges = AbilityCharges,
-            AbilityChargeCooldownEnd = (ulong)(_timeTillNextAbilityCharge?.ToUnixTimeMilliseconds() ?? 0),
+            AbilityChargeCooldownEnd = (ulong)(TimeTillNextAbilityCharge?.ToUnixTimeMilliseconds() ?? 0),
             Resource = Resource,
             Effects = ActiveEffects.ToInfoDictionary(),
             Devices = Devices
         });
         
         return true;
+    }
+
+    public void RecallEnded()
+    {
+        RecallTime = null;
+        IsRecall = false;
     }
 }

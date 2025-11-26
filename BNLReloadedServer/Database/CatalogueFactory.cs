@@ -58,7 +58,7 @@ public static class CatalogueFactory
         var newUnit = new Unit(id, unitInit, updater);
 
         var startingEffects = newUnit.InitialEffects.ToDictionary();
-        foreach (var effect in updater.GetTeamEffects(unit.Team))
+        foreach (var effect in updater.GetTeamEffects(unit.Team).Where(e => newUnit.DoesEffectApply(e, unit.Team)))
         {
             if (startingEffects.TryGetValue(effect.Key, out var value))
             {
@@ -106,7 +106,8 @@ public static class CatalogueFactory
         return newUnit;
     }
 
-    public static Unit? CreateUnit(uint id, Key unitKey, ZoneTransform location, TeamType team, Unit? owner, UnitUpdater updater, float speed = 0, bool isAttached = false)
+    public static Unit? CreateUnit(uint id, Key unitKey, ZoneTransform location, TeamType team, Unit? owner,
+        UnitUpdater updater, float speed = 0, bool isAttached = false)
     {
         var unit = Databases.Catalogue.GetCard<CardUnit>(unitKey);
         if (unit == null) return null;
@@ -123,7 +124,7 @@ public static class CatalogueFactory
         var newUnit = new Unit(id, unitInit, updater);
         
         var startingEffects = newUnit.InitialEffects.ToDictionary();
-        foreach (var effect in updater.GetTeamEffects(team))
+        foreach (var effect in updater.GetTeamEffects(team).Where(e => newUnit.DoesEffectApply(e, team)))
         {
             if (startingEffects.TryGetValue(effect.Key, out var value))
             {
@@ -211,7 +212,8 @@ public static class CatalogueFactory
         newUnit.InitialEffects = newUnit.InitialEffects.AddRange(effects);
         
         var startingEffects = newUnit.InitialEffects.ToDictionary();
-        foreach (var effect in updater.GetTeamEffects(playerInfo.Team))
+        foreach (var effect in updater.GetTeamEffects(playerInfo.Team)
+                     .Where(e => newUnit.DoesEffectApply(e, playerInfo.Team)))
         {
             if (startingEffects.TryGetValue(effect.Key, out var value))
             {

@@ -12,25 +12,25 @@ public static class ZoneTransformHelper
   private const byte BitNoInterpolation = 5;
   private static byte _flags;
 
-  public static bool IsCrouch(this ZoneTransform t) => t.IsCrouch;
-
-  public static void SetIsCrouch(this ZoneTransform t, bool value) => t.IsCrouch = value;
-
-  public static bool IsJump(this ZoneTransform t) => t.IsJump;
-
-  public static void SetIsJump(this ZoneTransform t, bool value) => t.IsJump = value;
-
-  public static bool IsSprint(this ZoneTransform t) => t.IsSprint;
-
-  public static void SetIsSprint(this ZoneTransform t, bool value) => t.IsSprint = value;
-
-  public static bool IsWallClimb(this ZoneTransform t) => t.IsWallClimb;
-
-  public static void SetIsWallClimb(this ZoneTransform t, bool value) => t.IsWallClimb = value;
-
-  public static bool NoInterpolation(this ZoneTransform t) => t.NoInterpolation;
-
-  public static void SetNoInterpolation(this ZoneTransform t, bool value) => t.NoInterpolation = value;
+  extension(ZoneTransform t)
+  {
+    public bool IsCrouch() => t.IsCrouch;
+    public void SetIsCrouch(bool value) => t.IsCrouch = value;
+    public bool IsJump() => t.IsJump;
+    public void SetIsJump(bool value) => t.IsJump = value;
+    public bool IsSprint() => t.IsSprint;
+    public void SetIsSprint(bool value) => t.IsSprint = value;
+    public bool IsWallClimb() => t.IsWallClimb;
+    public void SetIsWallClimb(bool value) => t.IsWallClimb = value;
+    public bool NoInterpolation() => t.NoInterpolation;
+    public void SetNoInterpolation(bool value) => t.NoInterpolation = value;
+    public void SetPosition(Vector3 position) => t.Position = position;
+    public Vector3 GetPosition() => t.Position;
+    public void SetRotation(Quaternion q) => t.Rotation = ToVector3s(q);
+    public Quaternion GetRotation() => ToQuaternion(t.Rotation);
+    public void SetLocalVelocity(Vector3 v) => t.LocalVelocity = ToVector3s(v);
+    public Vector3 GetLocalVelocity() => ToVector3(t.LocalVelocity);
+  }
 
   private static bool GetFlag(int bitNum) => (_flags & 1 << bitNum) > 0;
 
@@ -48,19 +48,7 @@ public static class ZoneTransformHelper
                  t1.Rotation == t2.Rotation && t1.LocalVelocity == t2.LocalVelocity && t1.IsCrouch == t2.IsCrouch &&
                  t1.IsJump == t2.IsJump && t1.IsSprint == t2.IsSprint && t1.IsWallClimb == t2.IsWallClimb &&
                  t1.IsDash == t2.IsDash && t1.IsGroundSlam == t2.IsGroundSlam && t1.NoInterpolation == t2.NoInterpolation);
-
-  public static void SetPosition(this ZoneTransform t, Vector3 position) => t.Position = position;
-
-  public static Vector3 GetPosition(this ZoneTransform t) => t.Position;
-
-  public static void SetRotation(this ZoneTransform t, Quaternion q) => t.Rotation = ToVector3s(q);
-
-  public static Quaternion GetRotation(this ZoneTransform t) => ToQuaternion(t.Rotation);
-
-  public static void SetLocalVelocity(this ZoneTransform t, Vector3 v) => t.LocalVelocity = ToVector3s(v);
-
-  public static Vector3 GetLocalVelocity(this ZoneTransform t) => ToVector3(t.LocalVelocity);
-
+  
   public static short PackToShort(float v) => (short) MathF.Round(v * 10f);
 
   public static float UnpackFromShort(short v) => v / 10f;
