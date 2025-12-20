@@ -21,15 +21,9 @@ public class LobbyData
 
     public PlayerLobbyState GetState(uint playerId) => Players[playerId];
 
-    public bool IsCustomMode => GameMode.Ranking == GameRankingType.None;
+    public bool IsCustomMode => GameMode?.Ranking == GameRankingType.None;
 
     public TeamType GetPlayerTeam(uint playerId) => GetPlayer(playerId)?.Team ?? TeamType.Neutral;
-
-    public int MapVotes(Key map)
-    {
-        var lobbyMapData = Maps.Find((Predicate<LobbyMapData>) (m => m.Info.GetKey() == map));
-        return lobbyMapData != null ? lobbyMapData.PlayerVotes.Count : -1;
-    }
 
     public PlayerLobbyState? GetPlayer(uint playerId) => Players.GetValueOrDefault(playerId);
 

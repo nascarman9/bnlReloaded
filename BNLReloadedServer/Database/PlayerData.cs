@@ -12,7 +12,7 @@ public class PlayerData
     public PlayerRole Role { get; set; } = PlayerRole.User;
     public string? Region { get; set; }
     public Rating Rating { get; set; } = new(25, 25.0 / 3.0);
-    public League League { get; set; } = new();
+    public League? League { get; set; }
     public PlayerProgression Progression { get; set; } = new();
     public List<uint> Friends { get; set; } = [];
     public List<uint> RequestsFromFriends { get; set; } = [];
@@ -32,7 +32,7 @@ public class PlayerData
 
     public void Write(BinaryWriter writer)
     {
-        new BitField(true, true, true, true, Region != null, true, true, true, true, true, true, true, true, true, LastPlayedHero.HasValue, true, true, true,
+        new BitField(true, true, true, true, Region != null, true, League != null, true, true, true, true, true, true, true, LastPlayedHero.HasValue, true, true, true,
             true, true, MatchmakerBanEnd.HasValue, GraveyardPermanent.HasValue, GraveyardLeaveTime.HasValue).Write(writer);
         writer.Write(PlayerId);
         writer.Write(SteamId);
@@ -43,7 +43,10 @@ public class PlayerData
             writer.Write(Region);
         }
         writer.Write(Rating);
-        League.WriteRecord(writer, League);
+        if (League != null)
+        {
+            League.WriteRecord(writer, League);
+        }
         PlayerProgression.WriteRecord(writer, Progression);
         writer.WriteList(Friends, writer.Write);
         writer.WriteList(RequestsFromFriends, writer.Write);
@@ -107,10 +110,7 @@ public class PlayerData
             Rating = reader.ReadRating();
         }
 
-        if (bitField[6])
-        {
-            League = League.ReadRecord(reader);
-        }
+        League = bitField[6] ? League.ReadRecord(reader) : null;
 
         if (bitField[7])
         {
@@ -252,6 +252,21 @@ public class PlayerData
         return reader.ReadList<MatchHistoryRecord, List<MatchHistoryRecord>>(MatchHistoryRecord.ReadRecord);
     }
 
+    public static byte[] WriteFriendByteRecord(List<uint> friends)
+    {
+        var memStream = new MemoryStream();
+        using var writer = new BinaryWriter(memStream);
+        writer.WriteList(friends, writer.Write);
+        return memStream.ToArray();
+    }
+
+    public static List<uint> ReadFriendByteRecord(byte[] bytes)
+    {
+        var memStream = new MemoryStream(bytes);
+        using var reader = new BinaryReader(memStream);
+        return reader.ReadList<uint, List<uint>>(reader.ReadUInt32);
+    }
+
     public PlayerRecord ToPlayerRecord() =>
         new()
         {
@@ -262,7 +277,7 @@ public class PlayerData
             Region = Region,
             RatingMean = Rating.Mean,
             RatingDeviation = Rating.StandardDeviation,
-            LeagueInfo = League.WriteByteRecord(League),
+            LeagueInfo = League != null ? League.WriteByteRecord(League) : null,
             Progression = PlayerProgression.WriteByteRecord(Progression),
             LookingForFriends = LookingForFriends,
             BadgeInfo = WriteBadgeByteRecord(Badges),
@@ -275,6 +290,9 @@ public class PlayerData
             MatchmakerBanEnd = MatchmakerBanEnd.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds((long)MatchmakerBanEnd.Value) : null,
             GraveyardPermanent = GraveyardPermanent,
             GraveyardLeaveTime = GraveyardLeaveTime.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds((long)GraveyardLeaveTime.Value) : null,
+            Friends = WriteFriendByteRecord(Friends),
+            FriendRequestsFor = WriteFriendByteRecord(RequestsFromFriends),
+            FriendRequestsFrom = WriteFriendByteRecord(RequestsFromMe)
         };
 
     public static PlayerData FromPlayerRecord(PlayerRecord playerRecord) =>
@@ -286,7 +304,7 @@ public class PlayerData
             Role = playerRecord.PlayerRole,
             Region = playerRecord.Region,
             Rating = new Rating(playerRecord.RatingMean, playerRecord.RatingDeviation),
-            League = League.ReadByteRecord(playerRecord.LeagueInfo),
+            League = playerRecord.LeagueInfo != null ? League.ReadByteRecord(playerRecord.LeagueInfo) : null,
             Progression = PlayerProgression.ReadByteRecord(playerRecord.Progression),
             LookingForFriends = playerRecord.LookingForFriends,
             Badges = ReadBadgeByteRecord(playerRecord.BadgeInfo),
@@ -298,6 +316,9 @@ public class PlayerData
             TimeTrial = TimeTrialData.ReadByteRecord(playerRecord.TimeTrialInfo),
             MatchmakerBanEnd = (ulong?)playerRecord.MatchmakerBanEnd?.ToUnixTimeMilliseconds(),
             GraveyardPermanent = playerRecord.GraveyardPermanent,
-            GraveyardLeaveTime = (ulong?)playerRecord.GraveyardLeaveTime?.ToUnixTimeMilliseconds()
+            GraveyardLeaveTime = (ulong?)playerRecord.GraveyardLeaveTime?.ToUnixTimeMilliseconds(),
+            Friends = ReadFriendByteRecord(playerRecord.Friends),
+            RequestsFromFriends = ReadFriendByteRecord(playerRecord.FriendRequestsFor),
+            RequestsFromMe = ReadFriendByteRecord(playerRecord.FriendRequestsFrom)
         };
 }

@@ -51,7 +51,7 @@ public class ServiceTime(ISender sender) : IServiceTime
         SendSync(rpcId, DateTimeOffset.Now.ToUnixTimeMilliseconds());
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceTimeId = reader.ReadByte();
         ServiceTimeId? timeEnum = null;
@@ -72,7 +72,9 @@ public class ServiceTime(ISender sender) : IServiceTime
                 break;
             default:
                 Console.WriteLine($"Time service received unsupported serviceId: {serviceTimeId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

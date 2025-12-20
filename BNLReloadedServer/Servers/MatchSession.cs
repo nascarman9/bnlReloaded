@@ -5,82 +5,42 @@ using NetCoreServer;
 namespace BNLReloadedServer.Servers;
 
 public class MatchSession : TcpSession
+{
+    private readonly SessionReader _reader;
+    private bool _connected;
+
+    public MatchSession(TcpServer server) : base(server)
     {
-        private readonly MatchServiceDispatcher _serviceDispatcher;
+        var sender = new SessionSender(server, Id, this);
+        var serviceDispatcher = new MatchServiceDispatcher(sender, Id);
+        _reader = new SessionReader(serviceDispatcher, Databases.ConfigDatabase.DebugMode(),
+            "Match server received packet with incorrect length");
+    }
 
-        public MatchSession(TcpServer server) : base(server)
-        {
-            var sender = new SessionSender(server, Id, this);
-            _serviceDispatcher = new MatchServiceDispatcher(sender, Id);
-        }
+    protected override void OnConnected()
+    {
+        _connected = true;
+        Console.WriteLine($"Match TCP session with Id {Id} connected!");
+    }
 
-        protected override void OnConnected()
-        {
-            if (Databases.ConfigDatabase.DebugMode())
-            {
-                Console.WriteLine($"Match TCP session with Id {Id} connected!");
-            }
-        }
+    protected override void OnDisconnected()
+    {
+        Databases.RegionServerDatabase.RemoveMatchServices(Id);
+        if (_connected)
+            Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
+        
+        _connected = false;
+    }
 
-        protected override void OnDisconnected()
-        {
-            Databases.RegionServerDatabase.RemoveMatchServices(Id);
-            if (Databases.ConfigDatabase.DebugMode())
-            {
-                Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
-            }
-        }
+    protected override void OnReceived(byte[] buffer, long offset, long size)
+    {
+        if (size <= 0) return;
+        
+        _reader.ProcessPacket(buffer, offset, size);
+    }
 
-        protected override void OnReceived(byte[] buffer, long offset, long size)
-        {
-            if (size <= 0) return;
-            
-            var memStream = new MemoryStream(buffer, (int)offset, (int)size);
-            using var reader = new BinaryReader(memStream);
-
-            var debugMode = Databases.ConfigDatabase.DebugMode();
-            try
-            {
-                while (reader.BaseStream.Position < reader.BaseStream.Length)
-                {
-                    // The first part of every packet is an 7 bit encoded int of its length.
-                    var packetLength = reader.Read7BitEncodedInt();
-                    var currentPosition = reader.BaseStream.Position;
-                    if (reader.BaseStream.Position + packetLength <= reader.BaseStream.Length)
-                    {
-                        if (debugMode)
-                        {
-                            Console.WriteLine($"Packet length: {packetLength}");
-                            _serviceDispatcher.Dispatch(reader);
-                            Console.WriteLine();
-                        }
-                        else
-                        {
-                            _serviceDispatcher.Dispatch(reader);
-                        }
-                    }
-                    else
-                        break;
-
-                    if (reader.BaseStream.Position < currentPosition + packetLength)
-                    {
-                        reader.ReadBytes((int) (currentPosition + packetLength - reader.BaseStream.Position));
-                    }
-                }
-            }
-            catch (EndOfStreamException)
-            {
-                Console.WriteLine("Match server received packet with incorrect length");
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
-            
-        }
-
-        protected override void OnError(SocketError error)
-        {
-            Console.WriteLine($"Match TCP session caught an error with code {error}");
-        }
+    protected override void OnError(SocketError error)
+    {
+        Console.WriteLine($"Match TCP session caught an error with code {error}");
+    }
 }

@@ -33,10 +33,10 @@ public class ClientSender(TcpClient client) : ISender
     private static byte[] AppendMessageLength(BinaryWriter writer)
     {
         var memStream = new MemoryStream();
-        var baseStream = writer.BaseStream as MemoryStream;
+        var baseStream = (MemoryStream)writer.BaseStream;
         using var packetWriter = new BinaryWriter(memStream);
         packetWriter.Write7BitEncodedInt((int)baseStream.Length);
         packetWriter.Write(baseStream.GetBuffer(), 0, (int)baseStream.Length);
-        return (packetWriter.BaseStream as MemoryStream).ToArray();
+        return ((MemoryStream)packetWriter.BaseStream).ToArray();
     }
 }

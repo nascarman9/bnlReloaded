@@ -7,11 +7,15 @@ namespace BNLReloadedServer.Servers;
 public class RegionClient : TcpClient
 {
     private readonly RegionClientServiceDispatcher _serviceDispatcher;
+    private readonly SessionReader _reader;
+    private bool _connected;
 
     public RegionClient(string address, int port) : base(address, port)
     {
         var sender = new ClientSender(this);
         _serviceDispatcher = new RegionClientServiceDispatcher(sender);
+        _reader = new SessionReader(_serviceDispatcher, Databases.ConfigDatabase.DebugMode(),
+            "Region client server received packet with incorrect length");
     }
     
     public void DisconnectAndStop()
@@ -22,14 +26,17 @@ public class RegionClient : TcpClient
             Thread.Yield();
     }
 
+    protected override void OnConnecting()
+    {
+        Console.WriteLine("Region client connecting...");
+    }
+
     protected override void OnConnected()
     {
-        if (Databases.ConfigDatabase.DebugMode())
-        {
-            Console.WriteLine($"Region TCP client connected a new session with Id {Id}");
-        }
+        _connected = true;
+        Console.WriteLine($"Region TCP client connected a new session with Id {Id}");
 
-        var host = Databases.ConfigDatabase.RegionHost();
+        var host = Databases.ConfigDatabase.RegionPublicHost();
         var guiInfo = Databases.ConfigDatabase.GetRegionInfo();
         
         Databases.PlayerDatabase.SetRegionServerService(_serviceDispatcher.ServiceRegionServer);
@@ -38,13 +45,13 @@ public class RegionClient : TcpClient
 
     protected override void OnDisconnected()
     {
-        if (Databases.ConfigDatabase.DebugMode())
-        {
+        if (_connected)
             Console.WriteLine($"Region TCP client disconnected a session with Id {Id}");
-        }
 
+        _connected = false;
+        
         // Wait for a while...
-        Thread.Sleep(1000);
+        Task.Delay(1000).Wait();
 
         // Try to connect again
         if (!_stop)
@@ -54,48 +61,8 @@ public class RegionClient : TcpClient
     protected override void OnReceived(byte[] buffer, long offset, long size)
     {
         if (size <= 0) return;
-            
-        var memStream = new MemoryStream(buffer, (int)offset, (int)size);
-        using var reader = new BinaryReader(memStream);
-
-        var debugMode = Databases.ConfigDatabase.DebugMode();
-        try
-        {
-            while (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                // The first part of every packet is an 7 bit encoded int of its length.
-                var packetLength = reader.Read7BitEncodedInt();
-                var currentPosition = reader.BaseStream.Position;
-                if (reader.BaseStream.Position + packetLength <= reader.BaseStream.Length)
-                {
-                    if (debugMode)
-                    {
-                        Console.WriteLine($"Packet length: {packetLength}");
-                        _serviceDispatcher.Dispatch(reader);
-                        Console.WriteLine();
-                    }
-                    else
-                    {
-                        _serviceDispatcher.Dispatch(reader);
-                    }
-                }
-                else
-                    break;
-
-                if (reader.BaseStream.Position < currentPosition + packetLength)
-                {
-                    reader.ReadBytes((int) (currentPosition + packetLength - reader.BaseStream.Position));
-                }
-            }
-        }
-        catch (EndOfStreamException)
-        {
-            Console.WriteLine("Region server received packet with incorrect length");
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-        }
+        
+        _reader.ProcessPacket(buffer, offset, size);
     }
 
     protected override void OnError(SocketError error)

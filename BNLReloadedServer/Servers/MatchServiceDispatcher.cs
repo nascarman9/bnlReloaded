@@ -18,14 +18,27 @@ public class MatchServiceDispatcher : IServiceDispatcher
         _servicePing = new ServicePing(sender);
         _serviceMediator = new ServiceMediator(sender);
 
-        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceLogin, ServiceId.ServiceLogin);
-        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceZone, ServiceId.ServiceZone);
-        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceLobby, ServiceId.ServiceLobby);
-        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _servicePing, ServiceId.ServicePing);
-        Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceMediator, ServiceId.ServiceMediator);
+        try
+        {
+            Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceLogin, ServiceId.ServiceLogin);
+            Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceZone, ServiceId.ServiceZone);
+            Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceLobby, ServiceId.ServiceLobby);
+            Databases.RegionServerDatabase.RegisterMatchService(sessionId, _servicePing, ServiceId.ServicePing);
+            Databases.RegionServerDatabase.RegisterMatchService(sessionId, _serviceMediator, ServiceId.ServiceMediator);
+        }
+        catch(Exception e)
+        {
+            Console.WriteLine(e);
+        }
+    }
+    
+    private static bool OnUnsupported(ServiceId? serviceId)
+    {
+        Console.WriteLine($"Match TCP session received unsupported serviceId: {serviceId}");
+        return false;
     }
 
-    public void Dispatch(BinaryReader reader)
+    public bool Dispatch(BinaryReader reader)
     {
         var serviceId = reader.ReadByte();
         ServiceId? serviceEnum = null;
@@ -39,26 +52,14 @@ public class MatchServiceDispatcher : IServiceDispatcher
             Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
         }
 
-        switch (serviceEnum)
+        return serviceEnum switch
         {
-            case ServiceId.ServiceLogin:
-                _serviceLogin.Receive(reader);
-                break;
-            case ServiceId.ServiceZone:
-                _serviceZone.Receive(reader);
-                break;
-            case ServiceId.ServiceLobby:
-                _serviceLobby.Receive(reader);
-                break;
-            case ServiceId.ServicePing:
-                _servicePing.Receive(reader);
-                break;
-            case ServiceId.ServiceMediator:
-                _serviceMediator.Receive(reader);
-                break;
-            default:
-                Console.WriteLine($"Match TCP session received unsupported serviceId: {serviceId}");
-                break;
-        }
+            ServiceId.ServiceLogin => _serviceLogin.Receive(reader),
+            ServiceId.ServiceZone => _serviceZone.Receive(reader),
+            ServiceId.ServiceLobby => _serviceLobby.Receive(reader),
+            ServiceId.ServicePing => _servicePing.Receive(reader),
+            ServiceId.ServiceMediator => _serviceMediator.Receive(reader),
+            _ => OnUnsupported(serviceEnum)
+        };
     }
 }

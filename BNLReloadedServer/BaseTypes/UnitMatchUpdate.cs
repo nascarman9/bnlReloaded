@@ -8,6 +8,8 @@ public partial class Unit
 {
     public Dictionary<ScoreType, float>? Stats { get; }
 
+    private const float AssistSeconds = 30;
+
     public readonly Stopwatch TimeRespawning = new();
     public readonly Stopwatch TimeSpotted = new();
     public readonly Stopwatch TimeControlled = new();
@@ -139,7 +141,7 @@ public partial class Unit
             case HealthType.Player when PlayerId is not null:
                 if (attackerPlayer is not null && targetTeam != attackerPlayer.Team)
                 {
-                    RecentDamagers[attackerPlayer] = DateTimeOffset.Now.AddMinutes(1);
+                    RecentDamagers[attackerPlayer] = DateTimeOffset.Now.AddSeconds(AssistSeconds);
                     
                     var playerData = PlayerUnitData;
                     if (playerData?.Class == CatalogueHelper.BrawnClassKey)

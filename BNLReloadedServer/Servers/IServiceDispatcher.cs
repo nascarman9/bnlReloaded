@@ -2,5 +2,5 @@
 
 public interface IServiceDispatcher
 {  
-    public void Dispatch(BinaryReader reader);
+    public bool Dispatch(BinaryReader reader);
 }

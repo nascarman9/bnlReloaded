@@ -1,5 +1,6 @@
 ﻿using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
+using Moserware.Skills;
 
 namespace BNLReloadedServer.ServerTypes;
 
@@ -13,7 +14,7 @@ public class DummyGameInitiator(CardGameMode gameMode, MapData map, TeamType tea
     {
     }
 
-    public void ClearInstance()
+    public void ClearInstance(string? instanceId)
     {
     }
 
@@ -46,4 +47,12 @@ public class DummyGameInitiator(CardGameMode gameMode, MapData map, TeamType tea
     public float GetRespawnMultiplier() => 0;
     
     public bool IsSuperSupplies() => false;
+    public bool NeedsBackfill() => false;
+
+    public void SetBackfillReady(bool backfillReady)
+    {
+    }
+
+    public (Dictionary<uint, Rating> team1, Dictionary<uint, Rating> team2) GetTeamRatings() =>
+        (new Dictionary<uint, Rating>(), new Dictionary<uint, Rating>());
 }

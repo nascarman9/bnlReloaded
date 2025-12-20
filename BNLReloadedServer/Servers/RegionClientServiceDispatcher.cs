@@ -3,11 +3,17 @@ using BNLReloadedServer.Service;
 
 namespace BNLReloadedServer.Servers;
 
-public class RegionClientServiceDispatcher(ISender sender)
+public class RegionClientServiceDispatcher(ISender sender) : IServiceDispatcher
 {
     public ServiceRegionServer ServiceRegionServer { get; } = new(sender);
 
-    public void Dispatch(BinaryReader reader)
+    private static bool OnUnsupported(ServiceId? serviceId)
+    {
+        Console.WriteLine($"Region client TCP session received unsupported serviceId: {serviceId}");
+        return false;
+    }
+    
+    public bool Dispatch(BinaryReader reader)
     {
         var serviceId = reader.ReadByte();
         ServiceId? serviceEnum = null;
@@ -21,14 +27,10 @@ public class RegionClientServiceDispatcher(ISender sender)
             Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
         }
 
-        switch (serviceEnum)
+        return serviceEnum switch
         {
-            case ServiceId.ServiceServer:
-                ServiceRegionServer.Receive(reader);
-                break;
-            default:
-                Console.WriteLine($"Region client TCP session received unsupported serviceId: {serviceId}");
-                break;
-        }
+            ServiceId.ServiceServer => ServiceRegionServer.Receive(reader),
+            _ => OnUnsupported(serviceEnum)
+        };
     }
 }

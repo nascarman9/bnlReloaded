@@ -852,8 +852,10 @@ public class MapBinary
             block.Id = blockCard.BlockId;
             block.Damage = 0;
             block.VData = 0;
-            block.Team = owner?.Team ?? TeamType.Neutral;
-            if (owner is not null)
+
+            var hasTeam = block.Card.HasTeam;
+            block.Team = hasTeam ? owner?.Team ?? TeamType.Neutral : TeamType.Neutral;
+            if (owner is not null && hasTeam)
             {
                 OwnedBlocks[block.Position] = owner;
             }
@@ -907,9 +909,10 @@ public class MapBinary
             block.VData = 0;
         }
 
-        block.Team = owner?.Team ?? TeamType.Neutral;
+        var hasTeam = block.Card.HasTeam;
+        block.Team = hasTeam ? owner?.Team ?? TeamType.Neutral : TeamType.Neutral;
 
-        if (owner is not null)
+        if (owner is not null && hasTeam)
         {
             OwnedBlocks[location] = owner;
         }
@@ -935,9 +938,11 @@ public class MapBinary
             {
                 block.VData = 0;
             }
-            block.Team = owner?.Team ?? TeamType.Neutral;
             
-            if (owner is not null)
+            var hasTeam = block.Card.HasTeam;
+            block.Team = hasTeam ? owner?.Team ?? TeamType.Neutral : TeamType.Neutral;
+            
+            if (owner is not null && hasTeam)
             {
                 OwnedBlocks[block.Position] = owner;
             }
@@ -1045,7 +1050,9 @@ public class MapBinary
             if (!visitedBlocks.Add(propInfo.prop.Position))
                 continue;
 
-            var dmg = dmgReduction > 0 ? damage.ReduceByPercent(dmgReduction - naturalFalloff * propInfo.travCount, dmgReduction) : damage;
+            var dmg = dmgReduction > 0
+                ? damage.ReduceByPercent(dmgReduction - naturalFalloff * propInfo.travCount, dmgReduction)
+                : damage;
             if (unitsForBlock.TryGetValue(propInfo.prop.Position, out var units))
             {
                 foreach (var unit in units)
@@ -1085,7 +1092,8 @@ public class MapBinary
                 var dmgAmount = MathF.Max(dmg.BlockDamage - blkCard.Health.Toughness, 0) * ((100 - blkCard.SplashResistance) / 100f);
                 var actDamage = dmgAmount * (byte.MaxValue / blkCard.Health.MaxHealth);
 
-                checkOpenFaces = (blkCard.IsVisualSlope && blk.VData != 0) || blkCard.IsVisualPrefab;
+                checkOpenFaces = (blkCard.IsVisualSlope && blk.VData != 0) || blkCard.IsVisualPrefab ||
+                                 blkCard.Visual?.CanBePassedByShot is true;
                 if (blk.Damage + actDamage >= byte.MaxValue)
                 {
                     dmgTaken = (byte.MaxValue - blk.Damage) * (blkCard.Health.MaxHealth / byte.MaxValue);
@@ -1140,6 +1148,7 @@ public class MapBinary
 
                 if (onlyOpenFaces && blk.VData is var vData && blkCard switch
                     {
+                        { Visual.CanBePassedByShot: true } => false,
                         { IsVisualSlope: true } => SlopeBuilder.SidesCorners[index].All(c =>
                             SlopeBuilder.IsCorner(c, (byte)vData)),
                         { IsVisualPrefab: true } => PrefabBuilder.IsSolidFace(blk, (BlockFace)index),
@@ -1164,7 +1173,8 @@ public class MapBinary
                     .Select((c, idx) => c && idx != (int)CoordsHelper.OppositeFace[index]).ToArray();
                 
                 blockQueue.Enqueue((new SplashDamagePropagation(newPos, newDirCount), propInfo.travCount + 1),
-                    onlyOpenFaces || (checkOpenFaces && oldVdata is var vdata && !(blkCard switch
+                    onlyOpenFaces || blkCard.Visual?.CanBePassedByShot is true || (checkOpenFaces &&
+                        oldVdata is var vdata && !(blkCard switch
                     {
                         { IsVisualSlope: true } => SlopeBuilder.SidesCorners[index].All(c =>
                             SlopeBuilder.IsCorner(c, (byte)vdata)),
@@ -1221,6 +1231,59 @@ public class MapBinary
         }
         
         return dict;
+    }
+    
+    private static IEnumerable<Vector3s> StepThroughLine(Vector3 p1, Vector3 p2, float stepSize)
+    {
+        var direction = p2 - p1;
+        var distance = direction.Length();
+        var numSteps = (int)Math.Floor(distance / stepSize);
+        
+        if (distance > 0)
+        {
+            direction.X /= distance;
+            direction.Y /= distance;
+            direction.Z /= distance;
+        }
+        
+        for (var i = 0; i <= numSteps; i++)
+        {
+            var currentDistance = i * stepSize;
+            
+            yield return new Vector3s(
+                p1.X + direction.X * currentDistance,
+                p1.Y + direction.Y * currentDistance,
+                p1.Z + direction.Z * currentDistance
+            );
+        }
+
+        // Ensure the exact end point is included if it wasn't perfectly hit by the steps
+        if (numSteps * stepSize < distance)
+        {
+            yield return (Vector3s)p2;
+        }
+    }
+
+    private bool RaycastCheck(Vector3 start, Vector3 end, float stepAmount, Func<BlockBinary, bool> blockCheck) =>
+        StepThroughLine(start, end, stepAmount).All(pos => !ContainsBlock(pos) || blockCheck(this[pos]));
+
+    public HashSet<Unit> CheckVisibility(Vector3 location, IEnumerable<Unit> units, ICollection<Unit> blockingUnits)
+    {
+        var contained = GetContainedInUnits(blockingUnits, 0, true);
+        var check = (BlockBinary block) =>
+        {
+            var blockCheck = block.IsSolid || block.Card.Visual?.CanBePassedByShot is true;
+            var unitCheck = contained.Contains(block.Position);
+            return !blockCheck && !unitCheck;
+        };
+        
+        return units.Aggregate(new HashSet<Unit>(), (visibleUnits, unit) =>
+        {
+            if (RaycastCheck(location, unit.Transform.Position, 1, check)) 
+                visibleUnits.Add(unit);
+            
+            return visibleUnits;
+        });
     }
 
     public bool AttachToBlock(Unit unit, Vector3s location, BlockFace face)

@@ -26,8 +26,9 @@ public class AbilityValidateDevices : AbilityValidate
 
     public override void Write(BinaryWriter writer)
     {
-      new BitField(true, true, true, Range.HasValue).Write(writer);
-      EffectTargeting.WriteRecord(writer, DeviceTargeting);
+      new BitField(DeviceTargeting != null, true, true, Range.HasValue).Write(writer);
+      if (DeviceTargeting != null)
+        EffectTargeting.WriteRecord(writer, DeviceTargeting);
       writer.Write(OwnedOnly);
       writer.Write(MinCount);
       if (!Range.HasValue)
@@ -39,7 +40,7 @@ public class AbilityValidateDevices : AbilityValidate
     {
       var bitField = new BitField(4);
       bitField.Read(reader);
-      DeviceTargeting = !bitField[0] ? null : EffectTargeting.ReadRecord(reader);
+      DeviceTargeting = bitField[0] ? EffectTargeting.ReadRecord(reader) : null;
       if (bitField[1])
         OwnedOnly = reader.ReadBoolean();
       if (bitField[2])

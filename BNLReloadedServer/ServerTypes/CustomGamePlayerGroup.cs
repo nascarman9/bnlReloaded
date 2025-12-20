@@ -1,8 +1,8 @@
 ﻿using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Service;
+using Moserware.Skills;
 
 namespace BNLReloadedServer.ServerTypes;
 
@@ -52,7 +52,9 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
         }
         EnqueueAction(() =>
         {
-            Players.Add(new CustomGamePlayer 
+            if (Players.All(p => p.Id != playerId))
+            {
+                Players.Add(new CustomGamePlayer 
                 {
                     Id = playerId,
                     SteamId = player.SteamId,
@@ -63,9 +65,10 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
                     Team = GetBalancedTeam(),
                     SwitchTeamRequest = false
                 });
-            GameInfo.Players++;
+                GameInfo.Players++;
                     
-            CustomGameUpdate(players: Players);
+                CustomGameUpdate(players: Players.ToList());
+            }
         });
         return true;
     }
@@ -130,7 +133,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
                     break;
             }
             
-            CustomGameUpdate(players: Players);
+            CustomGameUpdate(players: Players.ToList());
         });
         return true;
     }
@@ -208,7 +211,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
                 }
             }
         }
-        CustomGameUpdate(players: Players);
+        CustomGameUpdate(players: Players.ToList());
     }
 
     public void UpdateSettings(uint playerId, CustomGameSettings settings)
@@ -248,12 +251,17 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
             resourceCap: settings.ResourceCap, initResources: settings.InitResource);
     }
 
-    public void AddSpectator(uint playerId)
+    public bool IsMaxSpectators() => Spectators.Count >= _customLogic.MaxSpectatorsPerMatch;
+
+    public bool AddSpectator(uint playerId)
     {
         if (Spectators.Count >= _customLogic.MaxSpectatorsPerMatch)
-            return;
+            return false;
         Spectators.Add(playerId);
+        return true;
     }
+
+    public void RemoveSpectator(uint playerId) => Spectators.Remove(playerId);
 
     public bool StartIntoLobby(uint playerId)
     {
@@ -272,8 +280,11 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
         CustomGameUpdate(status: GameInfo.Status);
     }
 
-    public void ClearInstance()
+    public void ClearInstance(string? instanceId)
     {
+        if (instanceId != GameInstanceId)
+            return;
+        
         GameInstanceId = null;
         GameInfo.Status = CustomGameStatus.Preparing;
         CustomGameUpdate(status: GameInfo.Status);
@@ -306,6 +317,14 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
     public float GetRespawnMultiplier() => GameInfo.RespawnTimeMod;
     
     public bool IsSuperSupplies() => GameInfo.SuperSupply;
+    public bool NeedsBackfill() => false;
+
+    public void SetBackfillReady(bool backfillReady)
+    {
+    }
+
+    public (Dictionary<uint, Rating> team1, Dictionary<uint, Rating> team2) GetTeamRatings() =>
+        (new Dictionary<uint, Rating>(), new Dictionary<uint, Rating>());
 
     public CustomGameUpdate GetCustomGameUpdate()
     {
@@ -326,7 +345,7 @@ public class CustomGamePlayerGroup(IServiceMatchmaker matchService) : Updater, I
             GameName = GameInfo.GameName,
             Password = Password,
             Settings = settings,
-            Players = Players,
+            Players = Players.ToList(),
             Status = GameInfo.Status
         };
     }

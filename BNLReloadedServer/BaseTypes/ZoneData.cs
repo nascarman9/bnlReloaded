@@ -30,7 +30,7 @@ public class ZoneData(ZoneUpdater updater)
     public TeamType Winner;
     public float? ResourceCap;
     public readonly bool[] IsSurrenderRequest = new bool[Enum.GetValues<TeamType>().Length];
-    public Dictionary<uint, bool?> SurrenderVotes = new();
+    public readonly Dictionary<uint, bool?> SurrenderVotes = new();
     public readonly DateTimeOffset?[] SurrenderEndTime = new DateTimeOffset?[Enum.GetValues<TeamType>().Length];
     public bool? SurrenderResult;
     public TeamType SurrenderTeam;
@@ -49,25 +49,16 @@ public class ZoneData(ZoneUpdater updater)
 
     public CardGameMode GameModeCard => Databases.Catalogue.GetCard<CardGameMode>(GameModeKey)!;
 
-    public MatchTeamStats GetTeamScores(TeamType team)
-    {
-      return TeamStats.TryGetValue(team, out var matchTeamStats) ? matchTeamStats : new MatchTeamStats();
-    }
+    public MatchTeamStats GetTeamScores(TeamType team) => 
+        TeamStats.TryGetValue(team, out var matchTeamStats) ? matchTeamStats : new MatchTeamStats();
 
-    public MatchPlayerStats GetPlayerStats(uint playerId)
-    {
-      return PlayerStats.TryGetValue(playerId, out var matchPlayerStats) ? matchPlayerStats : new MatchPlayerStats();
-    }
+    public MatchPlayerStats GetPlayerStats(uint playerId) => 
+        PlayerStats.TryGetValue(playerId, out var matchPlayerStats) ? matchPlayerStats : new MatchPlayerStats();
 
-    public TeamType? GetPlayerTeam(uint playerId)
-    {
-      return GetPlayerStats(playerId).Team;
-    }
+    public TeamType? GetPlayerTeam(uint playerId) => GetPlayerStats(playerId).Team;
 
-    public TimeTrialCourse? GetTimeTrialCourse()
-    {
-      return MapKey.HasValue ? CatalogueHelper.TimeTrialLogic.Courses?.Find((Predicate<TimeTrialCourse>) (c => c.Map == MapKey.Value)) : null;
-    }
+    public TimeTrialCourse? GetTimeTrialCourse() => 
+        MapKey.HasValue ? CatalogueHelper.TimeTrialLogic.Courses?.Find(c => c.Map == MapKey.Value) : null;
 
     public ZoneInitData GetZoneInitData() =>
         new()
@@ -188,11 +179,18 @@ public class ZoneData(ZoneUpdater updater)
 
     public void RemoveSpawn(uint spawnId)
     {
-        SpawnPoints.Remove(spawnId);
+        if (!SpawnPoints.TryGetValue(spawnId, out var spawn)) return;
+        spawn.Lock = SpawnPointLockType.ServerBlocked;
+
+        foreach (var player in PlayerSpawnPoints.Where(p => p.Value == spawnId).ToList())
+        {
+            PlayerSpawnPoints[player.Key] = null;
+        }
 
         updater.OnZoneUpdate(new ZoneUpdate
         {
-            SpawnPoints = SpawnPoints.Values.ToList()
+            SpawnPoints = SpawnPoints.Values.ToList(),
+            PlayerSpawnPoints = PlayerSpawnPoints
         });
     }
 
@@ -233,6 +231,75 @@ public class ZoneData(ZoneUpdater updater)
         updater.OnZoneUpdate(new ZoneUpdate
         {
             SupplyInfo = SupplyInfo
+        });
+    }
+
+    public void CheckIfObjective(Unit checkedUnit, TeamType captureTeam)
+    {
+        switch (MatchCard.Data?.Type)
+        {
+            case MatchType.Tutorial:
+                if (checkedUnit.PickupUnitData is not null &&
+                    checkedUnit.UnitCard?.Labels?.Contains(UnitLabel.TutorialCheckpoint) is true)
+                {
+                    ObjectiveObtained(0, TeamType.Team1);
+                }
+                break;
+            case MatchType.TimeTrial:
+                var course = GetTimeTrialCourse();
+                if (course?.MatchObjectives is not { Count: > 0 })
+                    return;
+                
+                foreach (var objective in course.MatchObjectives.Where(o => o.Team == captureTeam))
+                {
+                    var isObjective = objective switch
+                    {
+                        MatchObjectiveCollectPickups matchObjectiveCollectPickups =>
+                            matchObjectiveCollectPickups.PickupKey is not null
+                                ? checkedUnit.Key == matchObjectiveCollectPickups.PickupKey
+                                : matchObjectiveCollectPickups.PickupLabel is not null &&
+                                  checkedUnit.UnitCard?.Labels?.Contains(matchObjectiveCollectPickups.PickupLabel.Value)
+                                      is true,
+                        
+                        MatchObjectiveKillUnits matchObjectiveKillUnits =>
+                            matchObjectiveKillUnits.UnitTeam switch
+                            {
+                                RelativeTeamType.Both => true,
+                                RelativeTeamType.Friendly => captureTeam == checkedUnit.Team,
+                                RelativeTeamType.Opponent => captureTeam != checkedUnit.Team,
+                                _ => false
+                            } &&
+                            (matchObjectiveKillUnits.UnitKey is not null
+                                ? checkedUnit.Key == matchObjectiveKillUnits.UnitKey
+                                : matchObjectiveKillUnits.UnitLabel is not null &&
+                                  checkedUnit.UnitCard?.Labels?.Contains(matchObjectiveKillUnits.UnitLabel.Value) is
+                                      true),
+                        
+                        _ => false
+                    };
+
+                    if (isObjective)
+                    {
+                        ObjectiveObtained(objective.Id, objective.Team);
+                    }
+                }
+                break;
+        }
+    }
+
+    private void ObjectiveObtained(int id, TeamType team)
+    {
+        Objectives.ForEach(o =>
+        {
+            if (o.Team == team && o.Id == id)
+            {
+                o.Counter += 1;
+            }
+        });
+        
+        UpdateData(new ZoneUpdate
+        {
+            Objectives = Objectives
         });
     }
 

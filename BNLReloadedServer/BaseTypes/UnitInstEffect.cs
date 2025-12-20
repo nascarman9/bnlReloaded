@@ -109,11 +109,7 @@ public partial class Unit
                     EffectSource? source = null;
                     if (effectSource is not null)
                     {
-                        var sourceList = _effectSources.GetValueOrDefault(effectSource.Key);
-                        if (sourceList is not null)
-                        {
-                            source = sourceList.First();
-                        }
+                        source = _effectSources.GetValueOrDefault(effectSource.Key)?.FirstOrDefault();
                     }
                     
                     TakeDamage(value * multiplier, source, unitUpdate);
@@ -122,7 +118,7 @@ public partial class Unit
             }
         }
 
-        if (hasUpdate || _sendDrop)
+        if (hasUpdate)
         {
             UpdateData(unitUpdate);
         }
@@ -209,7 +205,7 @@ public partial class Unit
     {
         if (Gears.Count == 0 || _currentGearIndex == -1) return;
         var currentGear = GetGearByIndex(_currentGearIndex);
-        if (currentGear?.Card.Ammo is not { } ammoData) return;
+        if (currentGear?.Card.Ammo is null ) return;
         var ammoUpdate = new Dictionary<Key, List<Ammo>> { { currentGear.Key, [] } };
         var sendUpdate = false;
         for (var i = 0; i < currentGear.Ammo.Count; i++)
@@ -471,7 +467,7 @@ public partial class Unit
                 }
                 break;
             case HealthType.World:
-                if (attTeam == Team)
+                if (attacker?.Id != Id && attTeam == Team)
                 {
                     if (damage.IgnoreDefences)
                     {
@@ -598,9 +594,9 @@ public partial class Unit
         }
         
         var selfImpact = CreateImpactData();
-        foreach (var effect in ActiveEffects.GetEffectsOfType<ConstEffectOnDamageTaken>().Where(dth => dth.Effect != null))
+        foreach (var effect in ActiveEffects.GetEffectsOfType<ConstEffectOnDamageTaken>().Select(d => d.Effect).OfType<InstEffect>())
         {
-            _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect.Effect, selfImpact);
+            _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect, selfImpact);
         }
         
         
@@ -620,7 +616,7 @@ public partial class Unit
     {
         var update = new UnitUpdate();
         TakeDamage(damage, source, update);
-        if (update.Health != null || update.Forcefield != null || update.Shield != null || _sendDrop)
+        if (update.Health != null || update.Forcefield != null || update.Shield != null)
         {
             UpdateData(update);
         }
@@ -630,7 +626,7 @@ public partial class Unit
     {
         var update = new UnitUpdate();
         TakeDamage(damage, impact, splash, attacker, attackingTeam, update);
-        if (update.Health != null || update.Forcefield != null || update.Shield != null || _sendDrop)
+        if (update.Health != null || update.Forcefield != null || update.Shield != null)
         {
             UpdateData(update);
         }
@@ -640,9 +636,9 @@ public partial class Unit
     {
         if (IsDead) return;
         var selfImpact = CreateImpactData();
-        foreach (var effect in ActiveEffects.GetEffectsOfType<ConstEffectOnDeath>().Where(dth => dth.Effect != null))
+        foreach (var effect in ActiveEffects.GetEffectsOfType<ConstEffectOnDeath>().Select(dth => dth.Effect).OfType<InstEffect>())
         {
-            _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect.Effect, selfImpact);
+            _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect, selfImpact);
         }
 
         if (DamageCaptureEffect?.NearbyUnits is { Length: > 0 } && UnitCard?.Data is UnitDataDamageCapture
@@ -657,8 +653,9 @@ public partial class Unit
         OnDestroyed?.Invoke();
         _updater.OnUnitKilled(this, impact, mining);
         IsDead = true;
+        LastMoveTime = null;
         
-        if (IsActive)
+        if (IsActive && PlayerId != null)
         {
             TimeRespawning.Start();
         }
@@ -674,17 +671,13 @@ public partial class Unit
                 .ToDictionary(k => k, v => (PersistOnDeathSource)_effectSources[v.Key].First(f => f is PersistOnDeathSource));
         update.Effects = new Dictionary<Key, ulong?>();
         _effectSources.Clear();
-        _sendDrop = true;
     }
 
     public void Killed(ImpactData impact, bool mining = false)
     {
         var update = new UnitUpdate();
         Killed(impact, mining, update);
-        if (_sendDrop || update.Health == 0.0f)
-        {
-            UpdateData(update);
-        }
+        UpdateData(update);
     }
 
     private void ChargeTesla(int chargeAmount, UnitUpdate update)
@@ -736,7 +729,7 @@ public partial class Unit
         
         update.AbilityCharges = currCharges;
         TimeTillNextAbilityCharge ??= DateTimeOffset.Now.AddSeconds(this.AbilityCooldownTime(aCard.Charges.ChargeCooldown));
-        if (update.AbilityCharges == 0)
+        if (update.AbilityCharges < aCard.Charges.MaxCharges)
         {
             update.AbilityChargeCooldownEnd = (ulong)TimeTillNextAbilityCharge.Value.ToUnixTimeMilliseconds();
         }
@@ -760,6 +753,11 @@ public partial class Unit
         TimeTillNextAbilityCharge = update.AbilityCharges < aCard.Charges.MaxCharges
             ? DateTimeOffset.Now.AddSeconds(this.AbilityCooldownTime(aCard.Charges.ChargeCooldown))
             : null;
+
+        if (update.AbilityCharges < aCard.Charges.MaxCharges && TimeTillNextAbilityCharge.HasValue)
+        {
+            update.AbilityChargeCooldownEnd = (ulong)TimeTillNextAbilityCharge.Value.ToUnixTimeMilliseconds();
+        }
     }
 
     public void AbilityChargeGained()
@@ -851,13 +849,14 @@ public partial class Unit
             }
             UnitsInAuraSinceLastUpdate[effect] = [];
         }
-
+        
         WinningTeam = TeamType.Neutral;
         UpdateData(new UnitUpdate
         {
             Team = confuser.Team
         });
         _wasConfused = true;
+        _everConfused = true;
     }
 
     private void OnUnconfused()
@@ -886,6 +885,7 @@ public partial class Unit
             UnitsInAuraSinceLastUpdate[effect] = [];
         }
         
+
         WinningTeam = TeamType.Neutral;
         UpdateData(new UnitUpdate
         {
@@ -956,6 +956,9 @@ public partial class Unit
         RespawnTime = null;
         WinningTeam = TeamType.Neutral;
         IsDead = false;
+        Id = _updater.OnChangeId(this);
+        LastMoveTime = DateTimeOffset.Now;
+        WasAfkWarned = false;
         if (vectorSpawnRotation is not null)
         {
             Transform = new ZoneTransform
@@ -969,8 +972,7 @@ public partial class Unit
             Transform = ZoneTransformHelper.ToZoneTransform(spawnPosition, spawnRotation);
         }
 
-        IsDropped = false;
-        _updater.OnRespawn(this, GetInitData(), ZoneService);
+        var initData = GetInitData();
         
         var startingEffects = InitialEffects.ToDictionary();
 
@@ -1040,6 +1042,9 @@ public partial class Unit
         var uCard = UnitCard;
         
         TimeRespawning.Stop();
+        
+        _updater.OnRespawn(this, initData, ZoneService);
+        IsDropped = false;
         UpdateData(new UnitUpdate
         {
             Team = Team,
@@ -1059,7 +1064,7 @@ public partial class Unit
             Resource = Resource,
             Effects = ActiveEffects.ToInfoDictionary(),
             Devices = Devices
-        });
+        }, unbuffered: true);
         
         return true;
     }

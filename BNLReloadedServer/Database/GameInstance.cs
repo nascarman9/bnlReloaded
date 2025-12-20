@@ -5,6 +5,7 @@ using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Servers;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
+using Moserware.Skills;
 using NetCoreServer;
 using Timer = System.Timers.Timer;
 
@@ -12,13 +13,13 @@ namespace BNLReloadedServer.Database;
 
 public class GameInstance : IGameInstance
 {
-    private class MatchConnectionInfo(Guid guid, Guid regionGuid, TeamType team, bool isSpectator)
+    private class MatchConnectionInfo(Guid guid, Guid regionGuid, TeamType team, ulong? squadId)
     {
         public Guid Guid { get; set; } = guid;
         public Guid RegionGuid { get; set; } = regionGuid;
         public TeamType Team { get; } = team;
-        public bool IsSpectator { get; } = isSpectator;
         public ZoneLoadStage LoadStage { get; set; } = ZoneLoadStage.None;
+        public ulong? SquadId { get; } = squadId;
     }
     
     private TcpServer Server { get; }
@@ -28,6 +29,7 @@ public class GameInstance : IGameInstance
     private IGameInitiator GameInitiator { get; }
     
     public bool IsStarted { get; private set; }
+    public bool? HasEnded => Zone?.HasEnded;
     
     private Key MatchKey { get; set; }
     private MapInfo? MapInfo { get; set; }
@@ -93,10 +95,12 @@ public class GameInstance : IGameInstance
 
     public bool HasLobby() => Lobby != null;
 
+    public bool IsOver() => HasEnded is true;
+
     public void LinkGuidToPlayer(uint userId, Guid guid, Guid regionGuid)
     {
         var playerTeam = GameInitiator.GetTeamForPlayer(userId);
-        var isSpectator = GameInitiator.IsPlayerSpectator(userId);
+        var squadId = _serverDatabase.GetSquadId(userId);
         if (_connectedUsers.TryGetValue(userId, out var connectedUser))
         {
             connectedUser.Guid = guid;
@@ -105,9 +109,10 @@ public class GameInstance : IGameInstance
         }
         else
         {
-            _connectedUsers[userId] = new MatchConnectionInfo(guid, regionGuid, playerTeam, isSpectator);
+            _connectedUsers[userId] = new MatchConnectionInfo(guid, regionGuid, playerTeam, squadId);
         }
-        if (_services[regionGuid][ServiceId.ServiceChat] is not IServiceChat chatService) return;
+        if (!_services.TryGetValue(regionGuid, out var svc) ||
+            !svc.TryGetValue(ServiceId.ServiceChat, out var service) || service is not IServiceChat chatService) return;
         ChatRooms.BothTeamsRoom.AddToRoom(regionGuid, chatService);
         switch (playerTeam)
         {
@@ -126,11 +131,22 @@ public class GameInstance : IGameInstance
     public void UserEnteredLobby(uint userId)
     {
         if (!_connectedUsers.TryGetValue(userId, out var value) || Lobby == null) return;
-        Lobby.EnqueueAction(() => Lobby.AddPlayer(userId, value.Team));
+        if (!GameInitiator.IsPlayerSpectator(userId))
+        {
+            Lobby.EnqueueAction(() => Lobby.AddPlayer(userId, value.Team, value.SquadId));
+            if (IsStarted)
+            {
+                ChatRooms.BothTeamsRoom.SendServiceMessage(CatalogueStringHelper.OnEnterChat, true, new Dictionary<string, string>
+                {
+                    { "player_id", userId.ToString() }
+                });
+            }
+        }
+        
         var playerGuid = value.Guid;
         _lobbySender.Subscribe(playerGuid);
-        _services.TryGetValue(playerGuid, out var service);
-        if (service?[ServiceId.ServiceLobby] is ServiceLobby lobbyService)
+        _services.TryGetValue(playerGuid, out var services);
+        if (services?.TryGetValue(ServiceId.ServiceLobby, out var service) is true && service is IServiceLobby lobbyService)
         {
             lobbyService.SendLobbyUpdate(Lobby.GetLobbyUpdate(userId));
         }
@@ -138,7 +154,8 @@ public class GameInstance : IGameInstance
 
     private void RemoveFromChat(MatchConnectionInfo? player)
     {
-        if (player == null || _services[player.RegionGuid][ServiceId.ServiceChat] is not IServiceChat chatService) return;
+        if (player == null || !_services.TryGetValue(player.RegionGuid, out var svc) ||
+            !svc.TryGetValue(ServiceId.ServiceChat, out var service) || service is not IServiceChat chatService) return;
         ChatRooms.BothTeamsRoom.RemoveFromRoom(player.RegionGuid, chatService);
         switch (player.Team)
         {
@@ -156,9 +173,26 @@ public class GameInstance : IGameInstance
 
     public void PlayerDisconnected(uint userId)
     {
-        RemoveFromChat(_connectedUsers[userId]);
-        Lobby?.EnqueueAction(() => Lobby?.PlayerDisconnected(userId));
-        Zone?.EnqueueAction(() => Zone?.PlayerDisconnected(userId));
+        if (!_connectedUsers.TryGetValue(userId, out var player)) return;
+        RemoveFromChat(player);
+        Lobby?.EnqueueAction(() =>
+        {
+            _lobbySender.Unsubscribe(player.Guid);
+            Lobby?.PlayerDisconnected(userId);
+        });
+        Zone?.EnqueueAction(() =>
+        {
+            _zoneSender.Unsubscribe(player.Guid);
+            Zone?.PlayerDisconnected(userId);
+        });
+
+        if (!GameInitiator.IsPlayerSpectator(userId) && IsStarted)
+        {
+            ChatRooms.BothTeamsRoom.SendServiceMessage(CatalogueStringHelper.OnDisconnected, true, new Dictionary<string, string>
+            {
+                { "player_id", userId.ToString() }
+            });
+        }
     }
     
     public void PlayerLeftInstance(uint userId, KickReason reason)
@@ -166,8 +200,41 @@ public class GameInstance : IGameInstance
         _connectedUsers.TryRemove(userId, out var player);
         RemoveFromChat(player);
         
-        Lobby?.EnqueueAction(() => Lobby?.PlayerLeft(userId));
-        Zone?.EnqueueAction(() => Zone?.PlayerLeft(userId, reason));
+        IServiceLobby? serviceLobby = null;
+        if (player?.Guid is not null && HasLobby() && _services.TryGetValue(player.Guid, out var services) &&
+            services.TryGetValue(ServiceId.ServiceLobby, out var lobby) && lobby is IServiceLobby lobbyService)
+        {
+            serviceLobby = lobbyService;
+        }
+        
+        Lobby?.EnqueueAction(() =>
+        {
+            if (player?.Guid is not null)
+                _lobbySender.Unsubscribe(player.Guid);
+            Lobby?.PlayerLeft(userId, serviceLobby);
+        });
+
+        Zone?.EnqueueAction(() =>
+        {
+            if (player?.Guid is not null)
+                _zoneSender.Unsubscribe(player.Guid);
+            
+            if (Zone?.PlayerLeft(userId, reason) is true)
+            {
+                ChatRooms.BothTeamsRoom.SendServiceMessage(
+                    reason is KickReason.MatchInactivity 
+                        ? CatalogueStringHelper.OnInactivity
+                        : reason is KickReason.Cheating or KickReason.Admin 
+                            ? CatalogueStringHelper.OnKicked 
+                            : Zone?.HasEnded is true 
+                                ? CatalogueStringHelper.OnLeaveMatch 
+                                : CatalogueStringHelper.OnQuit, 
+                        true, new Dictionary<string, string>
+                        { 
+                            { "player_id", userId.ToString() }
+                        });
+            }
+        });
 
         _serverDatabase.RemoveFromGameInstance(userId, GameInstanceId);
 
@@ -176,17 +243,41 @@ public class GameInstance : IGameInstance
         IsStarted = false;
         Lobby?.Stop();
         Zone?.Stop();
+        ChatRooms.ClearRooms();
         Lobby = null;
         Zone = null;
-        GameInitiator.ClearInstance();
+        GameInitiator.ClearInstance(GameInstanceId);
         _serverDatabase.RemoveGameInstance(GameInstanceId);
     }
+
+    public void RemoveAllFromSquad(ulong squadId, Action<uint>? onRemove = null)
+    {
+        foreach (var playerId in _connectedUsers.Where(p => p.Value.SquadId == squadId).Select(k => k.Key).ToList())
+        {
+            onRemove?.Invoke(playerId);
+            PlayerLeftInstance(playerId, KickReason.MatchQuit);
+        }
+    }
+
+    public void RemoveAllPlayers(Action<uint>? onRemove = null)
+    {
+        foreach (var playerId in _connectedUsers.Keys)
+        {
+            onRemove?.Invoke(playerId);
+            PlayerLeftInstance(playerId, KickReason.MatchQuit);
+        }
+    }
+
+    public void NotifyExitToCustom() =>
+        ChatRooms.BothTeamsRoom.SendServiceMessage(CatalogueStringHelper.ReturnToCustomHost, true);
 
     public void SetMap(MapInfo? mapInfo, MapData map)
     {
         MapInfo = mapInfo;
         MapData = map;
     }
+
+    public bool IsMapNull() => MapInfo is null && MapData is null;
 
     public void SetMatchKey(Key matchKey)
     {
@@ -260,6 +351,21 @@ public class GameInstance : IGameInstance
         return ChatRooms[roomId];
     }
 
+    public Key GetGameMode() => GameInitiator.GetGameMode();
+
+
+    public bool NeedsBackfill() => GameInitiator.NeedsBackfill();
+
+    public (Dictionary<uint, Rating> team1, Dictionary<uint, Rating> team2) GetTeamRatings() =>
+        GameInitiator.GetTeamRatings();
+
+    public void SendAfkWarning(uint playerId) =>
+        ChatRooms.BothTeamsRoom.SendServiceMessage("<PLAYER> will be kicked soon if they remain inactive", false,
+            new Dictionary<string, string>
+            {
+                { "player_id", playerId.ToString() }
+            });
+
     public void SwapHero(uint playerId, Key hero) => Lobby?.EnqueueAction(() => Lobby?.SwapHero(playerId, hero));
 
     public void UpdateDeviceSlot(uint playerId, int slot, Key? deviceKey) =>
@@ -298,7 +404,7 @@ public class GameInstance : IGameInstance
         UploadZoneData(playerId, player);
     }
 
-    public void StartMatch(List<PlayerLobbyState> playerList)
+    public void StartMatch(ICollection<PlayerLobbyState> playerList)
     {
         if (MapData == null) return;
         GameInitiator.StartIntoMatch();
@@ -341,23 +447,27 @@ public class GameInstance : IGameInstance
     private void BeginGame()
     {
         Zone?.BeginBuildPhase();
+        Lobby?.StartGame();
         IsStarted = true;
     }
 
     public void SendUserToZone(uint playerId)
     {
-        if (Lobby != null)
+        if (Lobby != null && !GameInitiator.IsPlayerSpectator(playerId))
         {
             var playerDatabase = Databases.PlayerDatabase;
             var lobbyData = Lobby.GetPlayerLobbyState(playerId);
-            playerDatabase.UpdateLastPlayedHero(playerId, lobbyData.Hero);
-            playerDatabase.UpdateLoadout(playerId, lobbyData.Hero, new LobbyLoadout
+            if (lobbyData != null)
             {
-                Devices = lobbyData.Devices,
-                HeroKey = lobbyData.Hero,
-                Perks = lobbyData.Perks,
-                SkinKey = lobbyData.SkinKey
-            });
+                playerDatabase.UpdateLastPlayedHero(playerId, lobbyData.Hero);
+                playerDatabase.UpdateLoadout(playerId, lobbyData.Hero, new LobbyLoadout
+                {
+                    Devices = lobbyData.Devices,
+                    HeroKey = lobbyData.Hero,
+                    Perks = lobbyData.Perks,
+                    SkinKey = lobbyData.SkinKey
+                });
+            }
         }
         
         var scene = new SceneZone
@@ -375,7 +485,8 @@ public class GameInstance : IGameInstance
     private void UploadZoneData(uint playerId, MatchConnectionInfo player)
     {
         var playerGuid = player.Guid;
-        if (_services[playerGuid][ServiceId.ServiceZone] is not IServiceZone zoneService) return;
+        if (!_services.TryGetValue(playerGuid, out var svc) ||
+            !svc.TryGetValue(ServiceId.ServiceZone, out var service) || service is not IServiceZone zoneService) return;
         switch (player.LoadStage)
         {
             case ZoneLoadStage.InitZone:
@@ -405,7 +516,7 @@ public class GameInstance : IGameInstance
                             zoneService.SendBlockUpdates(Zone.BeginningZoneInitData.Updates);
                         }
                             
-                        Zone?.JoinedInProgress(playerId);
+                        Zone?.JoinedInProgress(playerId, zoneService);
                     }
                     else
                     {
@@ -510,11 +621,11 @@ public class GameInstance : IGameInstance
     public void SelectSpawnPoint(uint playerId, uint? spawnId) =>
         Zone?.EnqueueAction(() => Zone?.ReceivedSelectSpawnPoint(playerId, spawnId));
 
-    public void TurretTarget(uint turretId, uint targetId) =>
-        Zone?.EnqueueAction(() => Zone?.ReceivedTurretTarget(turretId, targetId));
+    public void TurretTarget(uint playerId, uint turretId, uint targetId) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedTurretTarget(playerId, turretId, targetId));
 
-    public void TurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots) =>
-        Zone?.EnqueueAction(() => Zone?.ReceivedTurretAttack(turretId, shotPos, shots));
+    public void TurretAttack(uint playerId, uint turretId, Vector3 shotPos, List<ShotData> shots) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedTurretAttack(playerId, turretId, shotPos, shots));
 
     public void MortarAttack(uint mortarId, Vector3 shotPos, List<ShotData> shots) =>
         Zone?.EnqueueAction(() => Zone?.ReceivedMortarAttack(mortarId, shotPos, shots));
@@ -537,8 +648,8 @@ public class GameInstance : IGameInstance
     public void SurrenderVote(uint playerId, bool accept) =>
         Zone?.EnqueueAction(() => Zone?.ReceivedSurrenderVoteRequest(playerId, accept));
 
-    public void EditorCommand(uint playerId, MapEditorCommand command) =>
-        Zone?.EnqueueAction(() => Zone?.ReceivedEditorCommand(playerId, command));
+    public void EditorCommand(uint playerId, MapEditorCommand command, bool force) =>
+        Zone?.EnqueueAction(() => Zone?.ReceivedEditorCommand(playerId, command, force));
 
     private void OnLoadTimerElapsed(object? sender, ElapsedEventArgs e)
     {

@@ -13,6 +13,7 @@ public class PlayerDatabase : IPlayerDatabase
     private record PlayerToken(uint PlayerId, DateTimeOffset Timestamp);
     
     private readonly ConcurrentDictionary<uint, PlayerData> _players = new();
+    private readonly ConcurrentDictionary<uint, List<ulong>> _steamFriends = new();
     
     private readonly ConcurrentDictionary<uint, TaskCompletionSource<PlayerData>> _playerTasks = new();
     
@@ -102,7 +103,11 @@ public class PlayerDatabase : IPlayerDatabase
         return true;
     }
 
-    public bool RemovePlayer(uint playerId) => _players.Remove(playerId, out _);
+    public bool RemovePlayer(uint playerId)
+    {
+        _steamFriends.Remove(playerId, out _);
+        return _players.Remove(playerId, out _);
+    }
 
     public uint? GetPlayerId(ulong steamId) => _players.Values.FirstOrDefault(p => p.SteamId == steamId)?.PlayerId;
     
@@ -201,6 +206,8 @@ public class PlayerDatabase : IPlayerDatabase
         return playerData;
     }
 
+    public PlayerData? GetPlayerDataNoWait(uint playerId) => _players.GetValueOrDefault(playerId);
+
     public PlayerUpdate? GetFullPlayerUpdate(uint playerId)
     {
         if (!_players.TryGetValue(playerId, out var player))
@@ -210,14 +217,17 @@ public class PlayerDatabase : IPlayerDatabase
         
         var globalLogic = CatalogueHelper.GlobalLogic;
         var rewardsLogic = CatalogueHelper.RewardsLogic;
+        var friends = GetFriends(playerId).Result;
+        var requestsFor = GetFriendRequestsFor(playerId).Result;
+        var requestsFrom = GetFriendRequestsFrom(playerId).Result;
         return new PlayerUpdate
         {
             Nickname = player.Nickname,
             League = player.League,
             Progression = player.Progression,
-            Friends = [],
-            RequestsFromFriends = [],
-            RequestsFromMe = [],
+            Friends = friends,
+            RequestsFromFriends = requestsFor,
+            RequestsFromMe = requestsFrom,
             Merits = globalLogic.MeritLogic?.MeritInitial ?? 25f,
             LeaverRating = globalLogic.LeaverRating?.InitValue ?? 0,
             LeaverState = LeaverState.Normal,
@@ -309,7 +319,9 @@ public class PlayerDatabase : IPlayerDatabase
     public LobbyLoadout GetLoadoutForHero(uint playerId, Key heroKey, bool defaultLoadout = false)
     {
         var heroData = Databases.Catalogue.GetCard<CardUnit>(heroKey)?.Data as UnitDataPlayer;
-        if (defaultLoadout || !_players.TryGetValue(playerId, out var player) || !player.HeroLoadouts.TryGetValue(heroKey, out var loadout))
+        if (defaultLoadout || !_players.TryGetValue(playerId, out var player) ||
+            !player.HeroLoadouts.TryGetValue(heroKey, out var loadout) || loadout.HeroKey == Key.None ||
+            loadout.SkinKey == Key.None || loadout.Devices is null || loadout.Perks is null)
         {
             return new LobbyLoadout
             {
@@ -376,12 +388,107 @@ public class PlayerDatabase : IPlayerDatabase
 
     public async Task<List<SearchResult>?> GetSearchResults(string pattern) =>
         await _serviceRegionServer.SendProfileSearchRequest(pattern);
+    
+    public async Task<List<FriendInfo>> GetFriends(uint playerId)
+    {
+        if (!_players.TryGetValue(playerId, out var player))
+        {
+            return [];
+        }
+        
+        var friends = new List<FriendInfo>();
+        var friendInfo = await _serviceRegionServer.SendFriendSearchRequest(player.Friends);
+        if (friendInfo == null) return friends;
+        foreach (var friend in friendInfo)
+        {
+            var online = _players.TryGetValue(friend.PlayerId, out var friendData);
+            friends.Add(new FriendInfo
+            {
+                PlayerId = friend.PlayerId,
+                SteamId = friend.SteamId,
+                Nickname = friend.Nickname,
+                Online = online,
+                InMainMenu = online && Databases.RegionServerDatabase.GetLastScene(friend.PlayerId) is SceneMainMenu,
+                Region = friendData?.Region
+            });
+        }
+
+        if (!_steamFriends.TryGetValue(playerId, out var steamFriends)) return friends;
+        
+        var steamInfo = await _serviceRegionServer.SendFriendSearchSteamRequest(steamFriends);
+        if (steamInfo == null) return friends;
+        foreach (var friend in steamInfo)
+        {
+            var online = _players.TryGetValue(friend.PlayerId, out var friendData);
+            if (friends.All(f => f.PlayerId != friend.PlayerId))
+            {
+                friends.Add(new FriendInfo
+                {
+                    PlayerId = friend.PlayerId,
+                    SteamId = friend.SteamId,
+                    Nickname = friend.Nickname,
+                    Online = online,
+                    InMainMenu = online && Databases.RegionServerDatabase.GetLastScene(friend.PlayerId) is SceneMainMenu,
+                    Region = friendData?.Region
+                });
+            }
+        }
+
+        return friends;
+    }
+
+    public async Task<List<FriendRequest>> GetFriendRequestsFor(uint playerId)
+    {
+        if (!_players.TryGetValue(playerId, out var player))
+        {
+            return [];
+        }
+        
+        var friendsRequests = new List<FriendRequest>();
+        var friendInfo = await _serviceRegionServer.SendFriendSearchRequest(player.RequestsFromFriends);
+        if (friendInfo == null) return friendsRequests;
+        friendsRequests.AddRange(friendInfo.Select(friend => new FriendRequest
+            { PlayerId = friend.PlayerId, SteamId = friend.SteamId, Nickname = friend.Nickname }));
+
+        return friendsRequests;
+    }
+    
+    public async Task<List<FriendRequest>> GetFriendRequestsFrom(uint playerId)
+    {
+        if (!_players.TryGetValue(playerId, out var player))
+        {
+            return [];
+        }
+        
+        var friendsRequests = new List<FriendRequest>();
+        var friendInfo = await _serviceRegionServer.SendFriendSearchRequest(player.RequestsFromMe);
+        if (friendInfo == null) return friendsRequests;
+        friendsRequests.AddRange(friendInfo.Select(friend => new FriendRequest
+            { PlayerId = friend.PlayerId, SteamId = friend.SteamId, Nickname = friend.Nickname }));
+
+        return friendsRequests;
+    }
+
+    public async Task<List<LeagueLeaderboardRecord>?> GetLeaderboard() =>
+        await _serviceRegionServer.SendLeagueLeaderboardRequest();
+
+    public bool IsBanned(uint playerId)
+    {
+        if (_players.TryGetValue(playerId, out var player))
+        {
+            return player.MatchmakerBanEnd is not null &&
+                   DateTimeOffset.FromUnixTimeMilliseconds((long)player.MatchmakerBanEnd.Value) > DateTimeOffset.Now;
+        }
+        
+        return false;
+    }
 
     public void SetPlayerName(uint playerId, string name)
     {
         if (_players.TryGetValue(playerId, out var player))
         {
             player.Nickname = name;
+            Databases.RegionServerDatabase.UpdateChatName(playerId, name);
         }
         
         _serviceRegionServer.SendUsername(playerId, name);
@@ -420,6 +527,35 @@ public class PlayerDatabase : IPlayerDatabase
                 player.Rating = rating;
             }
         }
+    }
+
+    public void SetFriendsInfo(uint playerId, List<uint>? friends, List<uint>? requestsFor, List<uint>? requestsFrom)
+    {
+        if (!_players.TryGetValue(playerId, out var player))
+        {
+            return;
+        }
+
+        if (friends != null)
+        {
+            player.Friends = friends;
+            Databases.RegionServerDatabase.NotifyFriends(playerId);
+        }
+
+        if (requestsFor != null)
+        {
+            player.RequestsFromFriends = requestsFor;
+        }
+
+        if (requestsFrom != null)
+        {
+            player.RequestsFromMe = requestsFrom;
+        }
+    }
+
+    public void SetSteamFriends(uint playerId, List<ulong> steamFriends)
+    {
+        _steamFriends[playerId] = steamFriends;
     }
 
     public void UpdatePlayer(uint playerId, PlayerUpdate update)
@@ -508,13 +644,8 @@ public class PlayerDatabase : IPlayerDatabase
     public void UpdateLoadout(uint playerId, Key hero, LobbyLoadout loadout) =>
         _serviceRegionServer.SendHeroLoadout(playerId, hero, loadout);
 
-    public void UpdateLookingForFriends(uint playerId, bool lookingForFriends)
-    {
-        if (_players.TryGetValue(playerId, out var player))
-        {
-            player.LookingForFriends = lookingForFriends;
-        }
-    }
+    public void UpdateLookingForFriends(uint playerId, bool lookingForFriends) => 
+        _serviceRegionServer.SendLookingForFriends(playerId, lookingForFriends);
 
     public void UpdateLastPlayedHero(uint playerId, Key heroKey) => 
         _serviceRegionServer.SendLastPlayedHero(playerId, heroKey);
@@ -531,4 +662,10 @@ public class PlayerDatabase : IPlayerDatabase
 
     public void UpdateMatchStats(EndMatchResults endMatchResults) =>
         _serviceRegionServer.SendMatchEndedForPlayer(endMatchResults);
+
+    public void UpdateFriends(uint receiverId, uint senderId, bool accepted) =>
+        _serviceRegionServer.SendFriendUpdate(receiverId, senderId, accepted);
+
+    public void UpdateFriendRequest(uint receiverId, uint senderId) =>
+        _serviceRegionServer.SendFriendRequest(receiverId, senderId);
 }

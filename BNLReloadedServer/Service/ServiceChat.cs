@@ -121,7 +121,7 @@ public class ServiceChat(ISender sender) : IServiceChat
         sender.Send(writer);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceChatId = reader.ReadByte();
         ServiceChatId? chatEnum = null;
@@ -148,7 +148,9 @@ public class ServiceChat(ISender sender) : IServiceChat
                 break;
             default:
                 Console.WriteLine($"Unknown service chat id {serviceChatId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

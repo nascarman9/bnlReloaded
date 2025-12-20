@@ -9,7 +9,9 @@ public class Configs
     public bool UseMasterCdb { get; init; }
     public string? CdbName { get; init; }
     public required string MasterHost { get; init; }
+    public required string MasterPublicHost { get; init; }
     public required string RegionHost { get; init; }
+    public required string RegionPublicHost { get; init; }
     public required string RegionName { get; init; }
     public required string RegionIcon { get; init; }
     public bool ToJson { get; init; }

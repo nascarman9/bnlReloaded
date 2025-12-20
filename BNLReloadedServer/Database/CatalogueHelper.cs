@@ -101,7 +101,11 @@ public static class CatalogueHelper
         new("gear_doc_eliza_chem_grenade_perk_splashing_damage"),
         new("gear_doc_eliza_chem_grenade_beautiful_bubbles_1"),
         new("gear_doc_eliza_chem_grenade_beautiful_bubbles_2"),
-        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_3"),
+        new("gear_doc_eliza_chem_grenade_beautiful_bubbles_3")
+    ];
+
+    public static readonly List<Key> NerveGasKeys =
+    [
         new("gear_trondson_kobold_lamps_nerve_gas")
     ];
 
@@ -125,12 +129,12 @@ public static class CatalogueHelper
     {
         public T GetCategory<T>() where T : ShopCategory
         {
-            return shop.Categories!.Find((Predicate<ShopCategory>) (c => c is T)) as T;
+            return shop.Categories.Find((Predicate<ShopCategory>) (c => c is T)) as T;
         }
 
         public List<T> GetCategories<T>() where T : ShopCategory
         {
-            return shop.Categories!.FindAll((Predicate<ShopCategory>) (c => c is T)).ConvertAll((Converter<ShopCategory, T>) (c => c as T));
+            return shop.Categories.FindAll((Predicate<ShopCategory>) (c => c is T)).ConvertAll((Converter<ShopCategory, T>) (c => c as T));
         }
     }
 
@@ -222,7 +226,7 @@ public static class CatalogueHelper
     {
         if (level <= 1) 
             return 0.0f;
-        var playerXp = GlobalLogic.XpLogic!.PlayerXp!;
+        var playerXp = GlobalLogic.XpLogic?.PlayerXp;
         return (float) (playerXp.FlatCoeff + playerXp.MultCoeff * Math.Pow((float) (level - 1), playerXp.PowerCoeff));
     }
     
@@ -230,8 +234,8 @@ public static class CatalogueHelper
     {
         if (level <= 1)
             return 0.0f;
-        var heroXp = GlobalLogic.XpLogic!.HeroXp;
-        return (float) (heroXp!.FlatCoeff + heroXp.MultCoeff * Math.Pow((float) (level - 1), heroXp.PowerCoeff));
+        var heroXp = GlobalLogic.XpLogic?.HeroXp;
+        return (float) (heroXp.FlatCoeff + heroXp.MultCoeff * Math.Pow((float) (level - 1), heroXp.PowerCoeff));
     }
 
     public static XpInfo LeveLUp(XpInfo xpInfo, float xpAmount)
@@ -244,14 +248,15 @@ public static class CatalogueHelper
             XpForNextLevel = xpInfo.XpForNextLevel
         };
         
-        while (xp >= newXp.XpForNextLevel)
+        while (newXp.LevelXp + xp >= newXp.XpForNextLevel)
         {
-            xp -= newXp.LevelXp;
-            newXp.Level++;
+            xp -= newXp.XpForNextLevel - newXp.LevelXp;
+            newXp.Level += 1;
             newXp.LevelXp = 0;
             newXp.XpForNextLevel = PlayerXpForLevel(newXp.Level);
         }
-        
+
+        newXp.LevelXp += xp;
         return newXp;
     }
     
@@ -265,14 +270,15 @@ public static class CatalogueHelper
             XpForNextLevel = xpInfo.XpForNextLevel
         };
         
-        while (xp >= newXp.XpForNextLevel)
+        while (newXp.LevelXp + xp >= newXp.XpForNextLevel)
         {
-            xp -= newXp.LevelXp;
-            newXp.Level++;
+            xp -= newXp.XpForNextLevel - newXp.LevelXp;
+            newXp.Level += 1;
             newXp.LevelXp = 0;
             newXp.XpForNextLevel = HeroXpForLevel(newXp.Level);
         }
         
+        newXp.LevelXp += xp;
         return newXp;
     }
 

@@ -16,12 +16,17 @@ public class DummyConfigDatabase : IConfigDatabase
     public bool UseMasterCdb() => false;
     
     public string MasterHost() => "127.0.0.1";
-    
+    public string MasterPublicHost() => "127.0.0.1";
+
     public IPAddress MasterIp() => IPAddress.Parse(MasterHost());
 
     public string RegionHost() => "127.0.0.1";
     
+    public string RegionPublicHost() => "127.0.0.1";
+
     public IPAddress RegionIp() => IPAddress.Parse(RegionHost());
+    
+    public IPAddress RegionPublicIp() => IPAddress.Parse(RegionPublicHost());
 
     public RegionGuiInfo GetRegionInfo() => new()
     {

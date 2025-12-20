@@ -11,9 +11,12 @@ public interface IConfigDatabase
     public bool DoRunServer();
     public bool UseMasterCdb();
     public string MasterHost();
+    public string MasterPublicHost();
     public IPAddress MasterIp();
     public string RegionHost();
+    public string RegionPublicHost();
     public IPAddress RegionIp();
+    public IPAddress RegionPublicIp();
     public RegionGuiInfo GetRegionInfo();
     public string ToJsonCdbName();
     public string FromJsonCdbName();

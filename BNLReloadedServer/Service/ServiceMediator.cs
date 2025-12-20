@@ -24,11 +24,12 @@ public class ServiceMediator(ISender sender) : IServiceMediator
         sender.Send(writer);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceMediatorId = reader.ReadByte();
         Console.WriteLine($"ServiceMediatorId: {serviceMediatorId}");
         Console.WriteLine($"Mediator service received unsupported serviceId: {serviceMediatorId}");
+        return false;
     }
 
 }

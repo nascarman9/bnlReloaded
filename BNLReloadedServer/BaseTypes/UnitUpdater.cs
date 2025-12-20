@@ -19,10 +19,11 @@ public delegate float GetResourceCap();
 public delegate void UpdateMatchStats(Unit player, int? kills = null, int? deaths = null, int? assists = null);
 public delegate void OnUnitDamaged(Unit target, float damage, ImpactData impact);
 public delegate void OnUnitKilled(Unit target, ImpactData impact, bool mining = false);
-public delegate void OnUnitDrop(Unit target);
 public delegate void LinkPortal(Unit unit, bool unlink = false);
 public delegate void OnPull(Unit unit, ManeuverPull maneuverPull);
 public delegate void OnRespawn(Unit unit, UnitInit unitInit, IServiceZone creatorService);
+public delegate void OnDisarmed(Unit unit);
+public delegate uint OnChangeId(Unit unit);
 public delegate Unit? GetPlayerFromPlayerId(uint playerId);
 public delegate bool EnqueueAction(Action action);
 
@@ -40,9 +41,10 @@ public record UnitUpdater(
     UpdateMatchStats UpdateMatchStats,
     OnUnitDamaged OnUnitDamaged,
     OnUnitKilled OnUnitKilled,
-    OnUnitDrop OnUnitDrop,
     LinkPortal LinkPortal,
     OnPull OnPull,
     OnRespawn OnRespawn,
+    OnDisarmed OnDisarmed,
+    OnChangeId OnChangeId,
     GetPlayerFromPlayerId GetPlayerFromPlayerId,
     EnqueueAction EnqueueAction);

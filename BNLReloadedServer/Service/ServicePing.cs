@@ -45,7 +45,7 @@ public class ServicePing(ISender sender) : IServicePing
         sender.Send(writer);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var servicePingId = reader.ReadByte();
         ServicePingId? pingEnum = null;
@@ -69,7 +69,9 @@ public class ServicePing(ISender sender) : IServicePing
                 break;
             default:
                 Console.WriteLine($"Unknown service ping id {servicePingId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

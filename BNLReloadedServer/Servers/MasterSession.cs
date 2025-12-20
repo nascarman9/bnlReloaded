@@ -2,87 +2,46 @@
 using BNLReloadedServer.Database;
 using NetCoreServer;
 
-namespace BNLReloadedServer.Servers
+namespace BNLReloadedServer.Servers;
+
+internal class MasterSession : TcpSession
 {
-    internal class MasterSession : TcpSession
+    private readonly SessionReader _reader;
+    private bool _connected;
+
+    public MasterSession(TcpServer server) : base(server)
     {
-        private readonly MasterServiceDispatcher _serviceDispatcher;
-        private readonly SessionSender _sender;
+        var sender = new SessionSender(server, Id, this);
+        var serviceDispatcher = new MasterServiceDispatcher(sender, Id);
+        _reader = new SessionReader(serviceDispatcher, Databases.ConfigDatabase.DebugMode(),
+            "Master server received packet with incorrect length");
+    }
 
-        public MasterSession(TcpServer server) : base(server)
-        {
-            _sender = new SessionSender(server, Id, this);
-            _serviceDispatcher = new MasterServiceDispatcher(_sender, Id);
-        }
+    protected override void OnConnected()
+    {
+        _connected = true;
+        Console.WriteLine($"Master TCP session with Id {Id} connected!");
+    }
 
-        protected override void OnConnected()
-        {
-            if (Databases.ConfigDatabase.DebugMode())
-            {
-                Console.WriteLine($"Master TCP session with Id {Id} connected!");
-            }
-        }
+    protected override void OnDisconnected()
+    {
+        if (_connected)
+            Console.WriteLine($"Master TCP session with Id {Id} disconnected!");
 
-        protected override void OnDisconnected()
-        {
-            if (Databases.ConfigDatabase.DebugMode())
-            {
-                Console.WriteLine($"Master TCP session with Id {Id} disconnected!");
-            }
+        _connected = false;
+        
+        Databases.MasterServerDatabase.RemoveRegionServer(Id.ToString());
+    }
 
-            Databases.MasterServerDatabase.RemoveRegionServer(Id.ToString());
-        }
+    protected override void OnReceived(byte[] buffer, long offset, long size)
+    {
+        if (size <= 0) return;
+        
+        _reader.ProcessPacket(buffer, offset, size);
+    }
 
-        protected override void OnReceived(byte[] buffer, long offset, long size)
-        {
-            if (size <= 0) return;
-            
-            var memStream = new MemoryStream(buffer, (int)offset, (int)size);
-            using var reader = new BinaryReader(memStream);
-
-            var debugMode = Databases.ConfigDatabase.DebugMode();
-            try
-            {
-                while (reader.BaseStream.Position < reader.BaseStream.Length)
-                {
-                    // The first part of every packet is an 7 bit encoded int of its length.
-                    var packetLength = reader.Read7BitEncodedInt();
-                    var currentPosition = reader.BaseStream.Position;
-                    if (reader.BaseStream.Position + packetLength <= reader.BaseStream.Length)
-                    {
-                        if (debugMode)
-                        {
-                            Console.WriteLine($"Packet length: {packetLength}");
-                            _serviceDispatcher.Dispatch(reader);
-                            Console.WriteLine();
-                        }
-                        else
-                        {
-                            _serviceDispatcher.Dispatch(reader);
-                        }
-                    }
-                    else
-                        break;
-                    
-                    if (reader.BaseStream.Position < currentPosition + packetLength)
-                    {
-                        reader.ReadBytes((int) (currentPosition + packetLength - reader.BaseStream.Position));
-                    }
-                }
-            }
-            catch (EndOfStreamException)
-            {
-                Console.WriteLine("Master server received packet with incorrect length");
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
-        }
-
-        protected override void OnError(SocketError error)
-        {
-            Console.WriteLine($"Master TCP session caught an error with code {error}");
-        }
+    protected override void OnError(SocketError error)
+    {
+        Console.WriteLine($"Master TCP session caught an error with code {error}");
     }
 }

@@ -45,10 +45,11 @@ public class ServiceCatalogue(ISender sender) : IServiceCatalogue
         sender.Send(writer);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceCatalogueId = reader.ReadByte();
         Console.WriteLine($"ServiceCatalogueId: {serviceCatalogueId}");
         Console.WriteLine($"Catalogue service received unsupported serviceId: {serviceCatalogueId}");
+        return false;
     }
 }

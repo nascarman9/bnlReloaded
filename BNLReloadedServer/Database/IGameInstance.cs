@@ -2,24 +2,34 @@
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
+using Moserware.Skills;
 
 namespace BNLReloadedServer.Database;
 
 public interface IGameInstance
 {
     public bool HasLobby();
+    public bool IsOver();
     public void LinkGuidToPlayer(uint userId, Guid guid, Guid regionGuid);
     public void UserEnteredLobby(uint userId);
     // For when players leave via alt+f4
     public void PlayerDisconnected(uint userId);
     // For when players leave via disconnect button
     public void PlayerLeftInstance(uint userId, KickReason reason);
+    public void RemoveAllFromSquad(ulong squadId, Action<uint>? onRemove = null);
+    public void RemoveAllPlayers(Action<uint>? onRemove = null);
+    public void NotifyExitToCustom();
     public void SetMap(MapInfo? mapInfo, MapData map);
+    public bool IsMapNull();
     public void SetMatchKey(Key matchKey);
     public void RegisterServices(Guid sessionId, Dictionary<ServiceId, IService> services);
     public void RemoveService(Guid sessionId);
     public void CreateLobby(Key gameModeKey, MapInfo? mapInfo);
     public ChatRoom? GetChatRoom(RoomId roomId);
+    public Key GetGameMode();
+    public bool NeedsBackfill();
+    public (Dictionary<uint, Rating> team1, Dictionary<uint, Rating> team2) GetTeamRatings();
+    public void SendAfkWarning(uint playerId);
     public void SwapHero(uint playerId, Key hero);
     public void UpdateDeviceSlot(uint playerId, int slot, Key? deviceKey);
     public void SwapDevices(uint playerId, int slot1, int slot2);
@@ -31,7 +41,7 @@ public interface IGameInstance
     public void VoteForMap(uint playerId, Key mapKey);
     public void PlayerReady(uint playerId);
     public void LoadProgressUpdate(uint playerId, float progress);
-    public void StartMatch(List<PlayerLobbyState> playerList);
+    public void StartMatch(ICollection<PlayerLobbyState> playerList);
     public void SendUserToZone(uint playerId);
     public void PlayerEnterScene(uint playerId);
     public void PlayerZoneReady(uint playerId);
@@ -65,8 +75,8 @@ public interface IGameInstance
     public void Fall(uint unitId, float height, bool force);
     public void Pickup(uint playerId, uint pickupId);
     public void SelectSpawnPoint(uint playerId, uint? spawnId);
-    public void TurretTarget(uint turretId, uint targetId);
-    public void TurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots);
+    public void TurretTarget(uint playerId, uint turretId, uint targetId);
+    public void TurretAttack(uint playerId, uint turretId, Vector3 shotPos, List<ShotData> shots);
     public void MortarAttack(uint mortarId, Vector3 shotPos, List<ShotData> shots);
     public void DrillAttack(uint drillId, Vector3 shotPos, List<ShotData> shots);
     public void UpdateTesla(uint teslaId, uint? targetId, List<uint> teslasInRange);
@@ -74,5 +84,5 @@ public interface IGameInstance
     public void StartRecall(uint playerId);
     public void Surrender(ushort rpcId, uint playerId, IServiceZone surrenderService);
     public void SurrenderVote(uint playerId, bool accept);
-    public void EditorCommand(uint playerId, MapEditorCommand command);
+    public void EditorCommand(uint playerId, MapEditorCommand command, bool force);
 }

@@ -9,7 +9,7 @@ public interface IServicePlayer : IService
     public void SendNotifySquadInvite(uint senderId, string nickname);
     public void SendNotifySquadInviteReply(uint receiverId, SquadInviteReplyType reply, string nickname);
     public void SendNotifySquadInviteCancel(uint senderId);
-    public void SendUpdateSquad(SquadUpdate update);
+    public void SendUpdateSquad(SquadUpdate? update);
     public void SendNotifyKickFromSquad();
     public void SendSearchUser(ushort rpcId, List<SearchResult>? data, string? error = null);
     public void SendLookingForFriends(ushort rpcId, string? error = null);

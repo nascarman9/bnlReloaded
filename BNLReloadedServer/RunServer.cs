@@ -31,7 +31,7 @@ if (toJson || fromJson)
             deserializedCards.RemoveAll(c => c is CardMap or CardMapData);
             
             // Add maps
-            foreach (var map in Databases.MapDatabase.LoadMapCards())
+            foreach (var map in Databases.MapDatabase.GetMapCards())
             {
                 var exists = false;
                 foreach (var (_, idx) in deserializedCards.Select((x, idx) => (x, idx))
@@ -127,41 +127,29 @@ if (runServer)
         server = new MasterServer(configs.MasterIp(), 28100);
         
         // Start the server
-        Console.Write("Server starting...");
         server.Start();
-        Console.WriteLine("Done!");
-        Console.WriteLine("Press Enter to stop the server or '!' to restart the server...");
     }
 
     var regionServer = new RegionServer(configs.RegionIp(), 28101);
     regionServer.OptionNoDelay = true;
-    regionServer.OptionReceiveBufferSize = 10000000;
-    regionServer.OptionSendBufferSize = 10000000;
+    regionServer.OptionSendBufferSize = 16384;
+    regionServer.OptionReceiveBufferSize = 16384;
     var regionClient = new RegionClient(configs.MasterHost(), 28100);
-    regionClient.OptionReceiveBufferSize = 10000000;
-    regionClient.OptionSendBufferSize = 10000000;
     var matchServer = new MatchServer(configs.RegionIp(), 28102);
     matchServer.OptionNoDelay = true;
-    matchServer.OptionReceiveBufferSize = 10000000;
-    matchServer.OptionSendBufferSize = 10000000;
+    matchServer.OptionSendBufferSize = 16384;
+    matchServer.OptionReceiveBufferSize = 16384;
     Databases.SetRegionDatabase(new RegionServerDatabase(regionServer, matchServer));
-
-    Console.Write("Region server starting...");
+   
     regionServer.Start();
-    Console.WriteLine("Done!");
-    
-    Console.Write("Region client connecting...");
     regionClient.ConnectAsync();
-    Console.WriteLine("Done!");
-    
-    Console.Write("Match server starting...");
     matchServer.Start();
-    Console.WriteLine("Done!");
-
+    
+    Console.WriteLine("Press Enter to stop the server or '!' to restart the server...");
     try 
     {
         // Perform text input
-        for (;;)
+        while (true)
         {
             var line = Console.ReadLine();
             if (string.IsNullOrEmpty(line))
