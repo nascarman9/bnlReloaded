@@ -26,7 +26,12 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         MessagePublicKey = 13,
         MessageMatchEnded = 14,
         MessageRatingUpdate = 15,
-        MessageLookingForFriends = 16
+        MessageLookingForFriends = 16,
+        MessageFriend = 17,
+        MessageFriendRequest = 18,
+        MessageFriendSearch = 19,
+        MessageFriendSearchSteam = 20,
+        MessageGetLeaderboard = 21
     }
     
     private readonly IMasterServerDatabase _masterServerDatabase = Databases.MasterServerDatabase;
@@ -173,7 +178,7 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
     {
         var host = reader.ReadString();
         var regionInfo = RegionGuiInfo.ReadRecord(reader);
-        if (host == Databases.ConfigDatabase.MasterHost())
+        if (host == Databases.ConfigDatabase.MasterPublicHost())
         {
             _masterServerDatabase.AddRegionServer("master", host, regionInfo, this);
         }
@@ -181,7 +186,7 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         {
             _masterServerDatabase.AddRegionServer(sessionId.ToString(), host, regionInfo, this);
             SendMasterCdb(CatalogueCache.Load());
-            foreach (var map in CatalogueHelper.GetCards<CardMap>(CardCategory.Map))
+            foreach (var map in Databases.MapDatabase.GetMapCards())
             {
                 if (map.Id is null || Databases.MapDatabase.LoadMapData(Catalogue.Key(map.Id)) is not {} mapData)
                     continue;
@@ -189,7 +194,6 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
                 SendMap(map.Id, map, mapData);
             }
         }
-        
         SendPublicKey(Databases.PlayerDatabase.GetPublicKey());
     }
     
@@ -240,7 +244,7 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         
         _masterServerDatabase.SetNewRatings(winners, losers, excluded);
     }
-
+    
     public void ReceiveLookingForFriends(BinaryReader reader)
     {
         var playerId = reader.ReadUInt32();
@@ -248,8 +252,68 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         
         _masterServerDatabase.SetLookingForFriendsForPlayer(playerId, lookingForFriends);
     }
+    
+    public void SendFriendUpdate(uint playerId, List<uint>? friends, List<uint>? requestsFor, List<uint>? requestsFrom)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceMasterId.MessageFriend);
+        writer.Write(playerId);
+        writer.WriteOption(friends, list => writer.WriteList(list, writer.Write));
+        writer.WriteOption(requestsFor, list => writer.WriteList(list, writer.Write));
+        writer.WriteOption(requestsFrom, list => writer.WriteList(list, writer.Write));
+        sender.Send(writer);
+    }
 
-    public void Receive(BinaryReader reader)
+    public void ReceiveFriendUpdate(BinaryReader reader)
+    {
+        var receiverId = reader.ReadUInt32();
+        var senderId = reader.ReadUInt32();
+        var accepted = reader.ReadBoolean();
+        
+        _masterServerDatabase.SetFriends(receiverId, senderId, accepted);
+    }
+
+    public void ReceiveFriendRequest(BinaryReader reader)
+    {
+        var receiverId = reader.ReadUInt32();
+        var senderId = reader.ReadUInt32();
+        
+        _masterServerDatabase.SetFriendRequest(receiverId, senderId);
+    }
+
+    public void ReceiveFriendSearch(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var players = reader.ReadList<uint, List<uint>>(reader.ReadUInt32);
+
+        SendSearchResults(rpcId, _masterServerDatabase.GetSearchResults(players).Result);
+    }
+    
+    public void ReceiveFriendSearchSteam(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var players = reader.ReadList<ulong, List<ulong>>(reader.ReadUInt64);
+
+        SendSearchResults(rpcId, _masterServerDatabase.GetSearchResults(players).Result);
+    }
+    
+    public void SendLeaderboard(ushort rpcId, List<LeagueLeaderboardRecord> leagueLeaderboard)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceMasterId.MessageGetLeaderboard);
+        writer.Write(rpcId);
+        writer.WriteList(leagueLeaderboard, item => LeagueLeaderboardRecord.WriteRecord(writer, item));
+        sender.Send(writer);
+    }
+
+    public void ReceiveLeaderboard(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        
+        SendLeaderboard(rpcId, _masterServerDatabase.GetLeaderboard().Result);
+    }
+
+    public bool Receive(BinaryReader reader)
     {
         var serviceMasterId = reader.ReadByte();
         ServiceMasterId? masterEnum = null;
@@ -298,9 +362,26 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
             case ServiceMasterId.MessageLookingForFriends:
                 ReceiveLookingForFriends(reader);
                 break;
+            case ServiceMasterId.MessageFriend:
+                ReceiveFriendUpdate(reader);
+                break;
+            case ServiceMasterId.MessageFriendRequest:
+                ReceiveFriendRequest(reader);
+                break;
+            case ServiceMasterId.MessageFriendSearch:
+                ReceiveFriendSearch(reader);
+                break;
+            case ServiceMasterId.MessageFriendSearchSteam:
+                ReceiveFriendSearchSteam(reader);
+                break;
+            case ServiceMasterId.MessageGetLeaderboard:
+                ReceiveLeaderboard(reader);
+                break;
             default:
                 Console.WriteLine($"Master service received unsupported serviceId: {serviceMasterId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

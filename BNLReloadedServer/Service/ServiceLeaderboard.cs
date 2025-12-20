@@ -77,9 +77,19 @@ public class ServiceLeaderboard(ISender sender) : IServiceLeaderboard
     private void ReceiveGetLeagueLeaderboard(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
+
+        var result = Databases.PlayerDatabase.GetLeaderboard().Result;
+        if (result != null)
+        {
+            SendGetLeagueLeaderboard(rpcId, result);
+        }
+        else
+        {
+            SendGetLeagueLeaderboard(rpcId, null, new ELeaderboardUpdateCooldown());
+        }
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceLeaderboardId = reader.ReadByte();
         ServiceLeaderboardId? leaderboardEnum = null;
@@ -103,7 +113,9 @@ public class ServiceLeaderboard(ISender sender) : IServiceLeaderboard
                 break;
             default:
                 Console.WriteLine($"Unknown service leaderboard id {serviceLeaderboardId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

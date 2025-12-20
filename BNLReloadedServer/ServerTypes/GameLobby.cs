@@ -88,7 +88,7 @@ public class GameLobby : Updater
         _currentTimer.Value.timer.Enabled = true;
     }
     
-    public void AddPlayer(uint playerId, TeamType team)
+    public void AddPlayer(uint playerId, TeamType team, ulong? squadId)
     {
         if (!LobbyData.Players.TryGetValue(playerId, out var value))
         {
@@ -96,23 +96,24 @@ public class GameLobby : Updater
             var lastPlayedHero = Databases.PlayerDatabase.GetLastPlayedHero(playerId);
             var loadout = Databases.PlayerDatabase.GetLoadoutForHero(playerId, lastPlayedHero);
             var deviceLevels = Databases.PlayerDatabase.GetDeviceLevels(playerId);
+            var isDraft = LobbyData.GameMode?.LobbyMode is LobbyModeDraftPick;
             var playerState = new PlayerLobbyState
             {
                 PlayerId = playerId,
                 SteamId = profileData.SteamId,
                 Nickname = profileData.Nickname,
-                SquadId = null,
+                SquadId = squadId,
                 Role = PlayerRoleType.None,
                 PlayerLevel = profileData.Progression?.PlayerProgress?.Level ?? 1,
                 SelectedBadges = profileData.SelectedBadges,
                 Team = team,
-                Hero = lastPlayedHero,
-                Devices = loadout.Devices,
-                Perks = loadout.Perks,
+                Hero = isDraft ? Key.None : lastPlayedHero,
+                Devices = isDraft ? new Dictionary<int, Key>() : loadout.Devices,
+                Perks = isDraft ? [] : loadout.Perks,
                 RestrictedHeroes = [],
                 SkinKey = loadout.SkinKey,
                 Ready = LobbyData.Timer.TimerType == LobbyTimerType.Start,
-                CanLoadout = true,
+                CanLoadout = !isDraft,
                 Status = LobbyStatus.Online,
                 LookingForFriends = profileData.LookingForFriends,
                 DeviceLevels = deviceLevels
@@ -120,7 +121,26 @@ public class GameLobby : Updater
             LobbyData.Players.TryAdd(playerId, playerState);
             if (LobbyData.Timer.TimerType == LobbyTimerType.Requeue)
             {
-                LobbyData.RequeuePlayers[team].Add(playerId);
+                if (LobbyData.RequeuePlayers.TryGetValue(team, out var requeue))
+                {
+                    requeue.Add(playerId);
+                }
+                else
+                {
+                    LobbyData.RequeuePlayers.Add(team, [playerId]);
+                }
+                
+                if (!_requeueLobbyTimers.ContainsKey(playerId))
+                {
+                    var timer = GetRequeueTimer(playerId);
+                    var requeueTimer = new Timer(timer.EndTime - timer.StartTime);
+                    requeueTimer.AutoReset = false;
+                    requeueTimer.Elapsed += OnRequeueTimerElapsed;
+                    requeueTimer.Enabled = true;
+                    _requeueTimers.TryAdd(requeueTimer, playerId);
+                    _requeueLobbyTimers.TryAdd(playerId, timer);
+                }
+                
                 SendLobbyUpdate(players: LobbyData.Players.Values.ToList(), requeuePlayers: LobbyData.RequeuePlayers);
                 return;
             }
@@ -134,14 +154,22 @@ public class GameLobby : Updater
 
     public void PlayerDisconnected(uint playerId)
     {
-        if (LobbyData.Players.TryGetValue(playerId, out var value) || value == null) return;
+        if (!LobbyData.Players.TryGetValue(playerId, out var value)) return;
         value.Status = LobbyStatus.Offline;
         SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
     }
 
-    public void PlayerLeft(uint playerId)
+    public void PlayerLeft(uint playerId, IServiceLobby? lobbyService)
     {
-        LobbyData.Players.Remove(playerId, out _);
+        if (_gameInstance.IsOver() && LobbyData.Players.TryGetValue(playerId, out var value))
+        {
+            value.Status = LobbyStatus.Offline;
+        }
+        else
+        {
+            LobbyData.Players.Remove(playerId, out _);
+        }
+        lobbyService?.SendClearLobby();
         SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
     }
 
@@ -274,14 +302,22 @@ public class GameLobby : Updater
         SendLobbyUpdate(maps: LobbyData.Maps);
     }
 
+    public void StartGame() => SendLobbyUpdate(started: true);
+
     public void PlayerReady(uint playerId)
     {
         if (!LobbyData.Players.TryGetValue(playerId, out var player)) return;
         player.Ready = true;
-        if (LobbyData.Players.Values.All(p => p.Ready = true) && _currentTimer.HasValue)
+        if (LobbyData.Timer.TimerType is LobbyTimerType.Requeue)
+        {
+            OnRequeueTimerElapsed(_requeueTimers.FirstOrDefault(p => p.Value == playerId).Key,
+                new ElapsedEventArgs(DateTime.Now));
+        }
+        else if (LobbyData.Players.Values.Where(p => p.Hero != Key.None).All(p => p.Ready) && _currentTimer.HasValue)
         {
             OnSelectionTimerElapsed(_currentTimer.Value, new ElapsedEventArgs(DateTime.Now));
         }
+        
         SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
     }
 
@@ -291,10 +327,7 @@ public class GameLobby : Updater
         _serviceLobby.SendMatchLoadingProgress(LobbyData.PlayersProgress.ToDictionary());
     }
 
-    public PlayerLobbyState GetPlayerLobbyState(uint playerId)
-    {
-        return LobbyData.Players[playerId];
-    }
+    public PlayerLobbyState? GetPlayerLobbyState(uint playerId) => LobbyData.Players.GetValueOrDefault(playerId);
 
     private LobbyTimer GetRequeueTimer(uint playerId)
     {
@@ -346,32 +379,19 @@ public class GameLobby : Updater
             });
     }
 
-    public LobbyUpdate GetLobbyUpdate(uint playerId)
-    {
-        var timer = LobbyData.Timer.TimerType == LobbyTimerType.Requeue ? GetRequeueTimer(playerId) : LobbyData.Timer;
-        if (timer.TimerType == LobbyTimerType.Requeue && !LobbyData.Players.ContainsKey(playerId))
-        {
-            var requeueTimer = new Timer(timer.EndTime - timer.StartTime);
-            requeueTimer.AutoReset = false;
-            requeueTimer.Elapsed += OnRequeueTimerElapsed;
-            requeueTimer.Enabled = true;
-            _requeueTimers.TryAdd(requeueTimer, playerId);
-            _requeueLobbyTimers.TryAdd(playerId, timer);
-        }
-        
-        return new LobbyUpdate
+    public LobbyUpdate GetLobbyUpdate(uint playerId) =>
+        new()
         {
             MatchMode = LobbyData.MatchModeKey,
             GameMode = LobbyData.GameModeKey,
             Maps = LobbyData.Maps,
             Started = LobbyData.IsStarted,
-            Timer = timer,
+            Timer = LobbyData.Timer.TimerType == LobbyTimerType.Requeue ? GetRequeueTimer(playerId) : LobbyData.Timer,
             Players = LobbyData.Players.Values.ToList(),
             RequeuePlayers = LobbyData.RequeuePlayers,
             RequeueTimers = LobbyData.RequeueTimers,
             SessionName = LobbyData.SessionName
         };
-    }
 
     private void OnWaitTimerElapsed(object? sender, ElapsedEventArgs e)
     {
@@ -387,12 +407,44 @@ public class GameLobby : Updater
         if (LobbyData.GameMode.LobbyMode is LobbyModeDraftPick gameModeDraft)
         {
             LobbyData.Timer.EndTime = (ulong) DateTimeOffset.Now.AddSeconds(gameModeDraft.SelectionTime).ToUnixTimeMilliseconds();
+            
+            var unselectedPlayers = LobbyData.Players.Where(p => p.Value.Hero == Key.None).Select(p => p.Value).ToList();
+            EnqueueAction(() =>
+            {
+                if (unselectedPlayers.Count > 0)
+                {
+                    var team1Unselected = unselectedPlayers.Where(p => p.Team is TeamType.Team1).Shuffle().FirstOrDefault();
+                    var team2Unselected = unselectedPlayers.Where(p => p.Team is TeamType.Team2).Shuffle().FirstOrDefault();
+                    if (team1Unselected != null)
+                    {
+                        var loadout = Databases.PlayerDatabase.GetLoadoutForHero(team1Unselected.PlayerId,
+                            Databases.PlayerDatabase.GetLastPlayedHero(team1Unselected.PlayerId));
+                        team1Unselected.Hero = loadout.HeroKey;
+                        team1Unselected.Devices = loadout.Devices;
+                        team1Unselected.Perks = loadout.Perks;
+                        team1Unselected.CanLoadout = true;
+                    }
+
+                    if (team2Unselected != null)
+                    {
+                        var loadout = Databases.PlayerDatabase.GetLoadoutForHero(team2Unselected.PlayerId,
+                            Databases.PlayerDatabase.GetLastPlayedHero(team2Unselected.PlayerId));
+                        team2Unselected.Hero = loadout.HeroKey;
+                        team2Unselected.CanLoadout = true;
+                        team2Unselected.Devices = loadout.Devices;
+                        team2Unselected.Perks = loadout.Perks;
+                    }
+                }
+                
+                SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
+            });
         }
         else
         {
             var gameModeFree = (LobbyModeFreePick) LobbyData.GameMode.LobbyMode;
             LobbyData.Timer.EndTime = (ulong) DateTimeOffset.Now.AddSeconds(gameModeFree.SelectionTime).ToUnixTimeMilliseconds();
         }
+        
         SendLobbyUpdate(timer: LobbyData.Timer);
         SetUpTimerEvent();
     }
@@ -406,18 +458,125 @@ public class GameLobby : Updater
         
         if (LobbyData.GameMode?.LobbyMode == null) return;
         
-        LobbyData.Timer.TimerType = LobbyTimerType.Start;
-        LobbyData.Timer.StartTime = (ulong) DateTimeOffset.Now.ToUnixTimeMilliseconds();
-        LobbyData.Timer.EndTime = (ulong) DateTimeOffset.Now.AddSeconds(LobbyData.GameMode.LobbyMode.PrestartTime).ToUnixTimeMilliseconds();
-        
-        EnqueueAction(() =>
+        if (LobbyData.GameMode.LobbyMode is LobbyModeDraftPick gameModeDraft)
+        {
+            var unselectedPlayers = LobbyData.Players.Where(p => p.Value.Hero == Key.None).Select(p => p.Value).ToList();
+            if (unselectedPlayers.Count != 0)
+            {
+                LobbyData.Timer.TimerType = LobbyTimerType.Selection;
+                LobbyData.Timer.StartTime = (ulong) DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                LobbyData.Timer.EndTime = (ulong) DateTimeOffset.Now.AddSeconds(gameModeDraft.SelectionTime).ToUnixTimeMilliseconds();
+            }
+            else
+            {
+                LobbyData.Timer.TimerType = LobbyTimerType.Start;
+                LobbyData.Timer.StartTime = (ulong) DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                LobbyData.Timer.EndTime = (ulong) DateTimeOffset.Now.AddSeconds(gameModeDraft.PrestartTime).ToUnixTimeMilliseconds();
+            }
+            
+            EnqueueAction(() =>
+            {
+                foreach (var player in LobbyData.Players.Values.Where(p => p.Hero != Key.None))
+                {
+                    player.Ready = true;
+                }
+
+                if (unselectedPlayers.Count > 0)
+                {
+                    var team1Unselected = unselectedPlayers.Where(p => p.Team is TeamType.Team1).Shuffle().FirstOrDefault();
+                    var team2Unselected = unselectedPlayers.Where(p => p.Team is TeamType.Team2).Shuffle().FirstOrDefault();
+                    var limit = LobbyData.GameMode.HeroLimit;
+                    
+                    if (team1Unselected != null)
+                    {
+                        var loadout = Databases.PlayerDatabase.GetLoadoutForHero(team1Unselected.PlayerId,
+                            Databases.PlayerDatabase.GetLastPlayedHero(team1Unselected.PlayerId));
+                        
+                        List<Key> restricted = [];
+                        if (limit?.Limit is not null)
+                        {
+                            restricted = limit.LimitOption switch
+                            {
+                                LobbyHeroLimitOption.PerHero => LobbyData.Players.Values
+                                    .Where(p => p.Team == TeamType.Team1)
+                                    .GroupBy(item => item.Hero)
+                                    .Where(group => group.Key != Key.None && group.Count() >= limit.Limit)
+                                    .Select(group => group.Key)
+                                    .ToList(),
+                                LobbyHeroLimitOption.PerClass => LobbyData.Players.Values
+                                    .Where(p => p.Team == TeamType.Team1)
+                                    .GroupBy(item => (item.Hero.GetCard<CardUnit>()?.Data as UnitDataPlayer)?.Class)
+                                    .Where(group => group.Key is not null && group.Key != Key.None && group.Count() >= limit.Limit)
+                                    .Select(group => group.Key)
+                                    .OfType<Key>()
+                                    .SelectMany(key => CatalogueHelper.GetHeroes().Where(p => (p.GetCard<CardUnit>()?.Data as UnitDataPlayer)?.Class == key))
+                                    .ToList(),
+                                _ => []
+                            };
+                        }
+                        
+                        team1Unselected.Hero = loadout.HeroKey;
+                        team1Unselected.CanLoadout = true;
+                        team1Unselected.Devices = loadout.Devices;
+                        team1Unselected.Perks = loadout.Perks;
+                        team1Unselected.RestrictedHeroes = restricted;
+                    }
+
+                    if (team2Unselected != null)
+                    {
+                        var loadout = Databases.PlayerDatabase.GetLoadoutForHero(team2Unselected.PlayerId,
+                            Databases.PlayerDatabase.GetLastPlayedHero(team2Unselected.PlayerId));
+                        
+                        List<Key> restricted = [];
+                        if (limit?.Limit is not null)
+                        {
+                            restricted = limit.LimitOption switch
+                            {
+                                LobbyHeroLimitOption.PerHero => LobbyData.Players.Values
+                                    .Where(p => p.Team == TeamType.Team2)
+                                    .GroupBy(item => item.Hero)
+                                    .Where(group => group.Key != Key.None && group.Count() >= limit.Limit)
+                                    .Select(group => group.Key)
+                                    .ToList(),
+                                LobbyHeroLimitOption.PerClass => LobbyData.Players.Values
+                                    .Where(p => p.Team == TeamType.Team2)
+                                    .GroupBy(item => (item.Hero.GetCard<CardUnit>()?.Data as UnitDataPlayer)?.Class)
+                                    .Where(group => group.Key is not null && group.Key != Key.None && group.Count() >= limit.Limit)
+                                    .Select(group => group.Key)
+                                    .OfType<Key>()
+                                    .SelectMany(key => CatalogueHelper.GetHeroes().Where(p => (p.GetCard<CardUnit>()?.Data as UnitDataPlayer)?.Class == key))
+                                    .ToList(),
+                                _ => []
+                            };
+                        }
+                        
+                        team2Unselected.Hero = loadout.HeroKey;
+                        team2Unselected.CanLoadout = true;
+                        team2Unselected.Devices = loadout.Devices;
+                        team2Unselected.Perks = loadout.Perks;
+                        team2Unselected.RestrictedHeroes = restricted;
+                    }
+                }
+                
+                SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
+            });
+        }
+        else
+        {
+            LobbyData.Timer.TimerType = LobbyTimerType.Start;
+            LobbyData.Timer.StartTime = (ulong) DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            LobbyData.Timer.EndTime = (ulong) DateTimeOffset.Now.AddSeconds(LobbyData.GameMode.LobbyMode.PrestartTime).ToUnixTimeMilliseconds();
+            
+            EnqueueAction(() =>
             {
                 foreach (var pid in LobbyData.Players.Keys)
                 {
                     LobbyData.Players[pid].Ready = true;
                 }
+                
                 SendLobbyUpdate(players: LobbyData.Players.Values.ToList());
             });
+        }
         
         SendLobbyUpdate(timer: LobbyData.Timer);
         SetUpTimerEvent();
@@ -431,8 +590,17 @@ public class GameLobby : Updater
         _currentTimer = null;
 
         LobbyData.Timer.TimerType = LobbyTimerType.Requeue;
-        EnqueueAction(() => 
-            _gameInstance.StartMatch(LobbyData.Players.Values.ToList()));
+        EnqueueAction(() =>
+        {
+            var mostVoted = LobbyData.Maps.MaxBy(m => m.PlayerVotes?.Count);
+            if (mostVoted?.Info is MapInfoCard mapInfo && _gameInstance.IsMapNull() &&
+                Databases.MapDatabase.LoadMapData(mapInfo.MapKey) is { } mapData)
+            {
+                _gameInstance.SetMap(mapInfo, mapData);
+            }
+            _gameInstance.StartMatch(LobbyData.Players.Values);
+        });
+
     }
 
     private void OnRequeueTimerElapsed(object? sender, ElapsedEventArgs e)
@@ -445,9 +613,17 @@ public class GameLobby : Updater
 
         EnqueueAction(() =>
         {
-            LobbyData.RequeuePlayers[LobbyData.GetPlayerTeam(playerId)].Remove(playerId);
-            SendLobbyUpdate(requeuePlayers: LobbyData.RequeuePlayers);
+            if (LobbyData.Players.TryGetValue(playerId, out var player))
+            {
+                player.Ready = true;
+            }
 
+            if (LobbyData.RequeuePlayers.TryGetValue(LobbyData.GetPlayerTeam(playerId), out var requeuePlayers))
+            {
+                requeuePlayers.Remove(playerId);
+            }
+            
+            SendLobbyUpdate(players: LobbyData.Players.Values.ToList(), requeuePlayers: LobbyData.RequeuePlayers);
             _gameInstance.SendUserToZone(playerId);
         });
     }

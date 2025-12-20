@@ -12,9 +12,15 @@ public partial class GameZone
     
     public void ReceivedMoveRequest(uint unitId, ulong time, ZoneTransform transform)
     {
-        if (_units.TryGetValue(unitId, out var unit) &&
-            ((MapBinary.ContainsBlock((Vector3s)transform.Position) &&
-              !MapBinary[(Vector3s)transform.Position].IsPassable) || !unit.UnitMove(transform, time)))
+        if (!_units.TryGetValue(unitId, out var unit))
+        {
+            return;
+        }
+
+        unit.LastMoveTime = DateTimeOffset.Now;
+        unit.WasAfkWarned = false;
+        if ((MapBinary.ContainsBlock((Vector3s)transform.Position) &&
+             !MapBinary[(Vector3s)transform.Position].IsPassable) || !unit.UnitMove(transform, time))
         {
             _serviceZone.SendUnitMoveFail(unitId, unit.LastMoveUpdateTime);
         }
@@ -93,6 +99,16 @@ public partial class GameZone
 
     public void ReceivedEventBroadcast(ZoneEvent zoneEvent)
     {
+        if (zoneEvent is ZoneEventUnitCommonLand commonLand && _units.TryGetValue(commonLand.UnitId, out var unit) && unit.Controlled)
+        {
+            if (!unit.IsFirstLand)
+            {
+                return;
+            }
+
+            unit.IsFirstLand = false;
+        }
+
         _serviceZone.SendBroadcastZoneEvent(zoneEvent);
     }
 
@@ -433,7 +449,7 @@ public partial class GameZone
         
         var tool = player.CurrentGear?.Tools[toolIndex];
         
-        if (tool?.Tool is not ToolDash toolDash || !tool.IsEnoughAmmoToUse()) return;
+        if (tool?.Tool is not ToolDash toolDash || !tool.IsEnoughAmmoToUse() || player.IsBuff(BuffType.Root)) return;
         
         if (player.IsRecall)
         {
@@ -655,7 +671,7 @@ public partial class GameZone
 
         var impactData = projectile.CreateImpactDataExact(insidePoint: hitData.InsidePoint, normal: hitData.Normal,
             crit: hitData.Crit ?? false);
-        if (hitData.TargetId != null && _units.TryGetValue(hitData.TargetId.Value, out var target))
+        if (hitData.TargetId != null && _units.TryGetValue(hitData.TargetId.Value, out var target) && target.PlayerId != null)
         {
             if (projectileData.PlayerCollisionEffect is not null)
             {
@@ -721,6 +737,11 @@ public partial class GameZone
         if (player.HasSpawnProtection && _zoneData.MatchCard.RespawnLogic?.BreakProtectionOnAction is true)
         {
             player.SpawnProtectionTime = null;
+        }
+        
+        if (player.IsBuff(BuffType.Disarm))
+        {
+            return;
         }
         
         _serviceZone.SendCast(playerUnitId, castData);
@@ -1016,10 +1037,13 @@ public partial class GameZone
         _zoneData.UpdatePlayerSelectedSpawn(playerId, spawnId);
     }
 
-    public void ReceivedTurretTarget(uint turretId, uint targetId)
+    public void ReceivedTurretTarget(uint playerId, uint turretId, uint targetId)
     {
         if (!_units.TryGetValue(turretId, out var turret) || turret.TurretUnitData is null ||
-            (targetId != 0U && !_units.TryGetValue(targetId, out var target)))
+            !_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
+            !_playerUnits.TryGetValue(playerUnitId, out var player) ||
+            (targetId != 0U && (!_units.TryGetValue(targetId, out var target) || 
+                                (turret.Controlled && targetId != player.Id))))
         {
             return;
         }
@@ -1027,10 +1051,13 @@ public partial class GameZone
         turret.SetTurretTarget(targetId);
     }
 
-    public void ReceivedTurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots)
+    public void ReceivedTurretAttack(uint playerId, uint turretId, Vector3 shotPos, List<ShotData> shots)
     {
         if (!_units.TryGetValue(turretId, out var turret) || turret.TurretUnitData is null ||
-            (turret.TurretUnitData.RequiresTarget && turret.TurretTargetId == 0U))
+            !_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
+            !_playerUnits.TryGetValue(playerUnitId, out var player) ||
+            (turret.TurretUnitData.RequiresTarget && (turret.TurretTargetId == 0U ||
+            (turret.Controlled && turret.TurretTargetId != player.Id))))
         {
             return;
         }
@@ -1227,8 +1254,16 @@ public partial class GameZone
                 _zoneData.SurrenderVotes[vote] = null;
             }
         }
+        
+        _serviceZone.SendSurrenderProgress(_zoneData.SurrenderVotes);
         surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.Accepted);
-        _serviceZone.SendSurrenderBegin((ulong)endTime.ToUnixTimeMilliseconds());
+        var surrenderEnd = (ulong)endTime.ToUnixTimeMilliseconds();
+        
+        foreach (var teammate in _playerUnits.Values.Where(u => u.Team == player.Team))
+        {
+            teammate.ZoneService?.SendSurrenderBegin(surrenderEnd);
+        }
+        
         ReceivedSurrenderVoteRequest(playerId, true);
     }
 
@@ -1236,12 +1271,12 @@ public partial class GameZone
     {
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
-            !_zoneData.IsSurrenderRequest[(int)player.Team] ||
-            !_zoneData.SurrenderVotes.TryAdd(playerId, accept))
+            !_zoneData.IsSurrenderRequest[(int)player.Team])
         {
             return;
         }
 
+        _zoneData.SurrenderVotes[playerId] = accept;
         _serviceZone.SendSurrenderProgress(_zoneData.SurrenderVotes);
         if (_zoneData.MatchCard.SurrenderLogic?.MinVotes is null) return;
         
@@ -1250,7 +1285,7 @@ public partial class GameZone
 
         foreach (var play in _playerUnits.Values.Where(p => p.Team == player.Team && p.PlayerId.HasValue))
         {
-            if (_zoneData.SurrenderVotes.TryGetValue(play.PlayerId!.Value, out var vote))
+            if (_zoneData.SurrenderVotes.TryGetValue(play.PlayerId.Value, out var vote))
             {
                 switch (vote)
                 {
@@ -1296,11 +1331,11 @@ public partial class GameZone
         }
     }
 
-    public void ReceivedEditorCommand(uint playerId, MapEditorCommand command)
+    public void ReceivedEditorCommand(uint playerId, MapEditorCommand command, bool force)
     {
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
-            !_gameInitiator.IsMapEditor())
+            (!_gameInitiator.IsMapEditor() && !force))
         {
             return;
         }

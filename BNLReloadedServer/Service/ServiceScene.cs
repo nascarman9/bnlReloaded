@@ -56,7 +56,7 @@ public class ServiceScene(ISender sender) : IServiceScene
         sender.SendSync(writer);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceSceneId = reader.ReadByte();
         ServiceSceneId? sceneEnum = null;
@@ -77,7 +77,9 @@ public class ServiceScene(ISender sender) : IServiceScene
                 break;
             default:
                 Console.WriteLine($"Scene service received unsupported serviceId: {serviceSceneId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

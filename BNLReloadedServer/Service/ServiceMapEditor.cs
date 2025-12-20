@@ -253,7 +253,7 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
         }
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceMapEditorId = reader.ReadByte();
         ServiceMapEditorId? mapEditorEnum = null;
@@ -295,7 +295,9 @@ public class ServiceMapEditor(ISender sender) : IServiceMapEditor
                 break;
             default:
                 Console.WriteLine($"Unknown service MapEditor id {serviceMapEditorId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

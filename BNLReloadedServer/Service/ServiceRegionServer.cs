@@ -27,7 +27,12 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         MessagePublicKey = 13,
         MessageMatchEnded = 14,
         MessageRatingUpdate = 15,
-        MessageLookingForFriends = 16
+        MessageLookingForFriends = 16,
+        MessageFriend = 17,
+        MessageFriendRequest = 18,
+        MessageFriendSearch = 19,
+        MessageFriendSearchSteam = 20,
+        MessageGetLeaderboard = 21
     }
 
     private ushort _currRpcId = 1;
@@ -48,6 +53,10 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
     public void ReceiveMasterCdb(BinaryReader reader)
     {
         var cdb = reader.ReadOption(reader.ReadBinary);
+        if (cdb is not null)
+        {
+            CatalogueCache.Save(cdb, CatalogueCache.MasterCdbPath);
+        }
     }
 
     public void ReceiveMap(BinaryReader reader)
@@ -55,6 +64,8 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         var mapKey = reader.ReadString();
         var mapCard = CardMap.ReadRecord(reader);
         var mapData = MapData.ReadRecord(reader);
+        
+        Databases.MapDatabase.SaveMap(mapKey, mapCard, mapData);
     }
 
     public void ReceivePlayerData(BinaryReader reader)
@@ -259,7 +270,95 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         sender.Send(writer);
     }
 
-    public void Receive(BinaryReader reader)
+    public void SendFriendUpdate(uint receiverId, uint senderId, bool accepted)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte) ServiceRegionId.MessageFriend);
+        writer.Write(receiverId);
+        writer.Write(senderId);
+        writer.Write(accepted);
+        sender.Send(writer);
+    }
+
+    public void ReceiveFriendUpdate(BinaryReader reader)
+    {
+        var playerId = reader.ReadUInt32();
+        var friends = reader.ReadOption(() => reader.ReadList<uint, List<uint>>(reader.ReadUInt32));
+        var requestsFor = reader.ReadOption(() => reader.ReadList<uint, List<uint>>(reader.ReadUInt32));
+        var requestsFrom = reader.ReadOption(() => reader.ReadList<uint, List<uint>>(reader.ReadUInt32));
+        
+        _playerDatabase.SetFriendsInfo(playerId, friends, requestsFor, requestsFrom);
+    }
+
+    public void SendFriendRequest(uint receiverId, uint senderId)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte) ServiceRegionId.MessageFriendRequest);
+        writer.Write(receiverId);
+        writer.Write(senderId);
+        sender.Send(writer);
+    }
+
+    public async Task<List<SearchResult>?> SendFriendSearchRequest(List<uint> players)
+    {
+        await using var writer = CreateWriter();
+        writer.Write((byte) ServiceRegionId.MessageFriendSearch);
+        
+        var rpcId = GetRpcId();
+        writer.Write(rpcId);
+        writer.WriteList(players, writer.Write);
+        
+        var tcs = new TaskCompletionSource<object>();
+        _tasks[rpcId] = tcs;
+        
+        sender.Send(writer);
+        return await tcs.Task as List<SearchResult>;
+    }
+
+    public async Task<List<SearchResult>?> SendFriendSearchSteamRequest(List<ulong> players)
+    {
+        await using var writer = CreateWriter();
+        writer.Write((byte) ServiceRegionId.MessageFriendSearchSteam);
+        
+        var rpcId = GetRpcId();
+        writer.Write(rpcId);
+        writer.WriteList(players, writer.Write);
+        
+        var tcs = new TaskCompletionSource<object>();
+        _tasks[rpcId] = tcs;
+        
+        sender.Send(writer);
+        return await tcs.Task as List<SearchResult>;
+    }
+
+    public async Task<List<LeagueLeaderboardRecord>?> SendLeagueLeaderboardRequest()
+    {
+        await using var writer = CreateWriter();
+        writer.Write((byte) ServiceRegionId.MessageGetLeaderboard);
+        
+        var rpcId = GetRpcId();
+        writer.Write(rpcId);
+        
+        var tcs = new TaskCompletionSource<object>();
+        _tasks[rpcId] = tcs;
+        
+        sender.Send(writer);
+        return await tcs.Task as List<LeagueLeaderboardRecord>;
+    }
+    
+    public void ReceiveLeaderboard(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var results =
+            reader.ReadList<LeagueLeaderboardRecord, List<LeagueLeaderboardRecord>>(LeagueLeaderboardRecord.ReadRecord);
+        
+        if (_tasks.TryRemove(rpcId, out var tcs))
+        {
+            tcs.SetResult(results);
+        }
+    }
+
+    public bool Receive(BinaryReader reader)
     {
         var serviceRegionId = reader.ReadByte();
         ServiceRegionId? regionEnum = null;
@@ -311,9 +410,17 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
             case ServiceRegionId.MessageRatingUpdate:
                 ReceiveUpdateRatings(reader);
                 break;
+            case ServiceRegionId.MessageFriend:
+                ReceiveFriendUpdate(reader);
+                break;
+            case ServiceRegionId.MessageGetLeaderboard:
+                ReceiveLeaderboard(reader);
+                break;
             default:
                 Console.WriteLine($"Region service received unsupported serviceId: {serviceRegionId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

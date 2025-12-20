@@ -82,7 +82,11 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         {
             _playerDatabase.SetPlayerName(sender.AssociatedPlayerId.Value, playerSteamInfo.Nickname);
         }
-        
+
+        if (playerSteamInfo.Friends is not null)
+        {
+            _playerDatabase.SetSteamFriends(sender.AssociatedPlayerId.Value, playerSteamInfo.Friends);
+        }
         serviceTime.SendSetOrigin(DateTimeOffset.Now.ToUnixTimeMilliseconds());
         serviceScene.SendServerUpdate(new ServerUpdate
         {
@@ -92,8 +96,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
             MapEditorEnabled = true,
             PlayButtonEnabled = true,
             RankedEnabled = true,
-            TutorialEnabled = true,
-            ShopEnabled = true,
+            TutorialEnabled = false,
+            ShopEnabled = false,
             TimeAssaultEnabled = true
         });
         
@@ -131,6 +135,11 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         var gameMode = Key.ReadRecord(reader);
         var receiverId = reader.ReadUInt32();
         var steamLobbyId = reader.ReadUInt64();
+        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.SendSquadInvite(receiverId, sender.AssociatedPlayerId.Value, gameMode);
+        }
     }
 
     private void ReceiveSquadInviteSteamAccept(BinaryReader reader)
@@ -142,6 +151,11 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var gameMode = Key.ReadRecord(reader);
         var receiverId = reader.ReadUInt32();
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.SendSquadInvite(receiverId, sender.AssociatedPlayerId.Value, gameMode);
+        }
     }
 
     public void SendNotifySquadInvite(uint senderId, string nickname)
@@ -157,6 +171,8 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     {
         var senderId = reader.ReadUInt32();
         var reply = reader.ReadByteEnum<SquadInviteReplyType>();
+        if (!sender.AssociatedPlayerId.HasValue) return;
+        _serverDatabase.SendSquadInviteReply(senderId, sender.AssociatedPlayerId.Value, reply);
     }
 
     public void SendNotifySquadInviteReply(uint receiverId, SquadInviteReplyType reply, string nickname)
@@ -179,20 +195,27 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
 
     private void ReceiveLeaveSquad(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.LeaveSquad(sender.AssociatedPlayerId.Value);
+        }
     }
 
-    public void SendUpdateSquad(SquadUpdate update)
+    public void SendUpdateSquad(SquadUpdate? update)
     {
         using var writer = CreateWriter();
         writer.Write((byte)ServicePlayerId.MessageUpdateSquad);
-        SquadUpdate.WriteRecord(writer, update);
+        writer.WriteOption(update, up => SquadUpdate.WriteRecord(writer, up));
         sender.Send(writer);
     }
 
     private void ReceiveKickFromSquad(BinaryReader reader)
     {
         var playerId = reader.ReadUInt32();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.KickFromSquad(playerId, sender.AssociatedPlayerId.Value);
+        }
     }
 
     public void SendNotifyKickFromSquad()
@@ -205,6 +228,10 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     private void ReceiveSetSquadGameMode(BinaryReader reader)
     {
         var gameMode = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.SetSquadGamemode(sender.AssociatedPlayerId.Value, gameMode);
+        }
     }
 
     private void ReceiveSetSquadFinderSettings(BinaryReader reader)
@@ -259,17 +286,32 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
     private void ReceiveFriendRequst(BinaryReader reader)
     {
         var playerId = reader.ReadUInt32();
+
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _playerDatabase.UpdateFriendRequest(playerId, sender.AssociatedPlayerId.Value);
+        }
     }
 
     private void ReceiveFriendRequstAccept(BinaryReader reader)
     {
         var playerId = reader.ReadUInt32();
         var accept = reader.ReadBoolean();
+        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _playerDatabase.UpdateFriends(sender.AssociatedPlayerId.Value, playerId, accept);
+        }
     }
 
     private void ReceiveFriendRemove(BinaryReader reader)
     {
         var playerId = reader.ReadUInt32();
+        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _playerDatabase.UpdateFriends(playerId, sender.AssociatedPlayerId.Value, false);
+        }
     }
 
     public void SendLookingForFriends(ushort rpcId, string? error = null)
@@ -699,7 +741,7 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
         var itemKey = Key.ReadRecord(reader);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var servicePlayerId = reader.ReadByte();
         ServicePlayerId? playerEnum = null;
@@ -846,7 +888,9 @@ public class ServicePlayer(ISender sender, IServiceScene serviceScene, IServiceT
                 break;
             default:
                 Console.WriteLine($"Player service received unsupported serviceId: {servicePlayerId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

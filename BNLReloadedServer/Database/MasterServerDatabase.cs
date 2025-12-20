@@ -60,7 +60,7 @@ public class MasterServerDatabase : IMasterServerDatabase
             Username = playerName,
             PlayerRole = PlayerRole.User,
             Region = region,
-            LeagueInfo = League.WriteByteRecord(CatalogueHelper.GetDefaultLeague()),
+            LeagueInfo = null,
             Progression = PlayerProgression.WriteByteRecord(CatalogueHelper.GetDefaultProgression()),
             LookingForFriends = false,
             BadgeInfo = PlayerData.WriteBadgeByteRecord(new Dictionary<BadgeType, List<Key>>()),
@@ -258,6 +258,17 @@ public class MasterServerDatabase : IMasterServerDatabase
             // Update hero stats
             var endMatchData = endMatchResults.MatchData;
             var hero = endMatchData.HeroKey;
+            
+            if (currPlayer.HeroStats.All(x => x.Hero != hero))
+            {
+                currPlayer.HeroStats.Add(new HeroStats
+                {
+                    Hero = hero,
+                    TotalMatches = 0,
+                    Wins = 0
+                });
+            }
+            
             foreach (var stat in currPlayer.HeroStats.FindAll(s => s.Hero == hero))
             {
                 if (endMatchData is not { IsBackfiller: false }) continue;
@@ -317,7 +328,7 @@ public class MasterServerDatabase : IMasterServerDatabase
                 regionServer.SendHeroStats(currPlayer.PlayerId, currPlayer.HeroStats);
                 regionServer.SendPlayerUpdate(currPlayer.PlayerId, new PlayerUpdate
                 {
-                    Progression = currPlayer.Progression,
+                    Progression = currPlayer.Progression
                 });
                 regionServer.SendMatchHistory(currPlayer.PlayerId, currPlayer.MatchHistory);
             }
@@ -335,6 +346,12 @@ public class MasterServerDatabase : IMasterServerDatabase
         await _asyncLock.WaitAsync();
         try
         {
+            // If there's barely anyone left, just don't bother
+            if (winners.Count <= 2 && losers.Count <= 2)
+            {
+                return true;
+            }
+            
             var winnerRecords =
                 await _playerDb.Table<PlayerRecord>().Where(x => winners.Contains(x.PlayerId)).ToListAsync() ?? [];
             var loserRecords =
@@ -347,7 +364,7 @@ public class MasterServerDatabase : IMasterServerDatabase
             var loserRatings = loserPlayers.ToDictionary(k => new Player<uint>(k.PlayerId), v => v.Rating);
 
             var newRatings =
-                TrueSkillCalculator.CalculateNewRatings(GameInfo.DefaultGameInfo, [winnerRatings, loserRatings], 1, 2);
+                TrueSkillCalculator.CalculateNewRatings(Databases.DefaultGameInfo, [winnerRatings, loserRatings], 1, 2);
 
             var allPlayers = winnerPlayers.Union(loserPlayers).ToList();
             foreach (var (playerId, rating) in newRatings.ToDictionary(k => k.Key.Id, v => v.Value))
@@ -366,6 +383,91 @@ public class MasterServerDatabase : IMasterServerDatabase
             foreach (var regionServer in _regionServerConnections.Values)
             {
                 regionServer.SendRatingsUpdate(allPlayers.ToDictionary(p => p.PlayerId, p => p.Rating));
+            }
+        }
+        finally
+        {
+            _asyncLock.Release();
+        }
+        
+        return true;
+    }
+
+    public async Task<bool> SetFriends(uint receiverId, uint senderId, bool accepted)
+    {
+        await _asyncLock.WaitAsync();
+        try
+        {
+            var recordReceiver = await _playerDb.Table<PlayerRecord>().Where(x => x.PlayerId == receiverId)
+                .FirstOrDefaultAsync();
+            var recordSender = await _playerDb.Table<PlayerRecord>().Where(x => x.PlayerId == senderId)
+                .FirstOrDefaultAsync();
+            if (recordReceiver == null || recordSender == null) return false;
+            
+            var receiverPlayer = PlayerData.FromPlayerRecord(recordReceiver);
+            var senderPlayer = PlayerData.FromPlayerRecord(recordSender);
+
+            receiverPlayer.RequestsFromFriends.Remove(senderId);
+            senderPlayer.RequestsFromMe.Remove(receiverId);
+
+            if (accepted)
+            {
+                if (!receiverPlayer.Friends.Contains(senderId))
+                    receiverPlayer.Friends.Add(senderId);
+                if (!senderPlayer.Friends.Contains(receiverId))
+                    senderPlayer.Friends.Add(receiverId);
+            }
+            else
+            {
+                receiverPlayer.Friends.Remove(senderId);
+                senderPlayer.Friends.Remove(receiverId);
+            }
+            
+            recordReceiver = receiverPlayer.ToPlayerRecord();
+            recordSender = senderPlayer.ToPlayerRecord();
+            List<PlayerRecord> recList = [recordReceiver, recordSender];
+            await _playerDb.UpdateAllAsync(recList);
+            foreach (var regionServer in _regionServerConnections.Values)
+            {
+                regionServer.SendFriendUpdate(receiverId, receiverPlayer.Friends, receiverPlayer.RequestsFromFriends, null);
+                regionServer.SendFriendUpdate(senderId, senderPlayer.Friends, null, senderPlayer.RequestsFromMe);
+            }
+        }
+        finally
+        {
+            _asyncLock.Release();
+        }
+        
+        return true;
+    }
+
+    public async Task<bool> SetFriendRequest(uint receiverId, uint senderId)
+    {
+        await _asyncLock.WaitAsync();
+        try
+        {
+            var recordReceiver = await _playerDb.Table<PlayerRecord>().Where(x => x.PlayerId == receiverId)
+                .FirstOrDefaultAsync();
+            var recordSender = await _playerDb.Table<PlayerRecord>().Where(x => x.PlayerId == senderId)
+                .FirstOrDefaultAsync();
+            if (recordReceiver == null || recordSender == null) return false;
+            
+            var receiverPlayer = PlayerData.FromPlayerRecord(recordReceiver);
+            var senderPlayer = PlayerData.FromPlayerRecord(recordSender);
+            
+            if (!receiverPlayer.RequestsFromFriends.Contains(senderId))
+                receiverPlayer.RequestsFromFriends.Add(senderId);
+            if (!senderPlayer.RequestsFromMe.Contains(receiverId))
+                senderPlayer.RequestsFromMe.Add(receiverId);
+            
+            recordReceiver = receiverPlayer.ToPlayerRecord();
+            recordSender = senderPlayer.ToPlayerRecord();
+            List<PlayerRecord> recList = [recordReceiver, recordSender];
+            await _playerDb.UpdateAllAsync(recList);
+            foreach (var regionServer in _regionServerConnections.Values)
+            {
+                regionServer.SendFriendUpdate(receiverId, null, receiverPlayer.RequestsFromFriends, null);
+                regionServer.SendFriendUpdate(senderId, null, null, senderPlayer.RequestsFromMe);
             }
         }
         finally
@@ -427,6 +529,49 @@ public class MasterServerDatabase : IMasterServerDatabase
             PlayerId = rec.PlayerId,
             SteamId = rec.SteamId,
             Nickname = rec.Username
+        }).ToList();
+    }
+
+    public async Task<List<SearchResult>> GetSearchResults(List<uint> playerIds)
+    {
+        var records = await _playerDb.Table<PlayerRecord>().Where(x => playerIds.Contains(x.PlayerId)).ToListAsync() ?? [];
+        return records.Select(rec => new SearchResult
+        {
+            PlayerId = rec.PlayerId,
+            SteamId = rec.SteamId,
+            Nickname = rec.Username
+        }).ToList();
+    }
+
+    public async Task<List<SearchResult>> GetSearchResults(List<ulong> steamIds)
+    {
+        var records = await _playerDb.Table<PlayerRecord>().Where(x => steamIds.Contains(x.SteamId)).ToListAsync() ?? [];
+        return records.Select(rec => new SearchResult
+        {
+            PlayerId = rec.PlayerId,
+            SteamId = rec.SteamId,
+            Nickname = rec.Username
+        }).ToList();
+    }
+
+    public async Task<List<LeagueLeaderboardRecord>> GetLeaderboard()
+    {
+        var records = await _playerDb.Table<PlayerRecord>().Where(p =>
+                p.RatingMean != Databases.DefaultMean || p.RatingDeviation != Databases.DefaultSd)
+            .OrderByDescending(p => p.RatingMean).Take(100)
+            .ToListAsync();
+
+        return records.Select(PlayerData.FromPlayerRecord).Select((p, idx) => new LeagueLeaderboardRecord
+        {
+            PlayerId = p.PlayerId,
+            SteamId = p.SteamId,
+            PlayerName = p.Nickname,
+            Points = (int)double.Ceiling(p.Rating.Mean * 100),
+            Status = idx + 1,
+            Wins = p.HeroStats.Sum(h => h.Wins),
+            TotalMatches = p.HeroStats.Sum(h => h.TotalMatches),
+            RegistrationTime = default,
+            Region = p.Region
         }).ToList();
     }
 }

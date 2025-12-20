@@ -9,7 +9,8 @@ public class KeyJsonConverter : JsonConverter<Key>
 {
     public override Key Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        return Catalogue.Key(reader.GetString()!);
+        var val = reader.GetString();
+        return val != null ? Catalogue.Key(val) : Key.None;
     }
 
     public override void Write(Utf8JsonWriter writer, Key value, JsonSerializerOptions options)

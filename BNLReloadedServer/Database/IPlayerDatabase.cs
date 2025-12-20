@@ -17,6 +17,7 @@ public interface IPlayerDatabase
     public void SetRegionServerService(IServiceRegionServer serviceRegionServer);
     public string GetPlayerName(uint playerId);
     public Task<PlayerData> GetPlayerData(uint playerId);
+    public PlayerData? GetPlayerDataNoWait(uint playerId);
     public PlayerUpdate? GetFullPlayerUpdate(uint playerId);
     public ProfileData GetPlayerProfile(uint playerId);
     public Key GetLastPlayedHero(uint playerId);
@@ -27,11 +28,18 @@ public interface IPlayerDatabase
     public Dictionary<CurrencyType, float> GetCurrency(uint playerId);
     public Task<List<string>?> GetRegions();
     public Task<List<SearchResult>?> GetSearchResults(string pattern);
+    public Task<List<FriendInfo>> GetFriends(uint playerId);
+    public Task<List<FriendRequest>> GetFriendRequestsFor(uint playerId);
+    public Task<List<FriendRequest>> GetFriendRequestsFrom(uint playerId);
+    public Task<List<LeagueLeaderboardRecord>?> GetLeaderboard();
+    public bool IsBanned(uint playerId);
     public void SetPlayerName(uint playerId, string name);
     public void SetLoadout(uint playerId, Dictionary<Key, LobbyLoadout> loadout);
     public void SetHeroStats(uint playerId, List<HeroStats> heroStats);
     public void SetMatchHistory(uint playerId, List<MatchHistoryRecord> matchHistory);
     public void SetRatings(Dictionary<uint, Rating> ratings);
+    public void SetFriendsInfo(uint playerId, List<uint>? friends, List<uint>? requestsFor, List<uint>? requestsFrom);
+    public void SetSteamFriends(uint playerId, List<ulong> steamFriends);
     public void UpdatePlayer(uint playerId, PlayerUpdate update);
     public void UpdateLoadout(uint playerId, Key hero, LobbyLoadout loadout);
     public void UpdateLookingForFriends(uint playerId, bool lookingForFriends);
@@ -40,4 +48,6 @@ public interface IPlayerDatabase
     public void UpdateCurrency(uint playerId, Dictionary<CurrencyType, float> currencies);
     public void UpdateRatings(List<uint> winners, List<uint> losers, HashSet<uint> excluded);
     public void UpdateMatchStats(EndMatchResults endMatchResults);
+    public void UpdateFriends(uint receiverId, uint senderId, bool accepted);
+    public void UpdateFriendRequest(uint receiverId, uint senderId);
 }

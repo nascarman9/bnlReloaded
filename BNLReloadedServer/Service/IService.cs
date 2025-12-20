@@ -2,5 +2,5 @@
 
 public interface IService
 {
-    public void Receive(BinaryReader reader);
+    public bool Receive(BinaryReader reader);
 }

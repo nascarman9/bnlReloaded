@@ -7,6 +7,16 @@ namespace BNLReloadedServer.Servers;
 public class MatchServer(IPAddress address, int port) : TcpServer(address, port)
 {
     protected override TcpSession CreateSession() { return new MatchSession(this); }
+    
+    protected override void OnStarting()
+    {
+        Console.WriteLine("Match server starting...");
+    }
+
+    protected override void OnStarted()
+    {
+        Console.WriteLine("Match server started.");
+    }
 
     protected override void OnError(SocketError error)
     {

@@ -48,16 +48,27 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
     private void ReceiveEnterQueue(BinaryReader reader)
     {
         var gameMode = Key.ReadRecord(reader);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.JoinQueue(sender.AssociatedPlayerId.Value, gameMode, this);
+        }
     }
 
     private void ReceiveLeaveQueue(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.LeaveQueue(sender.AssociatedPlayerId.Value, this);
+        }
     }
 
     private void ReceiveEnableBackfilling(BinaryReader reader)
     {
         var enable = reader.ReadBoolean();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.EnableBackfilling(sender.AssociatedPlayerId.Value, enable);
+        }
     }
 
     private void ReceiveEnableNewHeroLeagueProtection(BinaryReader reader)
@@ -68,6 +79,10 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
     private void ReceiveConfirmMatch(BinaryReader reader)
     {
         var confirmMatch = reader.ReadBoolean();
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.ConfirmMatch(sender.AssociatedPlayerId.Value, confirmMatch, this);
+        }
     }
     
     public void SendMatchmakerUpdate(MatchmakerUpdate matchmakerUpdate)
@@ -165,6 +180,19 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
         var rpcId = reader.ReadUInt16();
         var gameId = reader.ReadUInt64();
         var password = reader.ReadString();
+        if (!sender.AssociatedPlayerId.HasValue)
+        {
+            SendSpectateCustomGame(rpcId, CustomGameSpectateResult.NoSuchGame);
+        }
+        else
+        {
+            var res = _serverDatabase.CheckSpectateCustomGame(sender.AssociatedPlayerId.Value, gameId, password);
+            SendSpectateCustomGame(rpcId, res);
+            if (res is CustomGameSpectateResult.Accepted)
+            {
+                _serverDatabase.SpectateCustomGame(sender.AssociatedPlayerId.Value, gameId);
+            }
+        }
     }
 
     private void ReceiveCreateCustomGame(BinaryReader reader)
@@ -184,7 +212,8 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
 
     private void ReceiveBackfillCustomGame(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId == null) return;
+        _serverDatabase.BackfillCustomGame(sender.AssociatedPlayerId.Value);
     }
 
     private void ReceiveLeaveCustomGame(BinaryReader reader)
@@ -277,7 +306,7 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
         var gameId = reader.ReadUInt64();
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceMatchmakerId = reader.ReadByte();
         ServiceMatchmakerId? matchEnum = null;
@@ -352,7 +381,9 @@ public class ServiceMatchmaker(ISender sender) : IServiceMatchmaker
                 break;
             default:
                 Console.WriteLine($"Unknown service matchmaker id {serviceMatchmakerId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

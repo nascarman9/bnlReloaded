@@ -7,6 +7,16 @@ namespace BNLReloadedServer.Servers;
 public class RegionServer(IPAddress address, int port) : TcpServer(address, port)
 {
     protected override TcpSession CreateSession() { return new RegionSession(this); }
+    
+    protected override void OnStarting()
+    {
+        Console.WriteLine("Region server starting...");
+    }
+
+    protected override void OnStarted()
+    {
+        Console.WriteLine("Region server started.");
+    }
 
     protected override void OnError(SocketError error)
     {

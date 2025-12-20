@@ -1,5 +1,7 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
+using Moserware.Skills;
 
 namespace BNLReloadedServer.Database;
 
@@ -7,6 +9,7 @@ public interface IRegionServerDatabase
 {
     public bool UserConnected(uint userId);
     public void UserUiChanged(uint userId, UiId uiId, float duration);
+    public UiId? GetUiId(uint userId);
     public bool UpdateScene(uint userId, Scene scene, IServiceScene sceneService, bool enterInstance);
     public bool UpdateScene(uint userId, Scene scene);
     public void UserEnterScene(uint userId);
@@ -18,10 +21,16 @@ public interface IRegionServerDatabase
     public bool LinkMatchSessionGuidToUser(uint userId, Guid sessionId);
     public bool AddUser(uint userId, Guid sessionId);
     public bool RemoveUser(uint userId);
+    public bool UpdateChatName(uint userId, string newName);
+    public Task NotifyFriends(uint playerId);
+    public Task NotifyRequests(uint receiverId, uint senderId);
     public List<CustomGameInfo> GetCustomGames();
     public ulong? AddCustomGame(string name, string password, uint playerId);
     public bool RemoveCustomGame(ulong gameId);
     public CustomGameJoinResult AddToCustomGame(uint playerId, ulong gameId, string password);
+    public bool BackfillCustomGame(uint playerId);
+    public CustomGameSpectateResult CheckSpectateCustomGame(uint playerId, ulong gameId, string password);
+    public bool SpectateCustomGame(uint playerId, ulong gameId);
     public bool RemoveFromCustomGame(uint playerId);
     public bool KickFromCustomGame(uint playerId, uint kickerId);
     public bool SwitchTeam(uint playerId);
@@ -29,9 +38,30 @@ public interface IRegionServerDatabase
     public CustomGameUpdate? GetFullCustomGameUpdate(uint playerId);
     public bool StartCustomGame(uint playerId, string? signedMap);
     public bool StartMapEditorGame(uint playerId, MapData map, Key heroKey, TeamType team);
+    public bool StartGameFromMatchmaker(CardGameMode gameMode, List<PlayerQueueData> team1, List<PlayerQueueData> team2);
+    public bool BackfillMatchmakerGame(PlayerQueueData player, TeamType team, string gameInstanceId);
     public bool SendMessage(uint playerId, RoomId roomId, string message);
     public PrivateMessageFailReason? SendMessage(uint playerId, uint receiver, string message);
     public IGameInstance? GetGameInstance(uint? playerId);
     public bool RemoveGameInstance(string gameInstanceId);
     public bool RemoveFromGameInstance(uint playerId, string gameInstanceId);
+    public IEnumerable<(Dictionary<uint, Rating> team1, Dictionary<uint, Rating> team2, string instanceId)> GetBackfillNeeded(Key gameModeKey);
+    public int GetActiveGamesCount(Key gameModeKey);
+    public void JoinQueue(uint playerId, Key gameModeKey, IServiceMatchmaker serviceMatchmaker);
+    public void LeaveQueue(uint playerId, IServiceMatchmaker serviceMatchmaker);
+    public void EnableBackfilling(uint playerId, bool enable);
+    public void ConfirmMatch(uint playerId, bool confirm, IServiceMatchmaker serviceMatchmaker);
+    public void ForceStartMatch(uint playerId);
+    public ulong? CreateSquad(uint ownerId, List<uint> players);
+    public bool JoinSquad(uint playerId, ulong squadId);
+    public bool LeaveSquad(uint playerId);
+    public bool KickFromSquad(uint playerId, uint kickerId);
+    public bool SendSquadInvite(uint playerId, uint senderId, Key gameModeKey);
+    public bool SendSquadInviteReply(uint playerId, uint senderId, SquadInviteReplyType reply);
+    public bool SetSquadGamemode(uint playerId, Key gameModeKey);
+    public void ClearSquadId(uint playerId);
+    public void CloseSquad(ulong squadId);
+    public ulong? GetSquadId(uint playerId);
+    public void SendAfkWarning(uint playerId, string gameInstanceId);
+    public void KickForAfk(uint playerId, string gameInstanceId);
 }

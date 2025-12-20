@@ -21,7 +21,13 @@ public interface IMasterServerDatabase
     public Task<bool> SetLoadoutForPlayer(uint playerId, Key hero, LobbyLoadout loadout);
     public Task<bool> SetNewMatchDataForPlayer(EndMatchResults endMatchResults);
     public Task<bool> SetNewRatings(List<uint> winners, List<uint> losers, HashSet<uint> excluded);
+    public Task<bool> SetFriends(uint receiverId, uint senderId, bool accepted);
+    public Task<bool> SetFriendRequest(uint receiverId, uint senderId);
     public void HaveRegionLoadPlayer(string regionServer, PlayerData playerData);
     public Task<ProfileData> GetProfileData(uint playerId);
     public Task<List<SearchResult>> GetSearchResults(string pattern);
+    public Task<List<SearchResult>> GetSearchResults(List<uint> playerIds);
+    public Task<List<SearchResult>> GetSearchResults(List<ulong> steamIds);
+    public Task<List<LeagueLeaderboardRecord>> GetLeaderboard();
+
 }

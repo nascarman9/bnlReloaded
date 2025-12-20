@@ -102,8 +102,10 @@ public static class CoordsHelper
     return dir == Vector3s.Back ? BlockFace.Back : BlockFace.Top;
   }
 
-  public static BlockFace RotationToFace(Vector3s dir) =>
-    Vector3.Transform(Vector3.UnitY, ZoneTransformHelper.ToQuaternion(dir)) switch
+  public static BlockFace RotationToFace(Vector3s dir)
+  {
+    var rotVector = Vector3.Transform(Vector3.UnitY, ZoneTransformHelper.ToQuaternion(dir));
+    return rotVector switch
     {
       { Y: >= .95f } => BlockFace.Top,
       { Y: <= -.95f } => BlockFace.Bottom,
@@ -113,6 +115,7 @@ public static class CoordsHelper
       { Z: <= -.95f } => BlockFace.Back,
       _ => BlockFace.Top
     };
+  }
 
   public static BlockCorner VectorToCorner(Vector3s dir)
   {

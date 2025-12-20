@@ -10,6 +10,7 @@ public class ConfigDatabase : IConfigDatabase
     private readonly Configs _configs;
     private readonly IPAddress _masterIp;
     private readonly IPAddress _regionIp;
+    private readonly IPAddress _regionPublicIp;
     
     public ConfigDatabase()
     {
@@ -17,6 +18,7 @@ public class ConfigDatabase : IConfigDatabase
         _configs = configs ?? throw new FileNotFoundException("Configs file not found");
         _masterIp = IPAddress.Parse(_configs.MasterHost);
         _regionIp = IPAddress.Parse(_configs.RegionHost);
+        _regionPublicIp = IPAddress.Parse(_configs.RegionPublicHost);
     }
 
     public bool IsMaster() => _configs.IsMaster;
@@ -30,12 +32,17 @@ public class ConfigDatabase : IConfigDatabase
     public bool UseMasterCdb() => _configs.UseMasterCdb || _configs.CdbName is null;
 
     public string MasterHost() => _configs.MasterHost;
+    public string MasterPublicHost() => _configs.MasterPublicHost;
 
     public IPAddress MasterIp() => _masterIp;
 
     public string RegionHost() => _configs.RegionHost;
+    
+    public string RegionPublicHost() => _configs.RegionPublicHost;
 
     public IPAddress RegionIp() => _regionIp;
+
+    public IPAddress RegionPublicIp() => _regionPublicIp;
 
     public RegionGuiInfo GetRegionInfo() => new()
     {

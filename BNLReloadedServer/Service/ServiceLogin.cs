@@ -238,7 +238,16 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
             writer.Write(error ?? string.Empty);
         }
         sender.SendSync(writer);
-        SendRegions(_masterServerDatabase.GetRegionServers());
+        
+        var regionServers = _masterServerDatabase.GetRegionServers();
+        if (regionServers.Count == 1 && sender.AssociatedPlayerId.HasValue)
+        {
+            EnterRegion(sender.AssociatedPlayerId.Value, regionServers.Single());
+        }
+        else
+        {
+            SendRegions(regionServers);
+        }
     }
     
     private void ReceiveLoginMasterSteam(BinaryReader reader)
@@ -321,18 +330,25 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.Send(writer);
     }
 
+    private void EnterRegion(uint playerId, RegionInfo region)
+    {
+        if (region.Id == null || _masterServerDatabase.GetPlayer(playerId).Result is not { } player) return;
+        
+        if (!_masterServerDatabase.SetRegionForPlayer(player.PlayerId, region.Info?.Name?.Text ?? region.Id).Result) return;
+        
+        _masterServerDatabase.HaveRegionLoadPlayer(region.Id, player);
+        SendEnterRegion(region, playerId);
+    }
+
     private void ReceiveSelectRegion(BinaryReader reader)
     {
         var region = reader.ReadString();
         var remember = reader.ReadBoolean();
         var regionToEnter = _masterServerDatabase.GetRegionServer(region);
-        if (regionToEnter?.Id == null || !sender.AssociatedPlayerId.HasValue ||
-            _masterServerDatabase.GetPlayer(sender.AssociatedPlayerId.Value).Result is not { } player) return;
-
-        if (!_masterServerDatabase.SetRegionForPlayer(player.PlayerId, regionToEnter.Info?.Name?.Text ?? region).Result) return;
-        
-        _masterServerDatabase.HaveRegionLoadPlayer(regionToEnter.Id, player);
-        SendEnterRegion(regionToEnter, sender.AssociatedPlayerId.Value);
+        if (sender.AssociatedPlayerId.HasValue && regionToEnter is not null)
+        {
+            EnterRegion(sender.AssociatedPlayerId.Value, regionToEnter);
+        }
     }
     
     public void SendEnterRegion(RegionInfo region, uint playerId)
@@ -451,7 +467,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         }
     }
 
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceLoginId = reader.ReadByte();
         ServiceLoginId? loginEnum = null;
@@ -502,7 +518,9 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
                 break;
             default:
                 Console.WriteLine($"Login service received unsupported serviceId: {serviceLoginId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

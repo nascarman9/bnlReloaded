@@ -28,6 +28,8 @@ public class ServiceDebug(ISender sender) : IServiceDebug
         MessageZoneTriggerRemoved = 15
     }
     
+    private IGameInstance? GameInstance => Databases.RegionServerDatabase.GetGameInstance(sender.AssociatedPlayerId);
+    
     private static BinaryWriter CreateWriter()
     {
         var memStream = new MemoryStream();
@@ -58,6 +60,47 @@ public class ServiceDebug(ISender sender) : IServiceDebug
     {
         var rpcId = reader.ReadUInt16();
         var cmd = reader.ReadString();
+
+        if (!sender.AssociatedPlayerId.HasValue || Databases.PlayerDatabase.GetPlayerDataNoWait(sender.AssociatedPlayerId.Value)?.Role is not (PlayerRole.Core
+                or PlayerRole.Admin))
+        {
+            SendExecuteArgs(rpcId, "fail");
+            return;
+        }
+
+        switch (cmd)
+        {
+            case "force_start_match":
+                SendExecute(rpcId, "success");
+                Databases.RegionServerDatabase.ForceStartMatch(sender.AssociatedPlayerId.Value);
+                break;
+            
+            case "remove_barriers":
+            case "skip_build_phase":
+                SendExecute(rpcId, "success");
+                GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, MapEditorCommand.SkipBuildPhase, true);
+                break;
+            
+            case "die":
+                SendExecute(rpcId, "success");
+                GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, MapEditorCommand.KillPlayer, true);
+                break;
+            
+            case "respawn_now":
+                SendExecute(rpcId, "success");
+                GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, MapEditorCommand.Respawn, true);
+                break;
+            
+            case "reset_ability_coodown":
+                SendExecute(rpcId, "success");
+                GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, MapEditorCommand.ResetCooldowns, true);
+                break;
+            
+            case "win_match":
+                SendExecute(rpcId, "success");
+                GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, MapEditorCommand.WinMatch, true);
+                break;
+        }
     }
 
     public void SendExecuteArgs(ushort rpcId, string? result, string? error = null)
@@ -308,7 +351,7 @@ public class ServiceDebug(ISender sender) : IServiceDebug
         sender.Send(writer);
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceDebugId = reader.ReadByte();
         ServiceDebugId? debugEnum = null;
@@ -359,7 +402,9 @@ public class ServiceDebug(ISender sender) : IServiceDebug
                 break;
             default:
                 Console.WriteLine($"Unknown service debug id {serviceDebugId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

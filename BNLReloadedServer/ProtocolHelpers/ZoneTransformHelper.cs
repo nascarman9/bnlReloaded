@@ -64,12 +64,12 @@ public static class ZoneTransformHelper
   }
 
   public static Quaternion ToQuaternion(Vector3s rot) =>
-    Quaternion.CreateFromYawPitchRoll(float.DegreesToRadians(UnpackFromShort(rot.x)),
-      float.DegreesToRadians(UnpackFromShort(rot.y)), float.DegreesToRadians(UnpackFromShort(rot.z)));
+    Quaternion.CreateFromYawPitchRoll(float.DegreesToRadians(UnpackFromShort(rot.y)),
+      float.DegreesToRadians(UnpackFromShort(rot.x)), float.DegreesToRadians(UnpackFromShort(rot.z)));
 
   public static Quaternion ToQuaternion(Vector2s rot) =>
-    Quaternion.CreateFromYawPitchRoll(0.0f, float.DegreesToRadians(UnpackFromShort(rot.y)), 0.0f) *
-    Quaternion.CreateFromYawPitchRoll(float.DegreesToRadians(UnpackFromShort(rot.x)), 0.0f, 0.0f);
+    Quaternion.CreateFromYawPitchRoll(float.DegreesToRadians(UnpackFromShort(rot.y)), 0.0f, 0.0f) *
+    Quaternion.CreateFromYawPitchRoll(0.0f, float.DegreesToRadians(UnpackFromShort(rot.x)), 0.0f);
   
   public static ZoneTransform ToZoneTransform(Vector3 pos, Quaternion rot) =>
     new()

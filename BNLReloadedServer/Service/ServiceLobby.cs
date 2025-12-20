@@ -168,23 +168,30 @@ public class ServiceLobby(ISender sender) : IServiceLobby
         }
     }
 
-    private void ReceiveExitToCustomGame(BinaryReader reader)
+    private async Task ReceiveExitToCustomGame(BinaryReader reader)
     {
         if (sender.AssociatedPlayerId.HasValue)
         {
-            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);    
+            GameInstance?.NotifyExitToCustom();
+            await Task.Delay(5000);
+            GameInstance?.RemoveAllPlayers();    
         }
     }
 
-    private void ReceiveExitToMenuAsSquad(BinaryReader reader)
+    private async Task ReceiveExitToMenuAsSquad(BinaryReader reader)
     {
         if (sender.AssociatedPlayerId.HasValue)
         {
-            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);    
+            var squad = _serverDatabase.GetSquadId(sender.AssociatedPlayerId.Value);
+            if (squad != null)
+            {
+                await Task.Delay(5000);
+                GameInstance?.RemoveAllFromSquad(squad.Value);
+            }
         }
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceLobbyId = reader.ReadByte();
         ServiceLobbyId? lobbyEnum = null;
@@ -253,7 +260,9 @@ public class ServiceLobby(ISender sender) : IServiceLobby
                 break;
             default:
                 Console.WriteLine($"Unknown service lobby id {serviceLobbyId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

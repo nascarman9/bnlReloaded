@@ -7,7 +7,13 @@ public class MasterServiceDispatcher(ISender sender, Guid sessionId) : IServiceD
     private readonly ServiceLogin _serviceLogin = new(sender, sessionId);
     private readonly ServiceMasterServer _serviceMasterServer = new(sender, sessionId);
 
-    public void Dispatch(BinaryReader reader)
+    private static bool OnUnsupported(ServiceId? serviceId)
+    {
+        Console.WriteLine($"Master TCP session received unsupported serviceId: {serviceId}");
+        return false;
+    }
+    
+    public bool Dispatch(BinaryReader reader)
     {
         var serviceId = reader.ReadByte();
         ServiceId? serviceEnum = null;
@@ -21,17 +27,11 @@ public class MasterServiceDispatcher(ISender sender, Guid sessionId) : IServiceD
             Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
         }
 
-        switch (serviceEnum)
+        return serviceEnum switch
         {
-            case ServiceId.ServiceLogin: 
-                _serviceLogin.Receive(reader);
-                break;
-            case ServiceId.ServiceServer:
-                _serviceMasterServer.Receive(reader);
-                break;
-            default: 
-                Console.WriteLine($"Master TCP session received unsupported serviceId: {serviceId}");
-                break;
-        }
+            ServiceId.ServiceLogin => _serviceLogin.Receive(reader),
+            ServiceId.ServiceServer => _serviceMasterServer.Receive(reader),
+            _ => OnUnsupported(serviceEnum)
+        };
     }
 }

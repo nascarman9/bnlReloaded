@@ -9,7 +9,7 @@ public class BufferSender : IBufferedSender
     {
         _stream.Seek(0, SeekOrigin.Begin);
         var buffer = new byte[_messageLength];
-        _stream.ReadExactly(buffer);
+        _stream.ReadAtLeast(buffer, (int)_messageLength, false);
         _stream.SetLength(0);
         _messageLength = 0;
         return buffer;

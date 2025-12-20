@@ -15,4 +15,9 @@ public interface IServiceRegionServer : IService
     public Task<List<string>?> SendRegionRequest();
     public void SendUpdateRatings(List<uint> winners, List<uint> losers, HashSet<uint> excluded);
     public void SendLookingForFriends(uint playerId, bool lookingForFriends);
+    public void SendFriendUpdate(uint receiverId, uint senderId, bool accepted);
+    public void SendFriendRequest(uint receiverId, uint senderId);
+    public Task<List<SearchResult>?> SendFriendSearchRequest(List<uint> players);
+    public Task<List<SearchResult>?> SendFriendSearchSteamRequest(List<ulong> players);
+    public Task<List<LeagueLeaderboardRecord>?> SendLeagueLeaderboardRequest();
 }

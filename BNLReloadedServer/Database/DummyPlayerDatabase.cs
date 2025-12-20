@@ -260,6 +260,11 @@ public class DummyPlayerDatabase : IPlayerDatabase
         throw new NotImplementedException();
     }
 
+    public PlayerData? GetPlayerDataNoWait(uint playerId)
+    {
+        throw new NotImplementedException();
+    }
+
     public PlayerUpdate? GetFullPlayerUpdate(uint playerId)
     {
         var globalLogic = CatalogueHelper.GlobalLogic;
@@ -336,7 +341,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
 
     public LobbyLoadout GetLoadoutForHero(uint playerId, Key heroKey, bool defaultLoadout = false)
     {
-        var heroData = (UnitDataPlayer) Databases.Catalogue.GetCard<CardUnit>(heroKey)?.Data;
+        var heroData = Databases.Catalogue.GetCard<CardUnit>(heroKey)?.Data as UnitDataPlayer;
         if (defaultLoadout)
         {
             return new LobbyLoadout
@@ -344,7 +349,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
                 HeroKey = heroKey,
                 Devices = CatalogueHelper.GetDefaultDevices(heroKey),
                 Perks = [],
-                SkinKey = heroData.Skins[0]
+                SkinKey = heroData?.Skins?[0] ?? Key.None
             };
         }
         
@@ -353,7 +358,7 @@ public class DummyPlayerDatabase : IPlayerDatabase
             HeroKey = heroKey,
             Devices = CatalogueHelper.GetDefaultDevices(heroKey),
             Perks = [],
-            SkinKey = heroData.Skins[0]
+            SkinKey = heroData?.Skins?[0] ?? Key.None
         };
     }
 
@@ -399,15 +404,19 @@ public class DummyPlayerDatabase : IPlayerDatabase
     public List<uint> GetIgnoredUsers(uint playerId) => [];
 
     public Dictionary<CurrencyType, float> GetCurrency(uint playerId) => _testCurrencies;
-    public async Task<List<string>?> GetRegions()
-    {
-        return [];
-    }
+    public async Task<List<string>?> GetRegions() => [];
 
-    public async Task<List<SearchResult>?> GetSearchResults(string pattern)
-    {
-        return [];
-    }
+    public async Task<List<SearchResult>?> GetSearchResults(string pattern) => [];
+
+    public async Task<List<FriendInfo>> GetFriends(uint playerId) => [];
+
+    public async Task<List<FriendRequest>> GetFriendRequestsFor(uint playerId) => [];
+
+    public async Task<List<FriendRequest>> GetFriendRequestsFrom(uint playerId) => [];
+
+    public async Task<List<LeagueLeaderboardRecord>?> GetLeaderboard() => [];
+
+    public bool IsBanned(uint playerId) => false;
 
     public void SetPlayerName(uint playerId, string name)
     {
@@ -426,6 +435,14 @@ public class DummyPlayerDatabase : IPlayerDatabase
     }
 
     public void SetRatings(Dictionary<uint, Rating> ratings)
+    {
+    }
+
+    public void SetFriendsInfo(uint playerId, List<uint>? friends, List<uint>? requestsFor, List<uint>? requestsFrom)
+    {
+    }
+
+    public void SetSteamFriends(uint playerId, List<ulong> steamFriends)
     {
     }
 
@@ -458,6 +475,14 @@ public class DummyPlayerDatabase : IPlayerDatabase
     }
 
     public void UpdateMatchStats(EndMatchResults endMatchResults)
+    {
+    }
+
+    public void UpdateFriends(uint receiverId, uint senderId, bool accepted)
+    {
+    }
+
+    public void UpdateFriendRequest(uint receiverId, uint senderId)
     {
     }
 }

@@ -32,7 +32,7 @@ public class PlayerRecord
     public double RatingVolatility { get; set; } = 0.06;
     
     [Column("league_info")]
-    public byte[] LeagueInfo { get; set; } = [];
+    public byte[]? LeagueInfo { get; set; }
     
     [Column("progression")]
     public byte[] Progression { get; set; } = [];
@@ -50,10 +50,10 @@ public class PlayerRecord
     public byte[] LoadoutData { get; set; } = [];
     
     [Column("hero_stats")]
-    public byte[] HeroStats { get; set; } = [];
+    public byte[] HeroStats { get; set; } = [0];
     
     [Column("match_history")]
-    public byte[] MatchHistory { get; set; } = [];
+    public byte[] MatchHistory { get; set; } = [0];
     
     [Column("tutorial_tokens")]
     public int TutorialTokens { get; set; }
@@ -69,4 +69,13 @@ public class PlayerRecord
     
     [Column("graveyard_leave")]
     public DateTimeOffset? GraveyardLeaveTime { get; set; }
+    
+    [Column("friends")]
+    public byte[] Friends { get; set; } = [0];
+    
+    [Column("friend_requests_for")]
+    public byte[] FriendRequestsFor { get; set; } = [0];
+    
+    [Column("friend_requests_from")]
+    public byte[] FriendRequestsFrom { get; set; } = [0];
 }

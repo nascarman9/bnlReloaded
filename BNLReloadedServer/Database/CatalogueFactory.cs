@@ -12,13 +12,14 @@ public static class CatalogueFactory
     {
         var customLogic = CatalogueHelper.GlobalLogic.CustomGame;
         var maps = CatalogueHelper.MapList.Custom;
+        var customMode = CatalogueHelper.ModeCustom;
         return new CustomGameInfo
         {
             Id = Interlocked.Increment(ref _nextGameId),
             GameName = name,
             StarterNickname = playerName,
             Players = 0,
-            MaxPlayers = 10,
+            MaxPlayers = customMode.PlayersPerTeam * 2,
             Private = password != string.Empty,
             MapInfo = new MapInfoCard
             {

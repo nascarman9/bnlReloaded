@@ -13,6 +13,7 @@
       <PackageReference Include="Moserware.Skills" Version="1.0.0.1" />
       <PackageReference Include="NetCoreServer" Version="8.0.7" />
       <PackageReference Include="NetOctree" Version="2.1.0" />
+      <PackageReference Include="NumberPartitioning" Version="1.3.0" />
       <PackageReference Include="ObservableCollections" Version="3.3.4" />
       <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     </ItemGroup>

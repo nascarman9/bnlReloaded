@@ -30,21 +30,34 @@ public class RegionServiceDispatcher : IServiceDispatcher
         _serviceMatchmaker = new ServiceMatchmaker(sender);
         _serviceLeaderboard = new ServiceLeaderboard(sender);
         _servicePing = new ServicePing(sender);
-        
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceLogin, ServiceId.ServiceLogin);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceScene, ServiceId.ServiceScene);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceTime, ServiceId.ServiceTime);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceCatalogue, ServiceId.ServiceCatalogue);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _servicePlayer, ServiceId.ServicePlayer);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceChat, ServiceId.ServiceChat);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceDebug, ServiceId.ServiceDebug);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceMapEditor, ServiceId.ServiceMapEditor);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceMatchmaker, ServiceId.ServiceMatchmaker);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _serviceLeaderboard, ServiceId.ServiceLeaderboard);
-        Databases.RegionServerDatabase.RegisterService(sessionId, _servicePing, ServiceId.ServicePing);
+
+        try
+        {
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceLogin, ServiceId.ServiceLogin);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceScene, ServiceId.ServiceScene);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceTime, ServiceId.ServiceTime);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceCatalogue, ServiceId.ServiceCatalogue);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _servicePlayer, ServiceId.ServicePlayer);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceChat, ServiceId.ServiceChat);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceDebug, ServiceId.ServiceDebug);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceMapEditor, ServiceId.ServiceMapEditor);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceMatchmaker, ServiceId.ServiceMatchmaker);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _serviceLeaderboard, ServiceId.ServiceLeaderboard);
+            Databases.RegionServerDatabase.RegisterService(sessionId, _servicePing, ServiceId.ServicePing);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
     }
 
-    public void Dispatch(BinaryReader reader)
+    private static bool OnUnsupported(ServiceId? serviceId)
+    {
+        Console.WriteLine($"Region TCP session received unsupported serviceId: {serviceId}");
+        return false;
+    }
+
+    public bool Dispatch(BinaryReader reader)
     {
         var serviceId = reader.ReadByte();
         ServiceId? serviceEnum = null;
@@ -57,44 +70,21 @@ public class RegionServiceDispatcher : IServiceDispatcher
         {
             Console.WriteLine($"Service ID: {serviceEnum.ToString()}");
         }
-        switch (serviceEnum)
+
+        return serviceEnum switch
         {
-            case ServiceId.ServiceLogin: 
-                _serviceLogin.Receive(reader);
-                break;
-            case ServiceId.ServiceScene:
-                _serviceScene.Receive(reader);
-                break;
-            case ServiceId.ServiceTime:
-                _serviceTime.Receive(reader);
-                break;
-            case ServiceId.ServiceCatalogue:
-                _serviceCatalogue.Receive(reader);
-                break;
-            case ServiceId.ServicePlayer:
-                _servicePlayer.Receive(reader);
-                break;
-            case ServiceId.ServiceChat:
-                _serviceChat.Receive(reader);
-                break;
-            case ServiceId.ServiceDebug:
-                _serviceDebug.Receive(reader);
-                break;
-            case ServiceId.ServiceMapEditor:
-                _serviceMapEditor.Receive(reader);
-                break;
-            case ServiceId.ServiceMatchmaker:
-                _serviceMatchmaker.Receive(reader);
-                break;
-            case ServiceId.ServiceLeaderboard:
-                _serviceLeaderboard.Receive(reader);
-                break;
-            case ServiceId.ServicePing:
-                _servicePing.Receive(reader);
-                break;
-            default: 
-                Console.WriteLine($"Region TCP session received unsupported serviceId: {serviceId}");
-                break;
-        }
+            ServiceId.ServiceLogin => _serviceLogin.Receive(reader),
+            ServiceId.ServiceScene => _serviceScene.Receive(reader),
+            ServiceId.ServiceTime => _serviceTime.Receive(reader),
+            ServiceId.ServiceCatalogue => _serviceCatalogue.Receive(reader),
+            ServiceId.ServicePlayer => _servicePlayer.Receive(reader),
+            ServiceId.ServiceChat => _serviceChat.Receive(reader),
+            ServiceId.ServiceDebug => _serviceDebug.Receive(reader),
+            ServiceId.ServiceMapEditor => _serviceMapEditor.Receive(reader),
+            ServiceId.ServiceMatchmaker => _serviceMatchmaker.Receive(reader),
+            ServiceId.ServiceLeaderboard => _serviceLeaderboard.Receive(reader),
+            ServiceId.ServicePing => _servicePing.Receive(reader),
+            _ => OnUnsupported(serviceEnum)
+        };
     }
 }

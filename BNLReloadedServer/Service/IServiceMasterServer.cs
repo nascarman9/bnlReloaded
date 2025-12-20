@@ -18,4 +18,6 @@ public interface IServiceMasterServer : IService
     public void SendRegions(ushort rpcId, List<string> regions);
     public void SendPublicKey(string publicKey);
     public void SendRatingsUpdate(Dictionary<uint, Rating> ratings);
+    public void SendFriendUpdate(uint playerId, List<uint>? friends, List<uint>? requestsFor, List<uint>? requestsFrom);
+    public void SendLeaderboard(ushort rpcId, List<LeagueLeaderboardRecord> leagueLeaderboard);
 }

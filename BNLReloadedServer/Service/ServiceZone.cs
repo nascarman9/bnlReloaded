@@ -139,7 +139,11 @@ public class ServiceZone(ISender sender) : IServiceZone
 
     private void ReceiveZoneLeave(BinaryReader reader)
     {
-        
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            _serverDatabase.RemoveFromCustomGame(sender.AssociatedPlayerId.Value);
+            GameInstance?.PlayerLeftInstance(sender.AssociatedPlayerId.Value, KickReason.MatchQuit);    
+        }
     }
 
     public void SendEndMatch(TeamType winner)
@@ -1041,7 +1045,10 @@ public class ServiceZone(ISender sender) : IServiceZone
     {
         var turretId = reader.ReadUInt32();
         var targetId = reader.ReadUInt32();
-        GameInstance?.TurretTarget(turretId, targetId);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.TurretTarget(sender.AssociatedPlayerId.Value, turretId, targetId);
+        }
     }
 
     private void ReceiveTurretAttack(BinaryReader reader)
@@ -1049,7 +1056,10 @@ public class ServiceZone(ISender sender) : IServiceZone
         var turretId = reader.ReadUInt32();
         var shotPos = reader.ReadVector3();
         var shots = reader.ReadList<ShotData, List<ShotData>>(ShotData.ReadRecord);
-        GameInstance?.TurretAttack(turretId, shotPos, shots);
+        if (sender.AssociatedPlayerId.HasValue)
+        {
+            GameInstance?.TurretAttack(sender.AssociatedPlayerId.Value, turretId, shotPos, shots);
+        }
     }
 
     public void SendTurretAttack(uint turretId, Vector3 shotPos, List<ShotData> shots)
@@ -1145,11 +1155,11 @@ public class ServiceZone(ISender sender) : IServiceZone
         var command = reader.ReadByteEnum<MapEditorCommand>();
         if (sender.AssociatedPlayerId.HasValue)
         {
-            GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, command);
+            GameInstance?.EditorCommand(sender.AssociatedPlayerId.Value, command, false);
         }
     }
     
-    public void Receive(BinaryReader reader)
+    public bool Receive(BinaryReader reader)
     {
         var serviceZoneId = reader.ReadByte();
         ServiceZoneId? zoneEnum = null;
@@ -1305,7 +1315,9 @@ public class ServiceZone(ISender sender) : IServiceZone
                 break;
             default:
                 Console.WriteLine($"Zone service received unsupported serviceId: {serviceZoneId}");
-                break;
+                return false;
         }
+        
+        return true;
     }
 }

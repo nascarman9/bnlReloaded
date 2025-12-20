@@ -1,21 +1,19 @@
 ﻿using System.Collections.Immutable;
 using System.Numerics;
-using System.Timers;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Octree_Extensions;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Service;
 using ObservableCollections;
-using Timer = System.Timers.Timer;
 
 namespace BNLReloadedServer.BaseTypes;
 
 public partial class Unit
 {
-    public readonly uint Id;
+    public uint Id;
     public TeamType Team;
     public ZoneTransform Transform = new();
-    private bool _controlled;
+    public bool Controlled;
     private float _shield;
     private readonly ObservableList<ImmutableList<ConstEffectInfo>> _constEffects = [new List<ConstEffectInfo>().ToImmutableList()];
     private readonly Dictionary<Key, HashSet<EffectSource>> _effectSources = new();
@@ -34,6 +32,8 @@ public partial class Unit
     public bool IsRecall;
     public bool IsDead = false;
     public bool IsActive = true;
+    public bool IsFirstLand = true;
+    public bool WasAfkWarned;
     public readonly List<GearData> Gears = [];
     private int _currentGearIndex = -1;
     public readonly Dictionary<int, DeviceData> Devices = new();
@@ -64,6 +64,7 @@ public partial class Unit
     public DateTimeOffset? RespawnTime;
     public DateTimeOffset? RecallTime;
     public DateTimeOffset? SpawnProtectionTime;
+    public DateTimeOffset? LastMoveTime;
 
     public ulong TicksPerChannel = 0;
     public ChannelData? CurrentChannelData;
@@ -74,14 +75,16 @@ public partial class Unit
     
     public bool JustTeleported = false;
     public DateTimeOffset? LastTeleport;
-
-    private bool _sendDrop;
+    
     public bool IsDropped;
     public bool CanPickUp = true;
 
     private bool _wasDisabled;
     private DateTimeOffset? _disabledTime;
     private bool _wasConfused;
+    private bool _everConfused;
+    private bool _wasDisarmed;
+    
     private uint? PermaOwnerPlayerId { get; }
     private TeamType PermaTeam { get; }
 
@@ -234,6 +237,9 @@ public partial class Unit
         return targeting.AffectedUnits is not { } units || units.Count == 0 ||
                units.Exists(u => u == uCard.Data?.Type);
     }
+    
+    public bool DoesEffectApply(ConstEffectInfo effect) =>
+        effect.Card.Effect?.Targeting is not { } targeting || ContainsLabelOrIsUnitType(targeting);
 
     public bool DoesEffectApply(ConstEffectInfo effect, TeamType sourceTeam) =>
         effect.Card.Effect?.Targeting is not { } targeting || DoesEffectApply(targeting, sourceTeam);
@@ -241,14 +247,24 @@ public partial class Unit
     public bool DoesEffectApply(EffectTargeting targeting, TeamType sourceTeam) =>
         targeting.AffectedTeam switch
         {
-            RelativeTeamType.Friendly when sourceTeam != PermaTeam => false,
-            RelativeTeamType.Opponent when sourceTeam == PermaTeam => false,
+            RelativeTeamType.Friendly when sourceTeam != Team => false,
+            RelativeTeamType.Opponent when sourceTeam == Team => false,
             _ => ContainsLabelOrIsUnitType(targeting)
         };
 
     public void AddEffect(ConstEffectInfo effect, TeamType sourceTeam, EffectSource? source)
     {
         if(!DoesEffectApply(effect, sourceTeam) || IsImmune(effect)) return;
+        
+        if (IsDead && source is PersistOnDeathSource persistOnDeathSource)
+        {
+            _returnOnRevive?.TryAdd(effect, persistOnDeathSource);
+        }
+        
+        if (IsDead)
+        {
+            return;
+        }
         
         if (effect is { TimestampEnd: not null })
         {
@@ -312,6 +328,19 @@ public partial class Unit
         var appliedEffects = effects.Where(e => DoesEffectApply(e, sourceTeam) && !IsImmune(e)).ToList();
         if (appliedEffects.Count == 0) return;
 
+        if (IsDead && source is PersistOnDeathSource persistOnDeathSource)
+        {
+            foreach (var effect in appliedEffects)
+            {
+                _returnOnRevive?.TryAdd(effect, persistOnDeathSource);
+            }
+        }
+
+        if (IsDead)
+        {
+            return;
+        }
+
         var doUpdate = false;
         
         foreach (var effect in appliedEffects.ToList())
@@ -322,7 +351,14 @@ public partial class Unit
 
                 if (existing is null && source is not null)
                 {
-                    _effectSources.Add(effect.Key, [source]);
+                    if (_effectSources.TryGetValue(effect.Key, out var effectSource))
+                    {
+                        effectSource.Add(source);
+                    }
+                    else
+                    {
+                        _effectSources.Add(effect.Key, [source]);
+                    }
                 }
                 else if (existing?.TimestampEnd is not null && existing.TimestampEnd < effect.TimestampEnd)
                 {
@@ -330,7 +366,14 @@ public partial class Unit
                     _effectSources.Remove(effect.Key);
                     if (source is not null)
                     {
-                        _effectSources.Add(effect.Key, [source]);
+                        if (_effectSources.TryGetValue(effect.Key, out var effectSource))
+                        {
+                            effectSource.Add(source);
+                        }
+                        else
+                        {
+                            _effectSources.Add(effect.Key, [source]);
+                        }
                     }
                     doUpdate = true;
                 }
@@ -378,7 +421,7 @@ public partial class Unit
             }
 
             return;
-        };
+        }
         
         ActiveEffects = ActiveEffects.AddRange(actualEffects);
         
@@ -394,6 +437,11 @@ public partial class Unit
         if(effect.HasDuration || !ActiveEffects.Contains(effect)) return;
         
         if (!DoesEffectApply(effect, sourceTeam)) return;
+        
+        if (IsDead)
+        {
+            return;
+        }
 
         if (clearAll)
         {
@@ -421,9 +469,16 @@ public partial class Unit
 
     public void RemoveEffects(ICollection<ConstEffectInfo> effects, TeamType sourceTeam, EffectSource? source, bool clearAll = false)
     {
+        Func<ConstEffectInfo, TeamType, bool> doCheck = _everConfused ? (eff, _) => DoesEffectApply(eff) : DoesEffectApply;
         var actualEffects = effects
-            .Where(e => !e.HasDuration && ActiveEffects.Contains(e) && DoesEffectApply(e, sourceTeam)).ToList();
+            .Where(e => !e.HasDuration && ActiveEffects.Contains(e) && doCheck(e, sourceTeam)).ToList();
+        
         if (actualEffects.Count == 0) return;
+        
+        if (IsDead)
+        {
+            return;
+        }
         
         foreach (var effect in actualEffects.ToList())
         {
@@ -579,6 +634,8 @@ public partial class Unit
 
     public bool IsForcefield => UnitCard?.Health is { Forcefield: not null };
 
+    public float HealthPercentage => UnitCard?.Health?.Health != null ? _health / this.UnitMaxHealth(UnitCard.Health.Health.MaxHealth) : 1;
+
     public bool IsLowHealth => UnitCard?.Health?.Health != null &&
                                _health / this.UnitMaxHealth(UnitCard.Health.Health.MaxHealth) <=
                                CatalogueHelper.GlobalLogic.GuiLogic?.LowHealthVignettePercent;
@@ -633,9 +690,9 @@ public partial class Unit
         
         var switchEffects = ActiveEffects.GetEffectsOfType<ConstEffectOnGearSwitch>();
         var impact = CreateImpactData();
-        foreach (var switchEffect in switchEffects.Where(e => e.Effect is not null))
+        foreach (var switchEffect in switchEffects.Select(sw => sw.Effect).OfType<InstEffect>())
         {
-            _updater.OnApplyInstEffect(GetSelfSource(impact), [this], switchEffect.Effect, impact);
+            _updater.OnApplyInstEffect(GetSelfSource(impact), [this], switchEffect, impact);
         }
     }
 
@@ -695,7 +752,7 @@ public partial class Unit
         Key = unitInit.Key;
         if (unitInit.Transform != null) 
             Transform = unitInit.Transform;
-        _controlled = unitInit.Controlled;
+        Controlled = unitInit.Controlled;
         OwnerPlayerId = unitInit.OwnerId;
         PermaOwnerPlayerId = unitInit.OwnerId;
         Team = unitInit.Team;
@@ -784,7 +841,7 @@ public partial class Unit
         {
             Key = Key,
             Transform = Transform,
-            Controlled = _controlled,
+            Controlled = Controlled,
             OwnerId = OwnerPlayerId,
             Team = Team,
             PlayerId = PlayerId
@@ -809,6 +866,9 @@ public partial class Unit
         
         var effectsBeforeUpdate = ActiveEffects;
         var buffsBeforeUpdate = _buffs;
+        
+        if (data.Team.HasValue)
+            Team = data.Team.Value;
         
         if (data.Buffs != null)
         {
@@ -891,8 +951,6 @@ public partial class Unit
             _currentGearIndex = GearKeyToIndex(data.CurrentGear.Value);
         if (data.CapturePoints.HasValue)
             _capturePoints = data.CapturePoints.Value;
-        if (data.Team.HasValue)
-            Team = data.Team.Value;
         if (data.TurretTargetId.HasValue)
             TurretTargetId = data.TurretTargetId.Value != 0U ? data.TurretTargetId.Value : null;
         if (data.Resource.HasValue)
@@ -944,11 +1002,6 @@ public partial class Unit
         _skipBuffSet = false;
             
         _updater.OnUnitUpdate(this, data, unbuffered);
-
-        if (!_sendDrop) return;
-        _updater.OnUnitDrop(this);
-        _sendDrop = false;
-        IsDropped = true;
     }
 
     public UnitUpdate GetUpdateData()
@@ -1251,6 +1304,16 @@ public partial class Unit
             else if (_wasDisabled && !IsBuff(BuffType.Disabled))
             {
                 OnReEnabled();
+            }
+
+            if (IsBuff(BuffType.Disarm) && !_wasDisarmed)
+            {
+                _wasDisarmed = true;
+                _updater.OnDisarmed(this);
+            }
+            else if (!IsBuff(BuffType.Disarm) && _wasDisarmed)
+            {
+                _wasDisarmed = false;
             }
 
             if (PlayerId is not null)

@@ -35,8 +35,16 @@ public class MapDatabase : IMapDatabase
         return mapCards;
     }
 
+    public List<CardMap> GetMapCards() => 
+        _maps.Count == 0 ? LoadMapCards() : _maps.Select(map => map.Key.GetCard<CardMap>()).OfType<CardMap>().ToList();
+
     public CardMap? LoadMapCard(Key key)
     {
+        if (_maps.Count == 0)
+        {
+            LoadMapCards();
+        }
+        
         if (!_maps.TryGetValue(key, out var mapFolder) || !Directory.Exists(mapFolder)) return null;
         
         CardMap? map = null;
@@ -98,5 +106,20 @@ public class MapDatabase : IMapDatabase
         if (!File.Exists(MapListFile)) return null;
         using var fs = new StreamReader(File.OpenRead(MapListFile));
         return JsonSerializer.Deserialize<ExtraMaps>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
+    }
+
+    public void SaveMap(string key, CardMap mapCard, MapData mapData)
+    {
+        var info = Directory.CreateDirectory(Path.Combine(MapPath, key));
+        using (var cardWriter = File.CreateText(Path.Combine(info.FullName, "card.json")))
+        {
+            mapCard.Data = null;
+            cardWriter.Write(JsonSerializer.Serialize(mapCard, JsonHelper.DefaultSerializerSettings));
+        }
+
+        using (var mapDataWriter = File.CreateText(Path.Combine(info.FullName, "data.json")))
+        {
+            mapDataWriter.Write(JsonSerializer.Serialize(mapData, JsonHelper.DefaultSerializerSettings));
+        }
     }
 }
