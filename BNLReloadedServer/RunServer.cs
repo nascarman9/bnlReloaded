@@ -28,10 +28,12 @@ if (toJson || fromJson)
         var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
         if (deserializedCards is not null)
         {
-            deserializedCards.RemoveAll(c => c is CardMap or CardMapData);
+            var mapsFromFolder = Databases.MapDatabase.GetMapCards();
+            var mapsFromFolderIds = new HashSet<string>(mapsFromFolder.Select(m => m.Id ?? ""));
+            deserializedCards.RemoveAll(c => c is (CardMap or CardMapData) && mapsFromFolderIds.Contains(c.Id ?? ""));
             
             // Add maps
-            foreach (var map in Databases.MapDatabase.GetMapCards())
+            foreach (var map in mapsFromFolder)
             {
                 var exists = false;
                 foreach (var (_, idx) in deserializedCards.Select((x, idx) => (x, idx))
