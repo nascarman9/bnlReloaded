@@ -54,4 +54,5 @@ public class DummyConfigDatabase : IConfigDatabase
     public string CdbName() => "cdb";
     
     public bool DebugMode() => true;
+    public bool DoReadline() => false;
 }
