@@ -19,4 +19,5 @@ public class Configs
     public bool FromJson { get; init; }
     public string? FromJsonName { get; init; }
     public bool DebugMode { get; init; }
+    public bool DoReadline { get; init; }
 }

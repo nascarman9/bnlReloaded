@@ -331,7 +331,8 @@ public class GameInstance : IGameInstance
                     mapKeys = rnd.GetItems(CatalogueHelper.MapList.Custom?.ToArray() ?? defaultMapList, mapGrabCount).ToList();
                     break;
             }
-            maps = mapKeys.Select(MapInfo (key) => new MapInfoCard { MapKey = key }).ToList();
+            maps = mapKeys.Where(k => k.GetCard<CardMap>() is not null)
+                .Select(MapInfo (key) => new MapInfoCard { MapKey = key }).ToList();
         }
         
         if (MapData != null)

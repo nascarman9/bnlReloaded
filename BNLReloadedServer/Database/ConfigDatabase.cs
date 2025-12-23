@@ -70,4 +70,6 @@ public class ConfigDatabase : IConfigDatabase
     public string CdbName() => UseMasterCdb() && !IsMaster() ? "cdb" : _configs.CdbName ?? string.Empty;
 
     public bool DebugMode() => _configs.DebugMode;
+    
+    public bool DoReadline() => _configs.DoReadline;
 }

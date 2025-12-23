@@ -151,35 +151,42 @@ if (runServer)
         // Perform text input
         while (true)
         {
-            var line = Console.ReadLine();
-            if (string.IsNullOrEmpty(line))
-                break;
-
-            switch (line)
+            if (Databases.ConfigDatabase.DoReadline())
             {
-                // Restart the server
-                case "!":
+                var line = Console.ReadLine();
+                if (string.IsNullOrEmpty(line))
+                    break;
+
+                switch (line)
                 {
-                    Console.Write("Server restarting...");
-                    server?.Restart();
-                    regionServer.Restart();
-                    regionClient.Disconnect();
-                    regionClient.Reconnect();
-                    matchServer.Restart();
-                    Console.WriteLine("Done!");
-                    break;
-                }
-                case "refreshCdb":
-                    if (Databases.Catalogue is ServerCatalogue serverCatalogue)
+                    // Restart the server
+                    case "!":
                     {
-                        Console.Write("Refreshing cdb...");
-                        var newCardList = CatalogueCache.UpdateCatalogue(CatalogueCache.Load());
-                        serverCatalogue.Replicate(newCardList);
-                        var catalogueReplicator = new ServiceCatalogue(new ServerSender(regionServer));
-                        catalogueReplicator.SendReplicate(newCardList);
+                        Console.Write("Server restarting...");
+                        server?.Restart();
+                        regionServer.Restart();
+                        regionClient.Disconnect();
+                        regionClient.Reconnect();
+                        matchServer.Restart();
                         Console.WriteLine("Done!");
+                        break;
                     }
-                    break;
+                    case "refreshCdb":
+                        if (Databases.Catalogue is ServerCatalogue serverCatalogue)
+                        {
+                            Console.Write("Refreshing cdb...");
+                            var newCardList = CatalogueCache.UpdateCatalogue(CatalogueCache.Load());
+                            serverCatalogue.Replicate(newCardList);
+                            var catalogueReplicator = new ServiceCatalogue(new ServerSender(regionServer));
+                            catalogueReplicator.SendReplicate(newCardList);
+                            Console.WriteLine("Done!");
+                        }
+                        break;
+                }
+            }
+            else
+            {
+                Task.Delay(Timeout.InfiniteTimeSpan).Wait();
             }
         }
     }

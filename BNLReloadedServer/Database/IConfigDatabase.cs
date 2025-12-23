@@ -22,4 +22,5 @@ public interface IConfigDatabase
     public string FromJsonCdbName();
     public string CdbName();
     public bool DebugMode();
+    public bool DoReadline();
 }
