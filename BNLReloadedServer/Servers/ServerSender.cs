@@ -18,6 +18,11 @@ public class ServerSender(TcpServer server) : ISender
         server.Multicast(buffer);
     }
 
+    public void Send(ReadOnlySpan<byte> buffer)
+    {
+        server.Multicast(buffer);
+    }
+
     public void SendExcept(BinaryWriter writer, List<Guid> excluded)
     {
         server.Multicast(AppendMessageLength(writer));
@@ -32,7 +37,12 @@ public class ServerSender(TcpServer server) : ISender
     {
         server.Multicast(buffer);
     }
-    
+
+    public void SendSync(ReadOnlySpan<byte> buffer)
+    {
+        server.Multicast(buffer);
+    }
+
     public void Subscribe(Guid sessionId)
     {
     }

@@ -21,7 +21,7 @@ public class BlockIntervalUpdater(BlockSpecialInsideEffect effect, BlockSource s
     {
         if (Effect.InsideEffects is { Count: > 0 } effects)
         {
-            unit.RemoveEffects(effects.Select(eff => new ConstEffectInfo(eff, null)).ToList(), source.Team, source);
+            unit.RemoveEffects(effects.Select(eff => new ConstEffectInfo(eff, null)), source.Team, source);
         }
         
         return _intervals.Remove(unit);

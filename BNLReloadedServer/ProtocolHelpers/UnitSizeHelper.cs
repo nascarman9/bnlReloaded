@@ -6,7 +6,7 @@ namespace BNLReloadedServer.ProtocolHelpers;
 
 public static class UnitSizeHelper
 {
-    public static Vector3 ImprecisionVector { get; } = new(0.01f, 0.01f, 0.01f);
+    public static Vector3 ImprecisionVector { get; } = new(0.015f, 0.015f, 0.015f);
     public static Vector3 HalfImprecisionVector { get; } = ImprecisionVector / 2;
     
     public static bool IsInsideUnit(Vector3s pos, Unit unit) => 

@@ -57,11 +57,13 @@ public partial class GameZone : Updater
     
     private readonly Dictionary<ulong, ShotInfo> _shotInfo = new();
     private readonly HashSet<ulong> _keepShotAlive = [];
+    private readonly HashSet<ulong> _checkForWater = [];
     private readonly List<Unit> _unitsToDrop = [];
 
     private DateTimeOffset? _attackStartTime;
     
     private Task? _gameLoop;
+    private Task? _tickChecker;
     private Task? _endMatchTask;
 
     private Timer? _build1Timer;
@@ -80,6 +82,9 @@ public partial class GameZone : Updater
     private uint _newSpawnId = 1;
 
     private readonly string? _instanceId;
+
+    private ulong _tickNumber;
+    private ulong _lastTickNumber;
 
     private uint NewUnitId() => _newUnitId++;
     private uint NewSpawnId() => _newSpawnId++;
@@ -785,6 +790,7 @@ public partial class GameZone : Updater
         }
         
         _gameLoop = RunGameLoop();
+        _tickChecker = RunTickCheck();
         _gameInitiator.SetBackfillReady(_zoneData.GameModeCard.Ranking is GameRankingType.Friendly);
     }
 
@@ -1531,7 +1537,7 @@ public partial class GameZone : Updater
             
             if (insideEffect.InsideEffects is { Count: > 0 } effects)
             {
-                unit.AddEffects(effects.Select(eff => new ConstEffectInfo(eff)).ToList(), blockSource.Team, blockSource);
+                unit.AddEffects(effects.Select(eff => new ConstEffectInfo(eff)), blockSource.Team, blockSource);
             }
 
             if (insideEffect.EnterEffect?.Effect is null) continue;
@@ -1565,7 +1571,6 @@ public partial class GameZone : Updater
         try
         {
             var token = GameCanceler.Token;
-            var tickNumber = 0UL;
             EnqueueAction(() =>
             {
                 foreach (var mapSpawnPoint in
@@ -1574,12 +1579,31 @@ public partial class GameZone : Updater
                     _zoneData.UpdateSpawn(mapSpawnPoint.Key, IsMapSpawnRequirementsMet(mapSpawnPoint.Value));
                 }
             });
-            while (await tickTimer.WaitForNextTickAsync(token)) EnqueueAction(OnTick(tickNumber++));
+            while (await tickTimer.WaitForNextTickAsync(token))
+            {
+                EnqueueAction(OnTick(_tickNumber++));
+            }
         }
         finally
         {
             tickTimer.Dispose();
         }
+    }
+
+    private async Task RunTickCheck()
+    {
+        var tickTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        var token = GameCanceler.Token;
+        while (await tickTimer.WaitForNextTickAsync(token))
+        {
+            var ticksLastSecond = _tickNumber - _lastTickNumber;
+            _lastTickNumber = _tickNumber;
+            if (ticksLastSecond < TicksPerSecond - 1)
+            {
+                Console.WriteLine($"Low TPS: {ticksLastSecond}");
+            }
+        }
+        
     }
 
     private Action OnTick(ulong tickNumber) =>
@@ -1653,7 +1677,7 @@ public partial class GameZone : Updater
                         if (aura.ConstantEffects != null)
                         {
                             exiting.ForEach(u =>
-                                u.RemoveEffects(aura.ConstantEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                                u.RemoveEffects(aura.ConstantEffects.Select(e => new ConstEffectInfo(e)),
                                     unit.Team, unitSource));
                         }
                     }
@@ -1668,7 +1692,7 @@ public partial class GameZone : Updater
                         if (aura.ConstantEffects != null)
                         {
                             entering.ForEach(u =>
-                                u.AddEffects(aura.ConstantEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                                u.AddEffects(aura.ConstantEffects.Select(e => new ConstEffectInfo(e)),
                                     unit.Team, unitSource));
                         }
                     }
@@ -1682,15 +1706,15 @@ public partial class GameZone : Updater
                         .ToList();
                     if (nearbyIds is not { Count: > 0 } || nearby.Effects == null) continue;
                     var nearbyBlock = MapBinary.CheckBlocks(bounds, block => nearbyIds.Contains(block.Id));
-                    if(nearbyBlock is not null)
+                    if (nearbyBlock is not null)
                     {
                         var imp = MapBinary.CreateImpactForBlock(nearbyBlock.Value, unit.GetMidpoint());
-                        unit.AddEffects(nearby.Effects.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team,
+                        unit.AddEffects(nearby.Effects.Select(e => new ConstEffectInfo(e)), unit.Team,
                             new BlockSource(nearbyBlock.Value, MapBinary[nearbyBlock.Value].ToBlock(), imp));
                     }
                     else
                     {
-                        unit.RemoveEffects(nearby.Effects.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, null,
+                        unit.RemoveEffects(nearby.Effects.Select(e => new ConstEffectInfo(e)), unit.Team, null,
                             true);
                     }
                 }
@@ -1706,22 +1730,19 @@ public partial class GameZone : Updater
                     case UnitDataCloud { InsideEffects: not null } unitDataCloud when !isDisabled && unit.CloudEffect is not null:
                         var prevColliders = unit.CloudEffect.NearbyUnits;
                         var currColliders = _unitOctree.GetColliding(unit.CloudEffect.Shape);
-                        var exit = prevColliders.Except(currColliders).ToList();
-                        var enter = currColliders.Except(prevColliders).ToList();
 
                         unit.CloudEffect.NearbyUnits = currColliders;
-                        if (exit.Count > 0)
+                        foreach (var exit in prevColliders.Except(currColliders))
                         {
-                            exit.ForEach(u =>
-                                u.RemoveEffects(
-                                    unitDataCloud.InsideEffects.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team,
-                                    unitSource));
+                            exit.RemoveEffects(
+                                unitDataCloud.InsideEffects.Select(e => new ConstEffectInfo(e)), unit.Team,
+                                unitSource);
                         }
-                        if (enter.Count > 0)
+                        
+                        foreach (var enter in currColliders.Except(prevColliders))
                         {
-                            enter.ForEach(u =>
-                                u.AddEffects(unitDataCloud.InsideEffects.Select(e => new ConstEffectInfo(e)).ToList(),
-                                    unit.Team, unitSource));
+                            enter.AddEffects(unitDataCloud.InsideEffects.Select(e => new ConstEffectInfo(e)),
+                                unit.Team, unitSource);
                         }
                         break;
                     
@@ -1731,29 +1752,28 @@ public partial class GameZone : Updater
                         var nearbyBaddies = nearby.Where(u =>
                             (u.UnitCard?.Labels?.Contains(unitDataDamageCapture.CapturerLabel) ?? false) &&
                             u.Team != unit.Team).ToArray();
-                        var exitBaddies = prevBaddies.Except(nearbyBaddies).ToList();
-                        var enterBaddies = nearbyBaddies.Except(prevBaddies).ToList();
 
+                        var doUpdate = false;
                         unit.DamageCaptureEffect.NearbyUnits = nearbyBaddies;
                         if (unitDataDamageCapture.ZoneEffects is not null)
                         {
-                            if (exitBaddies.Count > 0)
+                            foreach (var baddie in prevBaddies.Except(nearbyBaddies))
                             {
-                                exitBaddies.ForEach(u =>
-                                    u.RemoveEffects(
-                                        unitDataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)).ToList(),
-                                        unit.Team, unitSource));
+                                doUpdate = true;
+                                baddie.RemoveEffects(
+                                    unitDataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)),
+                                    unit.Team, unitSource);
                             }
-                            if (enterBaddies.Count > 0)
+                            foreach (var baddie in nearbyBaddies.Except(prevBaddies))
                             {
-                                enterBaddies.ForEach(u =>
-                                    u.AddEffects(
-                                        unitDataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)).ToList(),
-                                        unit.Team, unitSource));
+                                doUpdate = true;
+                                baddie.AddEffects(
+                                    unitDataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)),
+                                    unit.Team, unitSource);
                             }
                         }
 
-                        if (enterBaddies.Count > 0 || exitBaddies.Count > 0)
+                        if (doUpdate)
                         {
                             unit.UpdateData(new UnitUpdate
                             {
@@ -1790,8 +1810,8 @@ public partial class GameZone : Updater
                     
                     case UnitDataLandmine when !isDisabled && unit.LandmineEffect is not null:
                         var nearbyUnits = _unitOctree.GetColliding(unit.LandmineEffect.Shape);
-                        var nearbyEnemies = nearbyUnits.Where(u => u.PlayerId != null && u.Team != unit.Team).ToList();
-                        if (nearbyEnemies is { Count: > 0 })
+                        var nearbyEnemies = nearbyUnits.Where(u => u.PlayerId != null && u.Team != unit.Team);
+                        if (nearbyEnemies.Any())
                         {
                             unit.Killed(unit.CreateBlankImpactData());
                         }
@@ -1809,13 +1829,12 @@ public partial class GameZone : Updater
                                 new Vector3(0.5f, portalSize.y, 0.5f));
                             
                             var unitsForTeleport = _unitOctree.GetColliding(teleportRange).Where(u =>
-                                u.Id != unit.Id && (portalData.UnitsFilter is not { } targeting || u.DoesEffectApply(targeting, unit.Team))).ToList();
+                                u.Id != unit.Id && (portalData.UnitsFilter is not { } targeting || u.DoesEffectApply(targeting, unit.Team)));
 
-                            if (unitsForTeleport.Count != 0)
+                            if (unitsForTeleport.FirstOrDefault() is {} unitToTeleport)
                             {
                                 if (!unit.CanTeleport || !otherPortal.CanTeleport) break;
-
-                                var unitToTeleport = unitsForTeleport[0];
+                                
                                 _serviceZone.SendPortalTeleport(unitToTeleport.Id, unit.Id, otherPortal.Id);
                                 var telePos = otherPortal.GetMidpoint();
                                 telePos = telePos with
@@ -1851,9 +1870,9 @@ public partial class GameZone : Updater
                             
                                 var otherForTeleport = _unitOctree.GetColliding(teleport2Range).Where(u =>
                                     u.Id != otherPortal.Id && (portalData.UnitsFilter is not { } targeting ||
-                                                               u.DoesEffectApply(targeting, otherPortal.Team))).ToList();
+                                                               u.DoesEffectApply(targeting, otherPortal.Team)));
 
-                                if (otherForTeleport.Count == 0)
+                                if (!otherForTeleport.Any())
                                 {
                                     if (unit.JustTeleported)
                                     {
@@ -2022,12 +2041,7 @@ public partial class GameZone : Updater
             _unitsToDrop.Clear();
         };
 
-    private void FlushBuffer()
-    {
-        var buffer = _sendBuffer.GetBuffer();
-        if (buffer.Length > 0)
-           _sessionsSender.Send(buffer);
-    }
+    private void FlushBuffer() => _sendBuffer.UseBuffer(_sessionsSender.Send);
 
     private void OnBuild1TimerElapsed(object? sender, ElapsedEventArgs e)
     {

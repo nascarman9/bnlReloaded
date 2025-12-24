@@ -592,13 +592,19 @@ public partial class Unit
             default:
                 return;
         }
-        
-        var selfImpact = CreateImpactData();
-        foreach (var effect in ActiveEffects.GetEffectsOfType<ConstEffectOnDamageTaken>().Select(d => d.Effect).OfType<InstEffect>())
+
+        if (impact.Impact != CatalogueHelper.AntimatterShieldImpact)
         {
-            _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect, selfImpact);
+            var selfImpact = CreateImpactData();
+            foreach (var effect in ActiveEffects.GetEffectsOfType<ConstEffectOnDamageTaken>().Select(d => d.Effect).OfType<InstEffect>())
+            {
+                _updater.OnApplyInstEffect(GetSelfSource(selfImpact), [this], effect, selfImpact);
+            }
         }
-        
+        else
+        {
+            impact.SourceKey = CatalogueHelper.AntimatterSource;
+        }
         
         // Check if unit has died
         if (UnitCard?.Data is UnitDataBomb { TriggerOnDamage: true })
@@ -646,7 +652,7 @@ public partial class Unit
         {
             DamageCaptureEffect?.NearbyUnits.ToList().ForEach(u =>
                 u.RemoveEffects(
-                    dataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                    dataDamageCapture.ZoneEffects.Select(e => new ConstEffectInfo(e)),
                     Team, GetSelfSource(selfImpact)));
         }
         
@@ -786,7 +792,7 @@ public partial class Unit
 
         if (enabledEffects is { Count: > 0 })
         {
-            RemoveEffects(enabledEffects.Select(e => new ConstEffectInfo(e)).ToList(), Team, null);
+            RemoveEffects(enabledEffects.Select(e => new ConstEffectInfo(e)), Team, null);
         }
 
         if (PortalLinked.LinkedPortalUnitId is not null)
@@ -804,7 +810,7 @@ public partial class Unit
 
         if (enabledEffects is { Count: > 0 })
         {
-            AddEffects(enabledEffects.Select(e => new ConstEffectInfo(e)).ToList(), Team, null);
+            AddEffects(enabledEffects.Select(e => new ConstEffectInfo(e)), Team, null);
         }
 
         if (UnitCard?.Data is UnitDataPortal)
@@ -843,7 +849,7 @@ public partial class Unit
                 if (effect.ConstantEffects != null)
                 {
                     unitList.ToList().ForEach(u =>
-                        u.RemoveEffects(effect.ConstantEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                        u.RemoveEffects(effect.ConstantEffects.Select(e => new ConstEffectInfo(e)),
                             Team, source));
                 }
             }
@@ -878,7 +884,7 @@ public partial class Unit
                 if (effect.ConstantEffects != null)
                 {
                     unitList.ToList().ForEach(u =>
-                        u.RemoveEffects(effect.ConstantEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                        u.RemoveEffects(effect.ConstantEffects.Select(e => new ConstEffectInfo(e)),
                             Team, source));
                 }
             }
@@ -896,7 +902,7 @@ public partial class Unit
 
     private bool DoPull(Unit puller, ConstEffectPull pull)
     {
-        if (pull.Force < _minPullForce && DateTimeOffset.Now - _lastPullTime < TimeSpan.FromSeconds(5)) return false;
+        if (pull.Force < _minPullForce && DateTimeOffset.Now - _lastPullTime < TimeSpan.FromSeconds(3)) return false;
         if (Math.Abs(pull.Force - _minPullForce) < 0.01f && _activePuller is not null &&
             puller.Id != _activePuller) return false;
 

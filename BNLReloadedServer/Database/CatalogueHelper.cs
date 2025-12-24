@@ -76,12 +76,14 @@ public static class CatalogueHelper
     public static Key FallSource { get; } = new("damage_source_fall");
     public static Key LavaSource { get; } = new("damage_source_lava");
     public static Key AcidSource { get; } = new("damage_source_acid");
+    public static Key AntimatterSource { get; } = new("damage_source_antimatter_shield");
     public static Key SmokeBomb { get; } = new("unit_device_generic_smoketrap");
     public static Key FallImpact { get; } = new("impact_falling");
     public static Key SupplyDrop { get; } = new("unit_supply_resource");
     public static Key SuperSupplyDrop { get; } = new("unit_supply_super_resource");
     public static Key ClassicBlockbuster { get; } = new("unit_supply_blockbuster_classic");
     public static Key SpecialBadge { get; } = new("badge_icon_community_representative");
+    public static Key AntimatterShieldImpact { get; } = new("impact_antimatter_shield");
 
     public static readonly List<Key> ObjectiveShieldKeys =
     [

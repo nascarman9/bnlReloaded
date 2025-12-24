@@ -1381,7 +1381,7 @@ public class MapBinary
         {
             Solid: true, Grounded: false, Transparent: false, HasTeam: false, CanFloat: false, Destructible: true,
             IsVisualClone: false
-        };
+        } or { Visual.Icon: "block_ice" };
 
     public Vector3s? GetGroundBlockFromSky(int xVal, int zVal)
     {

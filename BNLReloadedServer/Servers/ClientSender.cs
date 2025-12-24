@@ -11,12 +11,16 @@ public class ClientSender(TcpClient client) : ISender
     public void Send(BinaryWriter writer) => client.SendAsync(AppendMessageLength(writer));
 
     public void Send(byte[] buffer) => client.SendAsync(buffer);
+    
+    public void Send(ReadOnlySpan<byte> buffer) => client.SendAsync(buffer);
 
     public void SendExcept(BinaryWriter writer, List<Guid> excluded) => client.SendAsync(AppendMessageLength(writer));
 
     public void SendSync(BinaryWriter writer) => client.Send(AppendMessageLength(writer));
 
     public void SendSync(byte[] buffer) => client.Send(buffer);
+    
+    public void SendSync(ReadOnlySpan<byte> buffer) => client.Send(buffer);
 
     public void Subscribe(Guid sessionId)
     {
