@@ -19,7 +19,7 @@ public static class BuffHelper
       baseMagSize * Math.Max(0.0f, 1f + unit.GetBuff(BuffType.WeaponMagazine));
 
     public float PoolSize(float basePoolSize) => 
-      basePoolSize * Math.Max(basePoolSize >= 1 ? 1.0f : 0, 1f + unit.GetBuff(BuffType.WeaponPool));
+      Math.Max(Math.Min(basePoolSize, 1), basePoolSize * Math.Max(0, 1f + unit.GetBuff(BuffType.WeaponPool)));
 
     public float AmmoRate(float baseAmmoRate) => 
       unit.IsBuff(BuffType.InfiniteAmmo) ? 0.0f : baseAmmoRate;
