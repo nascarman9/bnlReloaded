@@ -43,6 +43,12 @@ public class SessionSender : ISender
             session.SendAsync(buffer);
     }
 
+    public void Send(ReadOnlySpan<byte> buffer)
+    {
+        foreach (var session in _sessions.Values)
+            session.SendAsync(buffer);
+    }
+
     public void SendExcept(BinaryWriter writer, List<Guid> excluded)
     {
         var message = AppendMessageLength(writer);
@@ -58,6 +64,12 @@ public class SessionSender : ISender
     }
 
     public void SendSync(byte[] buffer)
+    {
+        foreach (var session in _sessions.Values)
+            session.Send(buffer);
+    }
+
+    public void SendSync(ReadOnlySpan<byte> buffer)
     {
         foreach (var session in _sessions.Values)
             session.Send(buffer);

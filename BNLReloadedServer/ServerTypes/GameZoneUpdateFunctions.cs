@@ -432,7 +432,7 @@ public partial class GameZone
                     new ConstEffectInfo(c, instEffectAllPlayersPersistent.PersistenceDuration));
                 if (constEffects != null)
                 {
-                    players.ForEach(plyer => plyer.AddEffects(constEffects.ToList(), source.Team, source));
+                    players.ForEach(plyer => plyer.AddEffects(constEffects, source.Team, source));
                 }
                 return true;
             
@@ -441,7 +441,7 @@ public partial class GameZone
                 {
                    foreach (var unit in actualUnitList)
                    {
-                       unit.AddEffects(constant.Select(c => new ConstEffectInfo(c)).ToList(), source.Team, source);
+                       unit.AddEffects(constant.Select(c => new ConstEffectInfo(c)), source.Team, source);
                    } 
                 }
 
@@ -721,7 +721,7 @@ public partial class GameZone
                 {
                     foreach (var unit in actualUnitList)
                     {
-                        unit.AddEffects(con.Select(c => new ConstEffectInfo(c)).ToList(), source.Team, source);
+                        unit.AddEffects(con.Select(c => new ConstEffectInfo(c)), source.Team, source);
                     } 
                 }
                 
@@ -745,7 +745,7 @@ public partial class GameZone
             case InstEffectCasterBunch instEffectCasterBunch when unitSource is not null:
                 if (instEffectCasterBunch.Constant is { Count: > 0 } cons)
                 {
-                    unitSource.AddEffects(cons.Select(c => new ConstEffectInfo(c)).ToList(), source.Team, source);
+                    unitSource.AddEffects(cons.Select(c => new ConstEffectInfo(c)), source.Team, source);
                 }
                 
                 var beforeCast = impactData.Clone();
@@ -1167,7 +1167,7 @@ public partial class GameZone
                 {
                     affUnits.ForEach(u =>
                         u.AddEffects(
-                            instEffectSplashDamage.UnitConstEffects.Select(e => new ConstEffectInfo(e)).ToList(),
+                            instEffectSplashDamage.UnitConstEffects.Select(e => new ConstEffectInfo(e)),
                             source.Team, source));
                 }
                 return true;
@@ -1341,7 +1341,7 @@ public partial class GameZone
                 var persistantSource = unitSource is not null ? new PersistOnDeathSource(unitSource, impactData) : source;
                 foreach (var unit in actualUnitList)
                 {
-                    unit.AddEffects(eff.Select(c => new ConstEffectInfo(c, instEffectZoneEffect.Duration)).ToList(),
+                    unit.AddEffects(eff.Select(c => new ConstEffectInfo(c, instEffectZoneEffect.Duration)),
                         source.Team, persistantSource);
                 }
                 return true;
@@ -2009,20 +2009,20 @@ public partial class GameZone
         var source = unit.GetSelfSource(unit.CreateImpactData());
         if (oldTeam == unit.Team && effect.EffectsOnLeading is { Count: > 0 })
         {
-            unit.RemoveEffects(effect.EffectsOnLeading.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+            unit.RemoveEffects(effect.EffectsOnLeading.Select(e => new ConstEffectInfo(e)), unit.Team, source);
         }
         else if (oldTeam != unit.Team && oldTeam != TeamType.Neutral && effect.EffectsOnLosing is { Count: > 0 })
         {
-            unit.RemoveEffects(effect.EffectsOnLosing.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+            unit.RemoveEffects(effect.EffectsOnLosing.Select(e => new ConstEffectInfo(e)), unit.Team, source);
         }
 
         if (newTeam == unit.Team && effect.EffectsOnLeading is { Count: > 0 })
         {
-            unit.AddEffects(effect.EffectsOnLeading.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+            unit.AddEffects(effect.EffectsOnLeading.Select(e => new ConstEffectInfo(e)), unit.Team, source);
         }
         else if (newTeam != unit.Team && newTeam != TeamType.Neutral && effect.EffectsOnLosing is { Count: > 0 })
         {
-            unit.AddEffects(effect.EffectsOnLosing.Select(e => new ConstEffectInfo(e)).ToList(), unit.Team, source);
+            unit.AddEffects(effect.EffectsOnLosing.Select(e => new ConstEffectInfo(e)), unit.Team, source);
         }
     }
 

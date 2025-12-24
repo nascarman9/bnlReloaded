@@ -323,7 +323,7 @@ public partial class Unit
         });
     }
 
-    public void AddEffects(ICollection<ConstEffectInfo> effects, TeamType sourceTeam, EffectSource? source)
+    public void AddEffects(IEnumerable<ConstEffectInfo> effects, TeamType sourceTeam, EffectSource? source)
     {
         var appliedEffects = effects.Where(e => DoesEffectApply(e, sourceTeam) && !IsImmune(e)).ToList();
         if (appliedEffects.Count == 0) return;
@@ -467,7 +467,7 @@ public partial class Unit
         });
     }
 
-    public void RemoveEffects(ICollection<ConstEffectInfo> effects, TeamType sourceTeam, EffectSource? source, bool clearAll = false)
+    public void RemoveEffects(IEnumerable<ConstEffectInfo> effects, TeamType sourceTeam, EffectSource? source, bool clearAll = false)
     {
         Func<ConstEffectInfo, TeamType, bool> doCheck = _everConfused ? (eff, _) => DoesEffectApply(eff) : DoesEffectApply;
         var actualEffects = effects
@@ -915,14 +915,14 @@ public partial class Unit
 
                             if (effect.ConstantEffects is { } constantEffects)
                             {
-                                AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), Team, source);
+                                AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)), Team, source);
                             }
                         }
                         else if (currHealthPercentage > effect.HealthThreshold &&
                                  oldHealthPercentage <= effect.HealthThreshold && 
                                  effect.ConstantEffects is { } constantEffects)
                         {
-                            RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), Team, SelfSource);
+                            RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)), Team, SelfSource);
                         }
                     }
 
@@ -1119,7 +1119,7 @@ public partial class Unit
             {
                 if (sprintEffect.ConstantEffects is { } constantEffects)
                 {
-                    AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), Team, GetSelfSource(impact));
+                    AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)), Team, GetSelfSource(impact));
                 }
             }
         }
@@ -1129,7 +1129,7 @@ public partial class Unit
             {
                 if (sprintEffect.ConstantEffects is { } constantEffects)
                 {
-                    RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), Team, SelfSource);
+                    RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)), Team, SelfSource);
                 }
             }
         }
@@ -1284,8 +1284,8 @@ public partial class Unit
         if (!e.IsSingleItem) return;
         var addedItems = e.NewItem.Except(e.OldItem);
         var removedItems = e.OldItem.Except(e.NewItem);
-        var removed = removedItems.Select(info => (Databases.Catalogue.GetCard<CardEffect>(info.Key), info)).ToList();
-        var added = addedItems.Select(info => (Databases.Catalogue.GetCard<CardEffect>(info.Key), info)).ToList();
+        var removed = removedItems.Select(info => (info.Key.GetCard<CardEffect>(), info)).ToList();
+        var added = addedItems.Select(info => (info.Key.GetCard<CardEffect>(), info)).ToList();
         if (added.Count == 0 && removed.Count == 0) return;
         
         if (!_skipBuffSet && removed.Exists(eff => eff.Item1?.Effect is ConstEffectBuff) ||
@@ -1417,7 +1417,7 @@ public partial class Unit
                 case ConstEffectOnNearbyBlock nearby:
                     NearbyBlockEffects.Remove(nearby);
                     if (nearby.Effects is { Count: > 0 } blockEffects)
-                        RemoveEffects(blockEffects.Select(k => new ConstEffectInfo(k, null)).ToList(), Team, null,
+                        RemoveEffects(blockEffects.Select(k => new ConstEffectInfo(k, null)), Team, null,
                             true);
                     break;
                 case ConstEffectPull:
@@ -1435,7 +1435,7 @@ public partial class Unit
                 case ConstEffectSelf constEffectSelf:
                     if (constEffectSelf.ConstantEffects is { Count: > 0 } effects)
                     {
-                        RemoveEffects(effects.Select(k => new ConstEffectInfo(k, null)).ToList(), Team, SelfSource);
+                        RemoveEffects(effects.Select(k => new ConstEffectInfo(k, null)), Team, SelfSource);
                     }
                     break;
                 case ConstEffectTeam:
@@ -1495,7 +1495,7 @@ public partial class Unit
                 case ConstEffectSelf constEffectSelf:
                     CreateIntervalUpdater(info.Key, constEffectSelf);
                     if (constEffectSelf.ConstantEffects is { Count: > 0 } effects)
-                        AddEffects(effects.Select(k => new ConstEffectInfo(k)).ToList(), Team, SelfSource);
+                        AddEffects(effects.Select(k => new ConstEffectInfo(k)), Team, SelfSource);
                     break;
                 case ConstEffectTeam:
                     _updater.OnTeamEffectAdded(this, info);

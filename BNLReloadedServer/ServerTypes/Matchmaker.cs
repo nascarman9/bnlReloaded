@@ -314,9 +314,11 @@ public class Matchmaker(TcpServer server)
             switch (checkTeam1, checkTeam2)
             {
                 case (true, true):
-                    (otherPlayer, quality) = otherPlayers
+                    (otherPlayer, quality) = otherPlayers.DefaultIfEmpty()
                         .Select(p =>
                         {
+                            if (p is null)
+                                return (null, 0);
                             var team1 = backfillInfo.Team1.ToDictionary(k => new Player<uint>(k.Key), v => v.Value);
                             team1.Add(new Player<uint>(player.PlayerId), player.Rating);
                             var team2 = backfillInfo.Team2.ToDictionary(k => new Player<uint>(k.Key), v => v.Value);

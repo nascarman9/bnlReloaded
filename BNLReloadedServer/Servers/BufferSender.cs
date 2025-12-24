@@ -1,18 +1,22 @@
-﻿namespace BNLReloadedServer.Servers;
+﻿using System.Buffers;
+
+namespace BNLReloadedServer.Servers;
 
 public class BufferSender : IBufferedSender
 {
     private readonly MemoryStream _stream = new();
     private long _messageLength;
     
-    public byte[] GetBuffer()
+    public void UseBuffer(Action<ReadOnlySpan<byte>> callback)
     {
         _stream.Seek(0, SeekOrigin.Begin);
         var buffer = new byte[_messageLength];
         _stream.ReadAtLeast(buffer, (int)_messageLength, false);
         _stream.SetLength(0);
         _messageLength = 0;
-        return buffer;
+        
+        if (buffer.Length > 0)
+            callback.Invoke(buffer);
     }
 
     public uint? AssociatedPlayerId { get; set; }
@@ -27,6 +31,12 @@ public class BufferSender : IBufferedSender
     }
 
     public void Send(byte[] buffer)
+    {
+        _messageLength += buffer.Length;
+        _stream.Write(buffer);
+    }
+
+    public void Send(ReadOnlySpan<byte> buffer)
     {
         _messageLength += buffer.Length;
         _stream.Write(buffer);
@@ -51,7 +61,13 @@ public class BufferSender : IBufferedSender
         _messageLength += buffer.Length;
         _stream.Write(buffer);
     }
-    
+
+    public void SendSync(ReadOnlySpan<byte> buffer)
+    {
+        _messageLength += buffer.Length;
+        _stream.Write(buffer);
+    }
+
     public void Subscribe(Guid sessionId)
     {
     }

@@ -506,7 +506,7 @@ public class GameInstance : IGameInstance
                     var tempBufferedSender = new BufferSender();
                     var tempSessionSender = new SessionSender(Server, playerGuid, Server.FindSession(playerGuid));
                     Zone?.SendLoadZone(new ServiceZone(tempBufferedSender), zoneService, playerId);
-                    tempSessionSender.Send(tempBufferedSender.GetBuffer());
+                    tempBufferedSender.UseBuffer(tempSessionSender.Send);
                     player.LoadStage = ZoneLoadStage.Finished;
                     _zoneSender.Subscribe(playerGuid);
                     if (IsStarted)

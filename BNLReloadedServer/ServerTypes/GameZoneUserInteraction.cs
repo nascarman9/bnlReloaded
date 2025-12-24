@@ -71,7 +71,7 @@ public partial class GameZone
         {
             if (buildEffect.ConstantEffects is { } constantEffects)
             {
-                player.AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, player.GetSelfSource(impact));
+                player.AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)), player.Team, player.GetSelfSource(impact));
             }
         }
     }
@@ -92,7 +92,7 @@ public partial class GameZone
         {
             if (buildEffect.ConstantEffects is { } constantEffects)
             {
-                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, player.GetSelfSource());
+                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)), player.Team, player.GetSelfSource());
             }
         }
     }
@@ -136,13 +136,13 @@ public partial class GameZone
         
         if (player.CurrentGear?.Card.EquipEffects is { Count: > 0 } effects1)
         {
-            player.RemoveEffects(effects1.Select(e => new ConstEffectInfo(e, null)).ToList(), player.Team, player.GetSelfSource());
+            player.RemoveEffects(effects1.Select(e => new ConstEffectInfo(e, null)), player.Team, player.GetSelfSource());
         }
 
         if (gear.Card.EquipEffects is { Count: > 0 } effects2)
         {
             var impact = player.CreateImpactData();
-            player.AddEffects(effects2.Select(e => new ConstEffectInfo(e)).ToList(), player.Team, player.GetSelfSource(impact));
+            player.AddEffects(effects2.Select(e => new ConstEffectInfo(e)), player.Team, player.GetSelfSource(impact));
         }
         
         player.SetGear(gearKey);
@@ -182,7 +182,7 @@ public partial class GameZone
             
             if (reloadEffect.ConstantEffects is { } constantEffects)
             {
-                player.AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, source);
+                player.AddEffects(constantEffects.Select(k => new ConstEffectInfo(k)), player.Team, source);
             }
         }
     }
@@ -233,7 +233,7 @@ public partial class GameZone
             
             if (reloadEffect.ConstantEffects is { } constantEffects)
             {
-                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, player.GetSelfSource());
+                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)), player.Team, player.GetSelfSource());
             }
         }
     }
@@ -268,7 +268,7 @@ public partial class GameZone
             
             if (reloadEffect.ConstantEffects is { } constantEffects)
             {
-                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, player.GetSelfSource());
+                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)), player.Team, player.GetSelfSource());
             }
         }
     }
@@ -276,17 +276,43 @@ public partial class GameZone
     public void ReceivedProjCreateRequest(ulong shotId, ProjectileInfo projectileInfo, Guid? creatingSession)
     {
         _keepShotAlive.Add(shotId);
+        if (projectileInfo.ProjectileKey.GetCard<CardProjectile>() is
+            { Behaviour: ProjectileBehaviourGrenade { CollisionMask.Ground: true } })
+        {
+            _checkForWater.Add(shotId);
+        }
         _unbufferedZone.SendCreateProjectile(shotId, projectileInfo, creatingSession);
     }
 
     public void ReceivedProjMoveRequest(ulong shotId, ulong time, ZoneTransform zoneTransform)
     {
-        _serviceZone.SendMoveProjectile(shotId, time, zoneTransform);
+        if (_checkForWater.Contains(shotId) && zoneTransform.Position.Y < _zoneData.PlanePosition)
+        {
+            ReceivedHit(time, new Dictionary<ulong, HitData>
+            {
+                {
+                    shotId, new HitData
+                    {
+                        InsidePoint = zoneTransform.Position,
+                        OutsideShift = BlockShift.None,
+                        Normal = Vector3s.Zero,
+                        TargetId = null,
+                        Crit = false
+                    }
+                }
+            });
+            ReceivedProjDropRequest(shotId);
+        }
+        else
+        {
+            _serviceZone.SendMoveProjectile(shotId, time, zoneTransform);
+        }
     }
 
     public void ReceivedProjDropRequest(ulong shotId)
     {
         _keepShotAlive.Remove(shotId);
+        _checkForWater.Remove(shotId);
         _shotInfo.Remove(shotId);
         _serviceZone.SendDropProjectile(shotId);
     }
@@ -328,7 +354,7 @@ public partial class GameZone
                 _units.TryGetValue(channelData.TargetUnit.Value, out var unit))
             {
                 var impactData = player.CreateImpactData(insidePoint: channelData.HitPos, sourceKey: player.CurrentGear.Key);
-                unit.AddEffects(channel.ConstantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, player.GetSelfSource(impactData));
+                unit.AddEffects(channel.ConstantEffects.Select(k => new ConstEffectInfo(k)), player.Team, player.GetSelfSource(impactData));
             }
         }
         else
@@ -352,7 +378,7 @@ public partial class GameZone
                 channelData.TargetUnit.HasValue && channel.ConstantEffects is { Count: > 0 } &&
                 _units.TryGetValue(channelData.TargetUnit.Value, out var unit))
             {
-                unit.RemoveEffects(channel.ConstantEffects.Select(k => new ConstEffectInfo(k, null)).ToList(),
+                unit.RemoveEffects(channel.ConstantEffects.Select(k => new ConstEffectInfo(k, null)),
                     player.Team, player.GetSelfSource());    
             }
         }
@@ -650,7 +676,7 @@ public partial class GameZone
 
                     if (abilityBehaviorTrigger.TriggerEffects is { Count: > 0 } effects)
                     {
-                        player.AddEffects(effects.Select(e => new ConstEffectInfo(e)).ToList(), player.Team,
+                        player.AddEffects(effects.Select(e => new ConstEffectInfo(e)), player.Team,
                             new TriggerSource(player, impactData));
                     }
                     break;
@@ -811,7 +837,7 @@ public partial class GameZone
         {
             if (buildEffect.ConstantEffects is { } constantEffects)
             {
-                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)).ToList(), player.Team, player.GetSelfSource());
+                player.RemoveEffects(constantEffects.Select(k => new ConstEffectInfo(k)), player.Team, player.GetSelfSource());
             }
         }
     }
