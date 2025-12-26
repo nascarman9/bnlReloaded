@@ -237,7 +237,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
             writer.Write(byte.MaxValue);
             writer.Write(error ?? string.Empty);
         }
-        sender.SendSync(writer);
+        sender.Send(writer);
         
         var regionServers = _masterServerDatabase.GetRegionServers();
         if (regionServers.Count == 1 && sender.AssociatedPlayerId.HasValue)
@@ -386,7 +386,7 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
             writer.Write(byte.MaxValue);
             writer.Write(error ?? string.Empty);
         }
-        sender.SendSync(writer);
+        sender.Send(writer);
     }
 
     private void ReceiveLoginRegion(BinaryReader reader)

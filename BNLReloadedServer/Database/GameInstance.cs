@@ -22,7 +22,7 @@ public class GameInstance : IGameInstance
         public ulong? SquadId { get; } = squadId;
     }
     
-    private TcpServer Server { get; }
+    private AsyncTaskTcpServer Server { get; }
     
     public string GameInstanceId { get; }
 
@@ -54,7 +54,7 @@ public class GameInstance : IGameInstance
     
     private readonly IRegionServerDatabase _serverDatabase = Databases.RegionServerDatabase;
 
-    public GameInstance(TcpServer matchServer, TcpServer regionServer, string gameInstanceId, IGameInitiator gameInitiator)
+    public GameInstance(AsyncTaskTcpServer matchServer, AsyncTaskTcpServer regionServer, string gameInstanceId, IGameInitiator gameInitiator)
     {
         Server = matchServer;
         GameInstanceId = gameInstanceId;
@@ -64,7 +64,7 @@ public class GameInstance : IGameInstance
         ChatRooms = CreateChatRooms(regionServer);
     }
 
-    private InstanceChatRooms CreateChatRooms(TcpServer server)
+    private InstanceChatRooms CreateChatRooms(AsyncTaskTcpServer server)
     {
         var lobbyId = Guid.NewGuid().GetHashCode();
         var instanceId = GameInstanceId.GetHashCode();
@@ -504,7 +504,13 @@ public class GameInstance : IGameInstance
                 Zone?.EnqueueAction(() =>
                 {
                     var tempBufferedSender = new BufferSender();
-                    var tempSessionSender = new SessionSender(Server, playerGuid, Server.FindSession(playerGuid));
+                    var senderTask = Server.FindAsyncSenderTask(playerGuid);
+                    if (senderTask == null)
+                    {
+                        return;
+                    }
+                    
+                    var tempSessionSender = new SessionSender(Server, playerGuid, senderTask);
                     Zone?.SendLoadZone(new ServiceZone(tempBufferedSender), zoneService, playerId);
                     tempBufferedSender.UseBuffer(tempSessionSender.Send);
                     player.LoadStage = ZoneLoadStage.Finished;

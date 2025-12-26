@@ -9,9 +9,11 @@ public class MatchSession : TcpSession
     private readonly SessionReader _reader;
     private bool _connected;
 
-    public MatchSession(TcpServer server) : base(server)
+    public MatchSession(AsyncTaskTcpServer server) : base(server)
     {
-        var sender = new SessionSender(server, Id, this);
+        var senderTask = new AsyncSenderTask(this);
+        server.AddSenderTask(Id, senderTask);
+        var sender = new SessionSender(server, Id, senderTask);
         var serviceDispatcher = new MatchServiceDispatcher(sender, Id);
         _reader = new SessionReader(serviceDispatcher, Databases.ConfigDatabase.DebugMode(),
             "Match server received packet with incorrect length");
@@ -28,7 +30,7 @@ public class MatchSession : TcpSession
         Databases.RegionServerDatabase.RemoveMatchServices(Id);
         if (_connected)
             Console.WriteLine($"Match TCP session with Id {Id} disconnected!");
-        
+
         _connected = false;
     }
 

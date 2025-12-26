@@ -2,5 +2,5 @@
 
 public interface IBuffer
 {
-    public void UseBuffer(Action<ReadOnlySpan<byte>> callback);
+    public void UseBuffer(Action<byte[]> callback);
 }

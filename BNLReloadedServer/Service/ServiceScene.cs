@@ -53,7 +53,7 @@ public class ServiceScene(ISender sender) : IServiceScene
         using var writer = CreateWriter();
         writer.Write((byte)ServiceSceneId.MessageServerUpdate);
         ServerUpdate.WriteRecord(writer, update);
-        sender.SendSync(writer);
+        sender.Send(writer);
     }
     
     public bool Receive(BinaryReader reader)

@@ -12,7 +12,7 @@ using Timer = System.Timers.Timer;
 
 namespace BNLReloadedServer.ServerTypes;
 
-public class Matchmaker(TcpServer server)
+public class Matchmaker(AsyncTaskTcpServer server)
 {
     private const double MaxSecondWaitTimeWithFullLobby = 60;
     private const double MaxSecondWaitTimeTillShorthandedGame = 120;

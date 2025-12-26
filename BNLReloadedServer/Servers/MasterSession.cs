@@ -9,9 +9,11 @@ internal class MasterSession : TcpSession
     private readonly SessionReader _reader;
     private bool _connected;
 
-    public MasterSession(TcpServer server) : base(server)
+    public MasterSession(AsyncTaskTcpServer server) : base(server)
     {
-        var sender = new SessionSender(server, Id, this);
+        var senderTask = new AsyncSenderTask(this);
+        server.AddSenderTask(Id,  senderTask);
+        var sender = new SessionSender(server, Id, senderTask);
         var serviceDispatcher = new MasterServiceDispatcher(sender, Id);
         _reader = new SessionReader(serviceDispatcher, Databases.ConfigDatabase.DebugMode(),
             "Master server received packet with incorrect length");
@@ -29,7 +31,7 @@ internal class MasterSession : TcpSession
             Console.WriteLine($"Master TCP session with Id {Id} disconnected!");
 
         _connected = false;
-        
+
         Databases.MasterServerDatabase.RemoveRegionServer(Id.ToString());
     }
 
