@@ -275,15 +275,14 @@ public partial class GameZone
 
     public void ReceivedProjCreateRequest(ulong shotId, ProjectileInfo projectileInfo, Guid? creatingSession)
     {
+        _keepShotAlive.Add(shotId);
+        
         if (projectileInfo.ProjectileKey.GetCard<CardProjectile>() is
             { Behaviour: ProjectileBehaviourGrenade { CollisionMask.Ground: true } })
         {
             _checkForWater.Add(shotId);
         }
-        else
-        {
-            _keepShotAlive.Add(shotId);
-        }
+        
         _unbufferedZone.SendCreateProjectile(shotId, projectileInfo, creatingSession);
     }
 

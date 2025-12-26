@@ -11,6 +11,8 @@ var toJson = configs.DoToJson();
 var fromJson = configs.DoFromJson();
 var runServer = configs.DoRunServer();
 
+const int bufferSize = 2000000;  // 2MB
+
 if (toJson || fromJson)
 {
     var serializedPath = Path.Combine(Databases.CacheFolderPath, configs.FromJsonCdbName());
@@ -125,6 +127,8 @@ if (runServer)
     {
         // Create a new TCP server
         server = new MasterServer(configs.MasterIp(), 28100);
+        server.OptionSendBufferSize = bufferSize;
+        server.OptionReceiveBufferSize = bufferSize;
         
         // Start the server
         server.Start();
@@ -132,13 +136,16 @@ if (runServer)
 
     var regionServer = new RegionServer(configs.RegionIp(), 28101);
     regionServer.OptionNoDelay = true;
-    regionServer.OptionSendBufferSize = 16384;
-    regionServer.OptionReceiveBufferSize = 16384;
+    regionServer.OptionSendBufferSize = bufferSize;
+    regionServer.OptionReceiveBufferSize = bufferSize;
     var regionClient = new RegionClient(configs.MasterHost(), 28100);
+    regionClient.OptionNoDelay = true;
+    regionClient.OptionSendBufferSize = bufferSize;
+    regionClient.OptionReceiveBufferSize = bufferSize;
     var matchServer = new MatchServer(configs.RegionIp(), 28102);
     matchServer.OptionNoDelay = true;
-    matchServer.OptionSendBufferSize = 16384;
-    matchServer.OptionReceiveBufferSize = 16384;
+    matchServer.OptionSendBufferSize = bufferSize;
+    matchServer.OptionReceiveBufferSize = bufferSize;
     Databases.SetRegionDatabase(new RegionServerDatabase(regionServer, matchServer));
    
     regionServer.Start();
