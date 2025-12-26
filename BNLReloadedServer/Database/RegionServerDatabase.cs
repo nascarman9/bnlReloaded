@@ -13,7 +13,7 @@ using NetCoreServer;
 
 namespace BNLReloadedServer.Database;
 
-public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRegionServerDatabase
+public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer matchServer) : IRegionServerDatabase
 {
     private class ConnectionInfo(Guid guid, ChatPlayer chatInfo, bool isAdmin)
     {

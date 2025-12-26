@@ -10,9 +10,11 @@ internal class RegionSession : TcpSession
     private readonly SessionReader _reader;
     private bool _connected;
 
-    public RegionSession(TcpServer server) : base(server)
+    public RegionSession(AsyncTaskTcpServer server) : base(server)
     {
-        _sender = new SessionSender(server, Id, this);
+        var senderTask = new AsyncSenderTask(this);
+        server.AddSenderTask(Id, senderTask);
+        _sender = new SessionSender(server, Id, senderTask);
         var serviceDispatcher = new RegionServiceDispatcher(_sender, Id);
         _reader = new SessionReader(serviceDispatcher, Databases.ConfigDatabase.DebugMode(),
             "Region server received packet with incorrect length");
@@ -33,9 +35,11 @@ internal class RegionSession : TcpSession
         }
             
         Databases.RegionServerDatabase.RemoveServices(Id);
-        
+
         if (_connected)
+        {
             Console.WriteLine($"Region TCP session with Id {Id} disconnected!");
+        }
         
         _connected = false;
     }

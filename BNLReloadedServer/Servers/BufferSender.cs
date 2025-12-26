@@ -7,7 +7,7 @@ public class BufferSender : IBufferedSender
     private readonly MemoryStream _stream = new();
     private long _messageLength;
     
-    public void UseBuffer(Action<ReadOnlySpan<byte>> callback)
+    public void UseBuffer(Action<byte[]> callback)
     {
         _stream.Seek(0, SeekOrigin.Begin);
         var buffer = new byte[_messageLength];
@@ -36,36 +36,11 @@ public class BufferSender : IBufferedSender
         _stream.Write(buffer);
     }
 
-    public void Send(ReadOnlySpan<byte> buffer)
-    {
-        _messageLength += buffer.Length;
-        _stream.Write(buffer);
-    }
-
     public void SendExcept(BinaryWriter writer, List<Guid> excluded)
     {
         var message = AppendMessageLength(writer);
         _messageLength += message.Length;
         _stream.Write(message);
-    }
-
-    public void SendSync(BinaryWriter writer)
-    {
-        var message = AppendMessageLength(writer);
-        _messageLength += message.Length;
-        _stream.Write(message); 
-    }
-
-    public void SendSync(byte[] buffer)
-    {
-        _messageLength += buffer.Length;
-        _stream.Write(buffer);
-    }
-
-    public void SendSync(ReadOnlySpan<byte> buffer)
-    {
-        _messageLength += buffer.Length;
-        _stream.Write(buffer);
     }
 
     public void Subscribe(Guid sessionId)

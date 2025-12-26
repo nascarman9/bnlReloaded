@@ -1,52 +1,41 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Threading.Channels;
 
 namespace BNLReloadedServer.ServerTypes;
 
 public abstract class Updater
 {
-    private readonly BlockingCollection<Action> _updateActions = new();
+    private readonly Channel<Action> _updateActions = Channel.CreateUnbounded<Action>();
 
-    private bool BlockEnqueuing { get; set; }
+    protected Updater() => _ = RunUpdater(_updateActions.Reader);
 
-    protected Updater()
+    private static async Task RunUpdater(ChannelReader<Action> actions)
     {
-        Task.Run(RunUpdater);
-    }
-    
-    private void RunUpdater()
-    {
-        while (!_updateActions.IsCompleted)
+        try
         {
-            Action? updateAction = null;
-            try
+            await foreach (var action in actions.ReadAllAsync())
             {
-                updateAction = _updateActions.Take();
-            }
-            catch (InvalidOperationException) { }
-
-            try
-            {
-                updateAction?.Invoke();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
+                try
+                {
+                    action();
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
             }
         }
-        
-        _updateActions.Dispose();
+        catch (OperationCanceledException)
+        {
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
     }
     
-    public bool EnqueueAction(Action func)
-    {
-        if (BlockEnqueuing) return false;
-        _updateActions.Add(func);
-        return true;
-    }
+    public bool EnqueueAction(Action func) => _updateActions.Writer.TryWrite(func);
 
-    public void Stop()
-    {
-        _updateActions.CompleteAdding();
-        BlockEnqueuing = true;
-    }
+    public void Stop() => _updateActions.Writer.TryComplete();
 }
