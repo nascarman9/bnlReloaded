@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_ruins",
+  "scope": "public",
+  "name": {
+    "text": "Ruins",
+    "data": {
+      "ru": {
+        "original": "Ruins",
+        "translation": "Ruins"
+      },
+      "es": {
+        "original": "Ruins",
+        "translation": "Ruins"
+      },
+      "de": {
+        "original": "Ruins",
+        "translation": "Ruins"
+      },
+      "fr": {
+        "original": "Ruins",
+        "translation": "Ruins"
+      },
+      "pt": {
+        "original": "Ruins",
+        "translation": "Ruins"
+      }
+    }
+  },
+  "description": {
+    "text": "Destroy or rebuild the ruins whilst defending your Base. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Destroy or rebuild the ruins whilst defending your Base. Two Cubes and a Base.",
+        "translation": "Уничтожь руины или отстрой их заново, защищая базу. Два куба и база."
+      },
+      "es": {
+        "original": "Destroy or rebuild the ruins whilst defending your Base. Two Cubes and a Base.",
+        "translation": "Explora las ruinas de la isla.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Destroy or rebuild the ruins whilst defending your Base. Two Cubes and a Base.",
+        "translation": "Zerstört die Ruinen oder baut sie wieder auf, während ihr eure Basis verteidigt. Zwei Generatoren und eine Basis."
+      },
+      "fr": {
+        "original": "Destroy or rebuild the ruins whilst defending your Base. Two Cubes and a Base.",
+        "translation": "Détruisez ou reconstruisez les ruines tout en défendant votre base. Deux cubes et une base."
+      },
+      "pt": {
+        "original": "Destroy or rebuild the ruins whilst defending your Base. Two Cubes and a Base.",
+        "translation": "Destrua ou reconstrua as ruinas enquanto defende sua Base. Dois Cubos e uma Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/2a3d07a670fb964fb109f93c32c5ccc8.jpg",
+  "large_image": "https://i.gyazo.com/2a3d07a670fb964fb109f93c32c5ccc8.jpg"
+}

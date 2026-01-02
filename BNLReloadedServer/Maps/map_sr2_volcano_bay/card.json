@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_volcano_bay",
+  "scope": "public",
+  "name": {
+    "text": "Volcano Bay",
+    "data": {
+      "es": {
+        "original": "Volcano Bay",
+        "translation": "Volcano Bay"
+      },
+      "ru": {
+        "original": "Volcano Bay",
+        "translation": "Volcano Bay"
+      },
+      "de": {
+        "original": "Volcano Bay",
+        "translation": "Volcano Bay"
+      },
+      "fr": {
+        "original": "Volcano Bay",
+        "translation": "Volcano Bay"
+      },
+      "pt": {
+        "original": "Volcano Bay",
+        "translation": "Volcano Bay"
+      }
+    }
+  },
+  "description": {
+    "text": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base.",
+    "data": {
+      "es": {
+        "original": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base.",
+        "translation": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base."
+      },
+      "pt": {
+        "original": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base.",
+        "translation": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base."
+      },
+      "de": {
+        "original": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base.",
+        "translation": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base."
+      },
+      "ru": {
+        "original": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base.",
+        "translation": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base."
+      },
+      "fr": {
+        "original": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base.",
+        "translation": "Work your way from the rocky dunes to the heart of the mountain as you try and destroy the base at the top! Two Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/6bd730a3ca0d262479d23df3c4022440.jpg",
+  "large_image": "https://i.gyazo.com/6bd730a3ca0d262479d23df3c4022440.jpg"
+}

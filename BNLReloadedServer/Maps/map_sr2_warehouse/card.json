@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_warehouse",
+  "scope": "public",
+  "name": {
+    "text": "Warehouse",
+    "data": {
+      "es": {
+        "original": "Warehouse",
+        "translation": "Warehouse"
+      },
+      "fr": {
+        "original": "Warehouse",
+        "translation": "Warehouse"
+      },
+      "de": {
+        "original": "Warehouse",
+        "translation": "Warehouse"
+      },
+      "pt": {
+        "original": "Warehouse",
+        "translation": "Warehouse"
+      },
+      "ru": {
+        "original": "Warehouse",
+        "translation": "Warehouse"
+      }
+    }
+  },
+  "description": {
+    "text": "Don't get lost! Three Cubes and a Base.",
+    "data": {
+      "es": {
+        "original": "Don't get lost! Three Cubes and a Base.",
+        "translation": "Don't get lost! Three Cubes and a Base."
+      },
+      "fr": {
+        "original": "Don't get lost! Three Cubes and a Base.",
+        "translation": "Don't get lost! Three Cubes and a Base."
+      },
+      "de": {
+        "original": "Don't get lost! Three Cubes and a Base.",
+        "translation": "Don't get lost! Three Cubes and a Base."
+      },
+      "ru": {
+        "original": "Don't get lost! Three Cubes and a Base.",
+        "translation": "Don't get lost! Three Cubes and a Base."
+      },
+      "pt": {
+        "original": "Don't get lost! Three Cubes and a Base.",
+        "translation": "Don't get lost! Three Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/822c4b27fee73205f0f53abd1bee50ad.jpg",
+  "large_image": "https://i.gyazo.com/822c4b27fee73205f0f53abd1bee50ad.jpg"
+}

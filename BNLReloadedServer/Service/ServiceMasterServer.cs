@@ -1,4 +1,7 @@
-﻿using BNLReloadedServer.BaseTypes;
+﻿using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
+using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
@@ -31,10 +34,16 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         MessageFriendRequest = 18,
         MessageFriendSearch = 19,
         MessageFriendSearchSteam = 20,
-        MessageGetLeaderboard = 21
+        MessageGetLeaderboard = 21,
+        MessageRegionStatusRequest = 22,
+        MessageRegionStatusResponse = 23
     }
     
     private readonly IMasterServerDatabase _masterServerDatabase = Databases.MasterServerDatabase;
+    private readonly ConcurrentDictionary<ushort, TaskCompletionSource<RegionStatus?>> _statusTasks = new();
+    private int _currRpcId = 1;
+
+    private ushort GetRpcId() => (ushort)Interlocked.Increment(ref _currRpcId);
     
     private static BinaryWriter CreateWriter()
     {
@@ -220,6 +229,39 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         writer.Write(publicKey);
         sender.Send(writer);
     }
+
+    public async Task<RegionStatus?> RequestStatusAsync(CancellationToken cancellationToken)
+    {
+        var rpcId = GetRpcId();
+        var tcs = new TaskCompletionSource<RegionStatus?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_statusTasks.TryAdd(rpcId, tcs))
+        {
+            throw new InvalidOperationException("Failed to register status request");
+        }
+
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceMasterId.MessageRegionStatusRequest);
+        writer.Write(rpcId);
+        sender.Send(writer);
+
+        using (cancellationToken.Register(() =>
+               {
+                   if (_statusTasks.TryRemove(rpcId, out var pending))
+                   {
+                       pending.TrySetCanceled(cancellationToken);
+                   }
+               }))
+        {
+            try
+            {
+                return await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                _statusTasks.TryRemove(rpcId, out _);
+            }
+        }
+    }
     
     public void ReceiveMatchEndedForPlayer(BinaryReader reader)
     {
@@ -243,6 +285,17 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         var excluded = reader.ReadList<uint, HashSet<uint>>(reader.ReadUInt32);
         
         _masterServerDatabase.SetNewRatings(winners, losers, excluded);
+    }
+
+    public void ReceiveRegionStatus(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var status = RegionStatus.ReadRecord(reader);
+
+        if (_statusTasks.TryRemove(rpcId, out var tcs))
+        {
+            tcs.TrySetResult(status);
+        }
     }
     
     public void ReceiveLookingForFriends(BinaryReader reader)
@@ -376,6 +429,9 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
                 break;
             case ServiceMasterId.MessageGetLeaderboard:
                 ReceiveLeaderboard(reader);
+                break;
+            case ServiceMasterId.MessageRegionStatusResponse:
+                ReceiveRegionStatus(reader);
                 break;
             default:
                 Console.WriteLine($"Master service received unsupported serviceId: {serviceMasterId}");

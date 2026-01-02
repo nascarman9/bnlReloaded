@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_insert_coin",
+  "scope": "public",
+  "name": {
+    "text": "Insert Coin",
+    "data": {
+      "ru": {
+        "original": "Insert Coin",
+        "translation": "Insert Coin"
+      },
+      "es": {
+        "original": "Insert Coin",
+        "translation": "Insert Coin"
+      },
+      "de": {
+        "original": "Insert Coin",
+        "translation": "Insert Coin"
+      },
+      "pt": {
+        "original": "Insert Coin",
+        "translation": "Insert Coin"
+      },
+      "fr": {
+        "original": "Insert Coin",
+        "translation": "Insert Coin"
+      }
+    }
+  },
+  "description": {
+    "text": "Respawn to continue. One Cube and a Base.",
+    "data": {
+      "ru": {
+        "original": "Respawn to continue. One Cube and a Base.",
+        "translation": "Начни бой с чистого листа. Один куб и база."
+      },
+      "es": {
+        "original": "Respawn to continue. One Cube and a Base.",
+        "translation": "¡No te quedes sin fichas!\nUn generador y un núcleo."
+      },
+      "de": {
+        "original": "Respawn to continue. One Cube and a Base.",
+        "translation": "Respawn und weiter geht's! Ein Generator und eine Basis."
+      },
+      "pt": {
+        "original": "Respawn to continue. One Cube and a Base.",
+        "translation": "Ressurgir para continuar. Um Cubo e uma Base."
+      },
+      "fr": {
+        "original": "Respawn to continue. One Cube and a Base.",
+        "translation": "On réapparaît, et on repart\u00A0! Un cube et une base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-insert-coin",
+  "large_image": "Gui/Maps/arena-insert-coin"
+}

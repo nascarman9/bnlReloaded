@@ -45,6 +45,7 @@ public interface IGameInstance
     public void SendUserToZone(uint playerId);
     public void PlayerEnterScene(uint playerId);
     public void PlayerZoneReady(uint playerId);
+    public StatusGameStatus? GetStatusSnapshot(IPlayerDatabase playerDatabase);
     public void UnitMoved(uint unitId, ulong moveTime, ZoneTransform transform);
     public void BuildRequest(ushort rpcId, uint playerId, BuildInfo buildInfo, IServiceZone builderService);
     public void CancelBuildRequest(uint playerId);

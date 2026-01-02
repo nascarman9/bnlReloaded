@@ -12,3 +12,78 @@ The next thing you have to change is the server IP. It's hardcoded to the origin
 The dll changes will be permanent unless you verify the integrity of the game files (or do something to cause steam to do it automatically). You should save a copy of the edited dll somewhere just in case you need to replace it again.
 
 To use the cdb serializer/deserializer, create a folder called Cache in the base directory (should be in the same directory as the BaseTypes, Database, etc. folders). Put the cdb file from the game assets into the new Cache folder. Then change the toJson and fromJson constants to serialize/deserialize the cdb to a json file/zipped cdb file respectively.
+
+## Example configuration
+
+Server settings live in `BNLReloadedServer/Configs/configs.json` and are deserialized with snake_case field names. A minimal single-node setup with the master HTTP status endpoint enabled looks like this:
+
+```json
+{
+  "is_master": true,
+  "run_server": true,
+  "use_master_cdb": false,
+  "cdb_name": "cdb",
+  "master_host": "127.0.0.1",
+  "master_public_host": "127.0.0.1",
+  "region_host": "127.0.0.1",
+  "region_public_host": "127.0.0.1",
+  "region_name": "Local Region",
+  "region_icon": "server_namericaeast",
+  "to_json": false,
+  "to_json_name": null,
+  "from_json": false,
+  "from_json_name": null,
+  "debug_mode": true,
+  "do_readline": true,
+  "enable_master_status_http": true,
+  "master_status_http_port": 28104,
+  "master_status_http_host": "*"
+}
+```
+
+For multi-region deployments, set `is_master` to `false` on the region servers and point `master_host`/`master_public_host` at the master instance. Regions still register with the master and are exposed through the master status HTTP endpoint when it is enabled.
+
+## Master status HTTP endpoint
+
+If `EnableMasterStatusHttp` is enabled in the configuration, the master process hosts a lightweight HTTP endpoint at `MasterStatusHttpHost:MasterStatusHttpPort` that returns JSON describing every connected region. Each region registers with the master when it connects, and the master status endpoint fetches live status from every registered region using the existing master↔region service RPCs. That means you can still retrieve up-to-date data for all regions (including the master region itself) directly from the master endpoint without running any per-region HTTP status servers.
+
+Example payload returned from `http://127.0.0.1:28104/` (whitespace added for clarity):
+
+```json
+{
+  "regions": [
+    {
+      "RegionId": "master",
+      "RegionName": "Local Region",
+      "Host": "127.0.0.1",
+      "Port": 28102,
+      "OnlinePlayers": 3,
+      "Queues": {
+        "quick_match": 2,
+        "custom": 1
+      },
+      "QueuePlayers": {
+        "quick_match": [
+          {
+            "Id": 12345,
+            "Name": "Alice",
+            "SquadId": null,
+            "JoinedAt": 1715200000
+          }
+        ]
+      },
+      "CustomGames": [],
+      "ActiveGames": [
+        {
+          "Id": "game-1",
+          "Mode": "quick_match",
+          "StartedAt": 1715200100,
+          "MatchDurationSeconds": null,
+          "Players": []
+        }
+      ],
+      "Error": null
+    }
+  ]
+}
+```

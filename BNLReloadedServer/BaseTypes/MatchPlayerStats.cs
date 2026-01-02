@@ -12,19 +12,28 @@ public class MatchPlayerStats
 
     public int Assists { get; set; }
 
+    public int BlocksBuilt { get; set; }
+
+    public int BlocksDestroyed { get; set; }
+
+    public float ResourcesEarned { get; set; }
+
     public void Write(BinaryWriter writer)
     {
-        new BitField(Team.HasValue, true, true, true).Write(writer);
+        new BitField(Team.HasValue, true, true, true, true, true, true).Write(writer);
         if (Team.HasValue)
             writer.WriteByteEnum(Team.Value);
         writer.Write(Kills);
         writer.Write(Deaths);
         writer.Write(Assists);
+        writer.Write(BlocksBuilt);
+        writer.Write(BlocksDestroyed);
+        writer.Write(ResourcesEarned);
     }
 
     public void Read(BinaryReader reader)
     {
-        var bitField = new BitField(4);
+        var bitField = new BitField(7);
         bitField.Read(reader);
         Team = bitField[0] ? reader.ReadByteEnum<TeamType>() : null;
         if (bitField[1])
@@ -34,6 +43,12 @@ public class MatchPlayerStats
         if (!bitField[3])
             return;
         Assists = reader.ReadInt32();
+        if (bitField[4])
+            BlocksBuilt = reader.ReadInt32();
+        if (bitField[5])
+            BlocksDestroyed = reader.ReadInt32();
+        if (bitField[6])
+            ResourcesEarned = reader.ReadSingle();
     }
 
     public static void WriteRecord(BinaryWriter writer, MatchPlayerStats value)

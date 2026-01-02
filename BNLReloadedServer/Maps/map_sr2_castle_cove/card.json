@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_castle_cove",
+  "scope": "public",
+  "name": {
+    "text": "Castle Cove",
+    "data": {
+      "es": {
+        "original": "Castle Cove",
+        "translation": "Castle Cove"
+      },
+      "ru": {
+        "original": "Castle Cove",
+        "translation": "Castle Cove"
+      },
+      "de": {
+        "original": "Castle Cove",
+        "translation": "Castle Cove"
+      },
+      "fr": {
+        "original": "Castle Cove",
+        "translation": "Castle Cove"
+      },
+      "pt": {
+        "original": "Castle Cove",
+        "translation": "Castle Cove"
+      }
+    }
+  },
+  "description": {
+    "text": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base.",
+    "data": {
+      "es": {
+        "original": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base.",
+        "translation": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base."
+      },
+      "pt": {
+        "original": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base.",
+        "translation": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base."
+      },
+      "de": {
+        "original": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base.",
+        "translation": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base."
+      },
+      "ru": {
+        "original": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base.",
+        "translation": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base."
+      },
+      "fr": {
+        "original": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base.",
+        "translation": "Cube Cove has received fortifications! Think you can tough it out in this expanded battleground? Two Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/824cefae96f2cdfcda2cab751ae92120.jpg",
+  "large_image": "https://i.gyazo.com/824cefae96f2cdfcda2cab751ae92120.jpg"
+}

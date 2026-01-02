@@ -1,0 +1,65 @@
+{
+  "category": "map",
+  "_id": "map_sr2_shiprekt",
+  "scope": "public",
+  "name": {
+    "text": "Shiprekt",
+    "data": {
+      "en": {
+        "original": "Shiprekt",
+        "translation": "Shiprekt"
+      },
+      "de": {
+        "original": "Shiprekt",
+        "translation": "Shiprekt"
+      },
+      "pt": {
+        "original": "Shiprekt",
+        "translation": "Shiprekt"
+      },
+      "fr": {
+        "original": "Shiprekt",
+        "translation": "Shiprekt"
+      },
+      "es": {
+        "original": "Shiprekt",
+        "translation": "Shiprekt"
+      },
+      "ru": {
+        "original": "Shiprekt",
+        "translation": "Shiprekt"
+      }
+    }
+  },
+  "description": {
+    "text": "The dankest ships around. One Cube and a Base.",
+    "data": {
+      "en": {
+        "original": "The dankest ships around. One Cube and a Base.",
+        "translation": "The dankest ships around. One Cube and a Base."
+      },
+      "de": {
+        "original": "The dankest ships around. One Cube and a Base.",
+        "translation": "Da sieht man ja vor lauter Schiffen den Ozean nicht mehr."
+      },
+      "pt": {
+        "original": "The dankest ships around. One Cube and a Base.",
+        "translation": "Os navios mais maneiros das redondezas."
+      },
+      "fr": {
+        "original": "The dankest ships around. One Cube and a Base.",
+        "translation": "Une armada de navires �chou�s."
+      },
+      "es": {
+        "original": "The dankest ships around. One Cube and a Base.",
+        "translation": "Un lugar lleno de barcos sombr�os."
+      },
+      "ru": {
+        "original": "The dankest ships around. One Cube and a Base.",
+        "translation": "The dankest ships around. One Cube and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/53a09a966de23aa0819f47b137c5dca2.jpg",
+  "large_image": "https://i.gyazo.com/53a09a966de23aa0819f47b137c5dca2.jpg"
+}

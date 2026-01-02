@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using BNLReloadedServer.Database;
+using BNLReloadedServer.ProtocolInterfaces;
 
 namespace BNLReloadedServer.BaseTypes;
 
@@ -36,6 +37,31 @@ public partial class Unit
             case ScoreType.Assists:
                 _updater.UpdateMatchStats(this, assists: (int)MathF.Round(amount));
                 break;
+            case ScoreType.BlocksBuiltResource:
+            case ScoreType.HeroBlocksBuiltResource:
+            case ScoreType.WorldBuiltResource:
+            case ScoreType.DevicesBuiltResource:
+                _updater.UpdateMatchStats(this, blocksBuilt: (int)MathF.Floor(amount));
+                break;
+            case ScoreType.BlocksBuilt:
+            case ScoreType.HeroBlocksBuilt:
+            case ScoreType.WorldBuilt:
+            case ScoreType.DevicesBuilt:
+                break;
+            case ScoreType.DevicesDestroyedResource:
+                _updater.UpdateMatchStats(this, blocksDestroyed: (int)MathF.Floor(amount));
+                break;
+            case ScoreType.BlocksDestroyedResource:
+            case ScoreType.HeroBlocksDestroyedResource:
+            case ScoreType.WorldDestroyedResource:
+            case ScoreType.BlocksDestroyed:
+            case ScoreType.HeroBlocksDestroyed:
+            case ScoreType.WorldDestroyed:
+            case ScoreType.DevicesDestroyed:
+                break;
+            case ScoreType.ResourceEarnedTotal:
+                _updater.UpdateMatchStats(this, resourcesEarned: amount);
+                break;
         }
     }
     
@@ -63,21 +89,40 @@ public partial class Unit
         }
     }
 
+    public static float ResolveDeviceResourceValue(IInternalDevice? deviceCard, float? enemyReward, float? playerReward)
+    {
+        if (deviceCard?.BaseCost is { } baseCost)
+        {
+            return baseCost;
+        }
+
+        if (enemyReward is { } enemyValue)
+        {
+            return enemyValue;
+        }
+
+        return playerReward ?? 0;
+    }
+
     public void DestroyedBlock(DeviceType deviceType, float resources)
     {
         switch (deviceType)
         {
             case DeviceType.None:
             case DeviceType.World:
+                UpdateStat(ScoreType.WorldDestroyed, 1);
                 UpdateStat(ScoreType.WorldDestroyedResource, resources);
                 break;
             case DeviceType.Block:
+                UpdateStat(ScoreType.BlocksDestroyed, 1);
                 UpdateStat(ScoreType.BlocksDestroyedResource, resources);
                 break;
             case DeviceType.Device:
+                UpdateStat(ScoreType.DevicesDestroyed, 1);
                 UpdateStat(ScoreType.DevicesDestroyedResource, resources);
                 break;
             case DeviceType.Hero:
+                UpdateStat(ScoreType.HeroBlocksDestroyed, 1);
                 UpdateStat(ScoreType.HeroBlocksDestroyedResource, resources);
                 break;
         }

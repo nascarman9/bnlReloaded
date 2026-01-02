@@ -23,4 +23,8 @@ public interface IConfigDatabase
     public string CdbName();
     public bool DebugMode();
     public bool DoReadline();
+    public bool EnableMasterStatusHttp();
+    public int MasterStatusHttpPort();
+    public string MasterStatusHttpHost();
+    public string MasterStatusHttpPrefix();
 }

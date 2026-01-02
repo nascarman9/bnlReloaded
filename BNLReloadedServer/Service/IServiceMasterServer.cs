@@ -1,4 +1,6 @@
-﻿using BNLReloadedServer.BaseTypes;
+﻿using System.Threading;
+using System.Threading.Tasks;
+using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using Moserware.Skills;
 
@@ -20,4 +22,5 @@ public interface IServiceMasterServer : IService
     public void SendRatingsUpdate(Dictionary<uint, Rating> ratings);
     public void SendFriendUpdate(uint playerId, List<uint>? friends, List<uint>? requestsFor, List<uint>? requestsFrom);
     public void SendLeaderboard(ushort rpcId, List<LeagueLeaderboardRecord> leagueLeaderboard);
+    public Task<RegionStatus?> RequestStatusAsync(CancellationToken cancellationToken);
 }

@@ -57,6 +57,77 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     public bool UserConnected(uint userId) => _connectedUsers.ContainsKey(userId);
     private bool UserConnected(uint userId, [MaybeNullWhen(false)] out ConnectionInfo playerInfo) => _connectedUsers.TryGetValue(userId, out playerInfo);
 
+    public int GetOnlinePlayerCount() => _connectedUsers.Values.Count(player => player.Online);
+
+    public Dictionary<string, int> GetQueueCounts() => new()
+    {
+        { "casual", _matchmaker.GetQueueCount(CatalogueHelper.ModeFriendly.Key) },
+        { "ranked", _matchmaker.GetQueueCount(CatalogueHelper.ModeRanked.Key) }
+    };
+
+    public Dictionary<string, List<StatusQueuePlayer>> GetQueuePlayers()
+    {
+        var queueMap = new Dictionary<string, List<StatusQueuePlayer>>();
+        var queues = _matchmaker.GetQueues();
+
+        foreach (var (gameMode, players) in queues)
+        {
+            var queueName = gameMode == CatalogueHelper.ModeFriendly.Key
+                ? "casual"
+                : gameMode == CatalogueHelper.ModeRanked.Key
+                    ? "ranked"
+                    : null;
+
+            if (queueName == null)
+            {
+                continue;
+            }
+
+            queueMap[queueName] = players
+                .Select(player => new StatusQueuePlayer
+                {
+                    Id = player.PlayerId,
+                    Name = _playerDatabase.GetPlayerName(player.PlayerId),
+                    SquadId = player.SquadId,
+                    JoinedAt = player.JoinTime.ToUnixTimeMilliseconds()
+                })
+                .ToList();
+        }
+
+        return queueMap;
+    }
+
+    public List<StatusCustomGame> GetCustomGameStatuses() =>
+        _customGamePlayerLists.Values.Select(entry => new StatusCustomGame
+        {
+            Id = entry.custom.GameInfo.Id,
+            Name = entry.custom.GameInfo.GameName,
+            Private = entry.custom.GameInfo.Private,
+            Players = entry.custom.Players.Count,
+            MaxPlayers = entry.custom.GameInfo.MaxPlayers,
+            Status = entry.custom.GameInfo.Status,
+            StatusDescription = entry.custom.GameInfo.Status switch
+            {
+                CustomGameStatus.Preparing => "preparing",
+                CustomGameStatus.Lobby => "lobby",
+                CustomGameStatus.Match => "in_match",
+                _ => "unknown"
+            },
+            PlayerList = entry.custom.Players.Select(p => new StatusCustomGamePlayer
+            {
+                Id = p.Id,
+                Nickname = p.Nickname,
+                Owner = p.Owner,
+                Team = p.Team
+            }).ToList()
+        }).ToList();
+
+    public List<StatusGameStatus> GetActiveGameStatuses() => _gameInstances.Values
+        .Select(instance => instance.GetStatusSnapshot(_playerDatabase))
+        .Where(status => status != null)
+        .Select(status => status!)
+        .ToList();
+
     private bool GetService<TService>(Guid guid, ServiceId id, [MaybeNullWhen(false)] out TService serviceCaller) where TService: IService
     {
         serviceCaller = default;

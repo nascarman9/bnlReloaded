@@ -405,6 +405,69 @@ public class GameInstance : IGameInstance
         UploadZoneData(playerId, player);
     }
 
+    public StatusGameStatus? GetStatusSnapshot(IPlayerDatabase playerDatabase)
+    {
+        var modeKey = GameInitiator.GetGameMode();
+        var mode = modeKey == CatalogueHelper.ModeFriendly.Key
+            ? "casual"
+            : modeKey == CatalogueHelper.ModeRanked.Key
+                ? "ranked"
+                : modeKey == CatalogueHelper.ModeCustom.Key
+                    ? "custom"
+                    : null;
+
+        if (mode == null)
+        {
+            return null;
+        }
+
+        Dictionary<uint, MatchPlayerStats>? stats = null;
+        DateTimeOffset? attackStartTime = null;
+        float? finalDurationSeconds = null;
+
+        if (Zone != null)
+        {
+            var zoneSnapshot = Zone.GetStatusSnapshot();
+            stats = zoneSnapshot.stats;
+            attackStartTime = zoneSnapshot.attackStartTime;
+            finalDurationSeconds = zoneSnapshot.finalDurationSeconds;
+        }
+
+        var status = new StatusGameStatus
+        {
+            Id = GameInstanceId,
+            Mode = mode,
+            StartedAt = attackStartTime?.ToUnixTimeMilliseconds(),
+            MatchDurationSeconds = finalDurationSeconds ?? (attackStartTime.HasValue
+                ? (float)(DateTimeOffset.Now - attackStartTime.Value).TotalSeconds
+                : null)
+        };
+
+        foreach (var (playerId, info) in _connectedUsers)
+        {
+            MatchPlayerStats? playerStats = null;
+
+            if (stats != null)
+            {
+                stats.TryGetValue(playerId, out playerStats);
+            }
+            status.Players.Add(new StatusGamePlayer
+            {
+                Id = playerId,
+                Name = playerDatabase.GetPlayerName(playerId),
+                Team = info.Team,
+                Kills = playerStats?.Kills ?? 0,
+                Deaths = playerStats?.Deaths ?? 0,
+                Assists = playerStats?.Assists ?? 0,
+                BlocksBuilt = playerStats?.BlocksBuilt ?? 0,
+                BlocksDestroyed = playerStats?.BlocksDestroyed ?? 0,
+                ResourcesEarned = playerStats?.ResourcesEarned ?? 0
+            });
+        }
+
+        return status;
+    }
+
     public void StartMatch(ICollection<PlayerLobbyState> playerList)
     {
         if (MapData == null) return;

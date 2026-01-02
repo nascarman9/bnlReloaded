@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_youtube_sandy",
+  "scope": "public",
+  "name": {
+    "text": "Sandy Shores",
+    "data": {
+      "ru": {
+        "original": "Sandy Shores",
+        "translation": "Sandy Shores"
+      },
+      "es": {
+        "original": "Sandy Shores",
+        "translation": "Sandy Shores"
+      },
+      "de": {
+        "original": "Sandy Shores",
+        "translation": "Sandy Shores"
+      },
+      "pt": {
+        "original": "Sandy Shores",
+        "translation": "Sandy Shores"
+      },
+      "fr": {
+        "original": "Sandy Shores",
+        "translation": "Sandy Shores"
+      }
+    }
+  },
+  "description": {
+    "text": "Fight on the beaches, the bridges and the towers. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Fight on the beaches, the bridges and the towers. Two Cubes and a Base.",
+        "translation": "Сражайся на пляжах, мостах и башнях. Два куба, одна база."
+      },
+      "es": {
+        "original": "Fight on the beaches, the bridges and the towers. Two Cubes and a Base.",
+        "translation": "Pelea en las playas, en los puentes y en las torres.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Fight on the beaches, the bridges and the towers. Two Cubes and a Base.",
+        "translation": "Kämpft am Strand, auf den Brücken und den Türmen. Zwei Generator und eine Basis."
+      },
+      "pt": {
+        "original": "Fight on the beaches, the bridges and the towers. Two Cubes and a Base.",
+        "translation": "Lute nas praias, pontes e torres. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Fight on the beaches, the bridges and the towers. Two Cubes and a Base.",
+        "translation": "Partez à l'assaut des plages, des ponts et des tours\u00A0! Deux cubes et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/9c89719e6e5126e620b69a442d25df26.jpg",
+  "large_image": "https://i.gyazo.com/9c89719e6e5126e620b69a442d25df26.jpg"
+}

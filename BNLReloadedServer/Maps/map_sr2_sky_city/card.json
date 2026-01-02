@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_sky_city",
+  "scope": "public",
+  "name": {
+    "text": "Sky City",
+    "data": {
+      "es": {
+        "original": "Sky City",
+        "translation": "Sky City"
+      },
+      "ru": {
+        "original": "Sky City",
+        "translation": "Sky City"
+      },
+      "de": {
+        "original": "Sky City",
+        "translation": "Sky City"
+      },
+      "fr": {
+        "original": "Sky City",
+        "translation": "Sky City"
+      },
+      "pt": {
+        "original": "Sky City",
+        "translation": "Sky City"
+      }
+    }
+  },
+  "description": {
+    "text": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base.",
+    "data": {
+      "es": {
+        "original": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base.",
+        "translation": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base."
+      },
+      "pt": {
+        "original": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base.",
+        "translation": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base."
+      },
+      "de": {
+        "original": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base.",
+        "translation": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base."
+      },
+      "ru": {
+        "original": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base.",
+        "translation": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base."
+      },
+      "fr": {
+        "original": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base.",
+        "translation": "A construction project built to feel like it's in the sky, this map features tiered level structures and floating grass islands to really feel like you're in the clouds. Two Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/6f371051dfd1942078fbea92b1207519.jpg",
+  "large_image": "https://i.gyazo.com/6f371051dfd1942078fbea92b1207519.jpg"
+}

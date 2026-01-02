@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_paradise",
+  "scope": "public",
+  "name": {
+    "text": "Paradise",
+    "data": {
+      "ru": {
+        "original": "Paradise",
+        "translation": "Paradise"
+      },
+      "es": {
+        "original": "Paradise",
+        "translation": "Paradise"
+      },
+      "de": {
+        "original": "Paradise",
+        "translation": "Paradise"
+      },
+      "pt": {
+        "original": "Paradise",
+        "translation": "Paradise"
+      },
+      "fr": {
+        "original": "Paradise",
+        "translation": "Paradise"
+      }
+    }
+  },
+  "description": {
+    "text": "Swim, jump, dig, and build your way to victory.  Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Swim, jump, dig, and build your way to victory.  Two Cubes and a Base.",
+        "translation": "Прыгай, ныряй, строй, побеждай. Два куба и база."
+      },
+      "es": {
+        "original": "Swim, jump, dig, and build your way to victory.  Two Cubes and a Base.",
+        "translation": "Cava más, salta más, construye más y... nada más.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Swim, jump, dig, and build your way to victory.  Two Cubes and a Base.",
+        "translation": "Schwimmt, springt, baut und buddelt euch zum Sieg. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Swim, jump, dig, and build your way to victory.  Two Cubes and a Base.",
+        "translation": "Nade, pule, cave e construa para sair vitorioso. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Swim, jump, dig, and build your way to victory.  Two Cubes and a Base.",
+        "translation": "Tous à l’eau pour rafler la victoire\u00A0! Deux cubes et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/5b50a11de845b9faad464a8593eace49.jpg",
+  "large_image": "https://i.gyazo.com/5b50a11de845b9faad464a8593eace49.jpg"
+}

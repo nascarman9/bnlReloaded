@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_deja_vu",
+  "scope": "public",
+  "name": {
+    "text": "Deja Vu",
+    "data": {
+      "ru": {
+        "original": "Deja Vu",
+        "translation": "Deja Vu"
+      },
+      "es": {
+        "original": "Deja Vu",
+        "translation": "Deja Vu"
+      },
+      "de": {
+        "original": "Deja Vu",
+        "translation": "Deja Vu"
+      },
+      "pt": {
+        "original": "Deja Vu",
+        "translation": "Deja Vu"
+      },
+      "fr": {
+        "original": "Deja Vu",
+        "translation": "Deja Vu"
+      }
+    }
+  },
+  "description": {
+    "text": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+    "data": {
+      "ru": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Сражайтесь на насыпи или пробивайся к башням. Один куб и база."
+      },
+      "es": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Cruza el viaducto o sube a las torres.\nUn generador y un núcleo."
+      },
+      "de": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Kämpft euch über den Damm oder nutzt die Türme. Ein Generator und eine Basis."
+      },
+      "pt": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Trave uma emocionante batalha neste clássico cenário. Um Cubo e uma Base."
+      },
+      "fr": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Affrontez-vous sur la chaussée ou partez à l'assaut des tours. Un cube et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/d3e11cece97c15c99fc1692ef6168ec2.jpg",
+  "large_image": "https://i.gyazo.com/d3e11cece97c15c99fc1692ef6168ec2.jpg"
+}

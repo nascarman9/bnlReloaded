@@ -16,7 +16,8 @@ public delegate bool DoesObjBuffApply(TeamType team, IEnumerable<UnitLabel> labe
 public delegate void OnImpactAction(Vector3 insidePoint, Vector3 shotPos, bool crit = false, Unit? sourceUnit = null,
     Key? source = null, CardImpact? card = null, IEnumerable<uint>? affectedUnits = null, Vector3s? normal = null);
 public delegate float GetResourceCap();
-public delegate void UpdateMatchStats(Unit player, int? kills = null, int? deaths = null, int? assists = null);
+public delegate void UpdateMatchStats(Unit player, int? kills = null, int? deaths = null, int? assists = null,
+    int? blocksBuilt = null, int? blocksDestroyed = null, float? resourcesEarned = null);
 public delegate void OnUnitDamaged(Unit target, float damage, ImpactData impact);
 public delegate void OnUnitKilled(Unit target, ImpactData impact, bool mining = false);
 public delegate void LinkPortal(Unit unit, bool unlink = false);

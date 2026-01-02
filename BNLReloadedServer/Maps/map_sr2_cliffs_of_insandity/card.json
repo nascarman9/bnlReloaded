@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_cliffs_of_insandity",
+  "scope": "public",
+  "name": {
+    "text": "Insandity",
+    "data": {
+      "ru": {
+        "original": "Insandity",
+        "translation": "Insandity"
+      },
+      "es": {
+        "original": "Insandity",
+        "translation": "Insandity"
+      },
+      "de": {
+        "original": "Insandity",
+        "translation": "Insandity"
+      },
+      "fr": {
+        "original": "Insandity",
+        "translation": "Insandity"
+      },
+      "pt": {
+        "original": "Insandity",
+        "translation": "Insandity"
+      }
+    }
+  },
+  "description": {
+    "text": "Tunnel through or climb over the sand mountain. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Tunnel through or climb over the sand mountain. Two Cubes and a Base.",
+        "translation": "Tunnel through or climb over the sand mountain. Two Cubes and a Base."
+      },
+      "es": {
+        "original": "Tunnel through or climb over the sand mountain. Two Cubes and a Base.",
+        "translation": "Tunnel through or climb over the sand mountain. Two Cubes and a Base."
+      },
+      "de": {
+        "original": "Tunnel through or climb over the sand mountain. Two Cubes and a Base.",
+        "translation": "Tunnel through or climb over the sand mountain. Two Cubes and a Base."
+      },
+      "fr": {
+        "original": "Tunnel through or climb over the sand mountain. Two Cubes and a Base.",
+        "translation": "Tunnel through or climb over the sand mountain. Two Cubes and a Base."
+      },
+      "pt": {
+        "original": "Tunnel through or climb over the sand mountain. Two Cubes and a Base.",
+        "translation": "Tunnel through or climb over the sand mountain. Two Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/d063e2c6a47afc3a0baa668d9748f487.png",
+  "large_image": "https://i.gyazo.com/d063e2c6a47afc3a0baa668d9748f487.png"
+}

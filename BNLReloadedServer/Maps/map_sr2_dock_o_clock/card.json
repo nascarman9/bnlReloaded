@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_dock_o_clock",
+  "scope": "public",
+  "name": {
+    "text": "Dock O' Clock",
+    "data": {
+      "ru": {
+        "original": "Dock O' Clock",
+        "translation": "Dock O' Clock"
+      },
+      "es": {
+        "original": "Dock O' Clock",
+        "translation": "Dock O' Clock"
+      },
+      "de": {
+        "original": "Dock O' Clock",
+        "translation": "Dock O' Clock"
+      },
+      "pt": {
+        "original": "Dock O' Clock",
+        "translation": "Dock O' Clock"
+      },
+      "fr": {
+        "original": "Dock O' Clock",
+        "translation": "Dock O' Clock"
+      }
+    }
+  },
+  "description": {
+    "text": "Battle across the ships. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Battle across the ships. Two Cubes and a Base.",
+        "translation": "Битва на кораблях. Два куба и база."
+      },
+      "es": {
+        "original": "Battle across the ships. Two Cubes and a Base.",
+        "translation": "Combate en el puerto, desde el muelle o en los barcos.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Battle across the ships. Two Cubes and a Base.",
+        "translation": "Kämpft auf Schiffen. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Battle across the ships. Two Cubes and a Base.",
+        "translation": "Batalhe entre os navios. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Battle across the ships. Two Cubes and a Base.",
+        "translation": "Préparez-vous à une bataille navale\u00A0! Deux cubes et une base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-block-docks-thumb2",
+  "large_image": "Gui/Maps/arena-block-docks-full"
+}

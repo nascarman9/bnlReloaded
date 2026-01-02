@@ -119,6 +119,9 @@ public class ZoneData(ZoneUpdater updater)
                     matchPlayerStats.Assists = playerStat.Value.Assists;
                     matchPlayerStats.Deaths = playerStat.Value.Deaths;
                     matchPlayerStats.Kills = playerStat.Value.Kills;
+                    matchPlayerStats.BlocksBuilt = playerStat.Value.BlocksBuilt;
+                    matchPlayerStats.BlocksDestroyed = playerStat.Value.BlocksDestroyed;
+                    matchPlayerStats.ResourcesEarned = playerStat.Value.ResourcesEarned;
                 }
             }
             if (update.Statistics.Team1Stats != null) 

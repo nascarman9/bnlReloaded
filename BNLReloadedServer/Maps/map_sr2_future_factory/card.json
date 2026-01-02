@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_future_factory",
+  "scope": "public",
+  "name": {
+    "text": "Future Factory",
+    "data": {
+      "ru": {
+        "original": "Future Factory",
+        "translation": "Future Factory"
+      },
+      "es": {
+        "original": "Future Factory",
+        "translation": "Future Factory"
+      },
+      "de": {
+        "original": "Future Factory",
+        "translation": "Future Factory"
+      },
+      "pt": {
+        "original": "Future Factory",
+        "translation": "Future Factory"
+      },
+      "fr": {
+        "original": "Future Factory",
+        "translation": "Future Factory"
+      }
+    }
+  },
+  "description": {
+    "text": "Start an industrial revolution in this arena. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Start an industrial revolution in this arena. Two Cubes and a Base.",
+        "translation": "Устройте в этой области промышленную революцию! Два куба и база."
+      },
+      "es": {
+        "original": "Start an industrial revolution in this arena. Two Cubes and a Base.",
+        "translation": "La cuna de la revolución industrial.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Start an industrial revolution in this arena. Two Cubes and a Base.",
+        "translation": "Startet in dieser Arena eine industrielle Revolution. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Start an industrial revolution in this arena. Two Cubes and a Base.",
+        "translation": "Dê início a uma revolução industrial nesta arena. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Start an industrial revolution in this arena. Two Cubes and a Base.",
+        "translation": "La révolution industrielle est en marche\u00A0! Deux cubes et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/1c866c15ec106415dbe23fc3bfa7a531.jpg",
+  "large_image": "https://i.gyazo.com/1c866c15ec106415dbe23fc3bfa7a531.jpg"
+}

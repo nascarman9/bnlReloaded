@@ -1,0 +1,65 @@
+{
+  "category": "map",
+  "_id": "map_sr2_new_stronghold",
+  "scope": "public",
+  "name": {
+    "text": "Stronghold",
+    "data": {
+      "en": {
+        "original": "Stronghold",
+        "translation": "Stronghold"
+      },
+      "de": {
+        "original": "Stronghold",
+        "translation": "Stronghold"
+      },
+      "pt": {
+        "original": "Stronghold",
+        "translation": "Stronghold"
+      },
+      "fr": {
+        "original": "Stronghold",
+        "translation": "Stronghold"
+      },
+      "es": {
+        "original": "Stronghold",
+        "translation": "Stronghold"
+      },
+      "ru": {
+        "original": "Stronghold",
+        "translation": "Stronghold"
+      }
+    }
+  },
+  "description": {
+    "text": "Castles everywhere! Two Cubes and a Base.",
+    "data": {
+      "en": {
+        "original": "Castles everywhere! Two Cubes and a Base.",
+        "translation": "Castles everywhere! Two Cubes and a Base."
+      },
+      "de": {
+        "original": "Castles everywhere! Two Cubes and a Base.",
+        "translation": "Burgen so weit das Auge reicht! Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Castles everywhere! Two Cubes and a Base.",
+        "translation": "Castelos para todo lado! Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Castles everywhere! Two Cubes and a Base.",
+        "translation": "Des ch�teaux � perte de vue�! Deux cubes et une base."
+      },
+      "es": {
+        "original": "Castles everywhere! Two Cubes and a Base.",
+        "translation": "�Construye castillos en el aire!\nDos generadores y un n�cleo."
+      },
+      "ru": {
+        "original": "Castles everywhere! Two Cubes and a Base.",
+        "translation": "Castles everywhere! Two Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/c2d7ea74dbbaa2306baabd7e63a2b1fe.jpg",
+  "large_image": "https://i.gyazo.com/c2d7ea74dbbaa2306baabd7e63a2b1fe.jpg"
+}

@@ -7,6 +7,7 @@ namespace BNLReloadedServer.Database;
 public interface IMasterServerDatabase
 {
     public List<RegionInfo> GetRegionServers();
+    public IServiceMasterServer? GetRegionServerService(string id);
     public bool AddRegionServer(string id, string host, RegionGuiInfo regionGuiInfo, IServiceMasterServer? serviceMasterServer = null);
     public bool RemoveRegionServer(string id);
     public RegionInfo? GetRegionServer(string id);

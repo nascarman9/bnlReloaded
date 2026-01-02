@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_high_score",
+  "scope": "public",
+  "name": {
+    "text": "High $core",
+    "data": {
+      "es": {
+        "original": "High $core",
+        "translation": "High $core"
+      },
+      "fr": {
+        "original": "High $core",
+        "translation": "High $core"
+      },
+      "de": {
+        "original": "High $core",
+        "translation": "High $core"
+      },
+      "pt": {
+        "original": "High $core",
+        "translation": "High $core"
+      },
+      "ru": {
+        "original": "High $core",
+        "translation": "High $core"
+      }
+    }
+  },
+  "description": {
+    "text": "Level Up! One Cube and a Base.",
+    "data": {
+      "es": {
+        "original": "Level Up! One Cube and a Base.",
+        "translation": "Level Up! One Cube and a Base."
+      },
+      "fr": {
+        "original": "Level Up! One Cube and a Base.",
+        "translation": "Level Up! One Cube and a Base."
+      },
+      "de": {
+        "original": "Level Up! One Cube and a Base.",
+        "translation": "Level Up! One Cube and a Base."
+      },
+      "ru": {
+        "original": "Level Up! One Cube and a Base.",
+        "translation": "Level Up! One Cube and a Base."
+      },
+      "pt": {
+        "original": "Level Up! One Cube and a Base.",
+        "translation": "Level Up! One Cube and a Base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-high-score",
+  "large_image": "Gui/Maps/arena-high-score"
+}

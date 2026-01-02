@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_block_street",
+  "scope": "public",
+  "name": {
+    "text": "Block Street",
+    "data": {
+      "ru": {
+        "original": "Block Street",
+        "translation": "Block Street"
+      },
+      "es": {
+        "original": "Block Street",
+        "translation": "Block Street"
+      },
+      "de": {
+        "original": "Block Street",
+        "translation": "Block Street"
+      },
+      "fr": {
+        "original": "Block Street",
+        "translation": "Block Street"
+      },
+      "pt": {
+        "original": "Block Street",
+        "translation": "Block Street"
+      }
+    }
+  },
+  "description": {
+    "text": "Remember to look both ways before crossing the road! One Base.",
+    "data": {
+      "ru": {
+        "original": "Remember to look both ways before crossing the road! One Base.",
+        "translation": "Remember to look both ways before crossing the road! One Base."
+      },
+      "es": {
+        "original": "Remember to look both ways before crossing the road! One Base.",
+        "translation": "Remember to look both ways before crossing the road! One Base."
+      },
+      "de": {
+        "original": "Remember to look both ways before crossing the road! One Base.",
+        "translation": "Remember to look both ways before crossing the road! One Base."
+      },
+      "fr": {
+        "original": "Remember to look both ways before crossing the road! One Base.",
+        "translation": "Remember to look both ways before crossing the road! One Base."
+      },
+      "pt": {
+        "original": "Remember to look both ways before crossing the road! One Base.",
+        "translation": "Remember to look both ways before crossing the road! One Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/b117bf8fbc7a277095ac9ac08f094417.jpg",
+  "large_image": "https://i.gyazo.com/b117bf8fbc7a277095ac9ac08f094417.jpg"
+}

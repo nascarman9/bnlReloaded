@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_prifdentists",
+  "scope": "public",
+  "name": {
+    "text": "Prifdentists",
+    "data": {
+      "ru": {
+        "original": "Prifdentists",
+        "translation": "Prifdentists"
+      },
+      "es": {
+        "original": "Prifdentists",
+        "translation": "Prifdentists"
+      },
+      "de": {
+        "original": "Prifdentists",
+        "translation": "Prifdentists"
+      },
+      "pt": {
+        "original": "Prifdentists",
+        "translation": "Prifdentists"
+      },
+      "fr": {
+        "original": "Prifdentists",
+        "translation": "Prifdentists"
+      }
+    }
+  },
+  "description": {
+    "text": "The majestic towers, winding paths and narrow bridges of Elf City await you. Two Cubes and a Base!",
+    "data": {
+      "ru": {
+        "original": "The majestic towers, winding paths and narrow bridges of Elf City await you. Two Cubes and a Base!",
+        "translation": "Причудливые башни, извилистые тропы и узкие мостики — это город эльфов. Два куба и база."
+      },
+      "es": {
+        "original": "The majestic towers, winding paths and narrow bridges of Elf City await you. Two Cubes and a Base!",
+        "translation": "Admira la majestuosidad de la ciudad elfa.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "The majestic towers, winding paths and narrow bridges of Elf City await you. Two Cubes and a Base!",
+        "translation": "Die majestätischen Türme, Brücken und gewundenen Wege der Elfenstadt! Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "The majestic towers, winding paths and narrow bridges of Elf City await you. Two Cubes and a Base!",
+        "translation": "As torres majestosas, os caminhos sinuosos e as pontes estreitas da Cidade dos Elfos lhe aguardam. Dois Cubos e uma Base!"
+      },
+      "fr": {
+        "original": "The majestic towers, winding paths and narrow bridges of Elf City await you. Two Cubes and a Base!",
+        "translation": "Les tours majestueuses, les chemins tortueux et les ponts étroits de la cité elfe vous attendent. Deux cubes et une base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-prifddinas-thumb",
+  "large_image": "Gui/Maps/arena-prifddinas-full"
+}

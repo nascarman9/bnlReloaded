@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_stone_waterslide",
+  "scope": "public",
+  "name": {
+    "text": "Stone Waterslide",
+    "data": {
+      "ru": {
+        "original": "Stone Waterslide",
+        "translation": "Stone Waterslide"
+      },
+      "es": {
+        "original": "Stone Waterslide",
+        "translation": "Stone Waterslide"
+      },
+      "de": {
+        "original": "Stone Waterslide",
+        "translation": "Stone Waterslide"
+      },
+      "pt": {
+        "original": "Stone Waterslide",
+        "translation": "Stone Waterslide"
+      },
+      "fr": {
+        "original": "Stone Waterslide",
+        "translation": "Stone Waterslide"
+      }
+    }
+  },
+  "description": {
+    "text": "Ransack ramparts, reduce ruins to rubble, hold your own and brace for flanking fire. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Ransack ramparts, reduce ruins to rubble, hold your own and brace for flanking fire. Two Cubes and a Base.",
+        "translation": "Возьми базу врага наскоком и сровняй ее с землей. Отбивай вражеские атаки, но следи за флангами. Два куба и база."
+      },
+      "es": {
+        "original": "Ransack ramparts, reduce ruins to rubble, hold your own and brace for flanking fire. Two Cubes and a Base.",
+        "translation": "Solamente vestigios de lo que alguna vez fue.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Ransack ramparts, reduce ruins to rubble, hold your own and brace for flanking fire. Two Cubes and a Base.",
+        "translation": "Bombadiert Befestigungen und macht euch auf furioses Flankenfeuer gefasst. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Ransack ramparts, reduce ruins to rubble, hold your own and brace for flanking fire. Two Cubes and a Base.",
+        "translation": "Saqueie as defesas, reduza as ruínas a escombros e prepara-se para se defender do fogo inimigo pelos flancos. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Ransack ramparts, reduce ruins to rubble, hold your own and brace for flanking fire. Two Cubes and a Base.",
+        "translation": "Mettez à sac les remparts, réduisez les ruines en poussière, tenez vos troupes et préparez-vous à une attaque de flanc. Deux cubes et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/371eae17343a9cf5fe7c9369cae5acfe.jpg",
+  "large_image": "https://i.gyazo.com/371eae17343a9cf5fe7c9369cae5acfe.jpg"
+}

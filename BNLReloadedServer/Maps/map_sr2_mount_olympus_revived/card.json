@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_mount_olympus_revived",
+  "scope": "public",
+  "name": {
+    "text": "Mount Olympus Revived",
+    "data": {
+      "ru": {
+        "original": "Mount Olympus Revived",
+        "translation": "Mount Olympus Revived"
+      },
+      "es": {
+        "original": "Mount Olympus Revived",
+        "translation": "Mount Olympus Revived"
+      },
+      "de": {
+        "original": "Mount Olympus Revived",
+        "translation": "Mount Olympus Revived"
+      },
+      "pt": {
+        "original": "Mount Olympus Revived",
+        "translation": "Mount Olympus Revived"
+      },
+      "fr": {
+        "original": "Mount Olympus Revived",
+        "translation": "Mount Olympus Revived"
+      }
+    }
+  },
+  "description": {
+    "text": "No Greek legends, just a selection of Heroes.  Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "No Greek legends, just a selection of Heroes.  Two Cubes and a Base.",
+        "translation": "Здесь нет мифов, только выбор героев. Два куба и база."
+      },
+      "es": {
+        "original": "No Greek legends, just a selection of Heroes.  Two Cubes and a Base.",
+        "translation": "Aquí no hay deidades griegas sino héroes cúbicos.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "No Greek legends, just a selection of Heroes.  Two Cubes and a Base.",
+        "translation": "Statt griechischer Legenden habt ihr Helden hier das Sagen. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "No Greek legends, just a selection of Heroes.  Two Cubes and a Base.",
+        "translation": "Aqui não tem nenhum deus grego, só um monte de heróis destemidos. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "No Greek legends, just a selection of Heroes.  Two Cubes and a Base.",
+        "translation": "Les divinités grecques ont laissé place aux héros. Deux cubes et une base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-mount-olympus-thumb",
+  "large_image": "Gui/Maps/arena-mount-olympus-thumb"
+}

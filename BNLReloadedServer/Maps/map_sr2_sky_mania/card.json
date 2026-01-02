@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_sky_mania",
+  "scope": "public",
+  "name": {
+    "text": "Sky Mania",
+    "data": {
+      "ru": {
+        "original": "Sky Mania",
+        "translation": "Sky Mania"
+      },
+      "es": {
+        "original": "Sky Mania",
+        "translation": "Sky Mania"
+      },
+      "de": {
+        "original": "Sky Mania",
+        "translation": "Sky Mania"
+      },
+      "pt": {
+        "original": "Sky Mania",
+        "translation": "Sky Mania"
+      },
+      "fr": {
+        "original": "Sky Mania",
+        "translation": "Sky Mania"
+      }
+    }
+  },
+  "description": {
+    "text": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base.",
+        "translation": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base."
+      },
+      "es": {
+        "original": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base.",
+        "translation": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base."
+      },
+      "de": {
+        "original": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base.",
+        "translation": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base."
+      },
+      "pt": {
+        "original": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base.",
+        "translation": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base."
+      },
+      "fr": {
+        "original": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base.",
+        "translation": "Its got some sky and its got some mania. Now Deluxe.  Two Cubes and a Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/30f397817b45b0ec9c161a4bd6284964.jpg",
+  "large_image": "https://i.gyazo.com/30f397817b45b0ec9c161a4bd6284964.jpg"
+}

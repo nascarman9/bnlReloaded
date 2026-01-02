@@ -975,13 +975,17 @@ public class MapBinary
                 {
                     if (attacker.Team != block.Team && blockCard.Reward.EnemyReward is not null)
                     {
-                        attacker.AddResource(blockCard.Reward.EnemyReward.Value, ResourceType.Mining);   
-                        attacker.DestroyedBlock(blockCard.DeviceType, blockCard.Reward.EnemyReward.Value);
+                        var destroyValue = Unit.ResolveDeviceResourceValue(blockCard, blockCard.Reward.EnemyReward,
+                            blockCard.Reward.PlayerReward);
+                        attacker.AddResource(blockCard.Reward.EnemyReward.Value, ResourceType.Mining);
+                        attacker.DestroyedBlock(blockCard.DeviceType, destroyValue);
                     }
                     else if (blockCard.Reward.PlayerReward is not null)
                     {
+                        var destroyValue = Unit.ResolveDeviceResourceValue(blockCard, blockCard.Reward.EnemyReward,
+                            blockCard.Reward.PlayerReward);
                         attacker.AddResource(blockCard.Reward.PlayerReward.Value, ResourceType.Mining);
-                        attacker.DestroyedBlock(blockCard.DeviceType, blockCard.Reward.PlayerReward.Value);
+                        attacker.DestroyedBlock(blockCard.DeviceType, destroyValue);
                     }
                 }
             }

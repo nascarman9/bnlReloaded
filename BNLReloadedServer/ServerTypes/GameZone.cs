@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using System.Timers;
+using System.Linq;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Octree_Extensions;
@@ -61,6 +62,8 @@ public partial class GameZone : Updater
     private readonly List<Unit> _unitsToDrop = [];
 
     private DateTimeOffset? _attackStartTime;
+    private DateTimeOffset? _matchEndTime;
+    private float? _finalMatchDurationSeconds;
     
     private Task? _gameLoop;
     private Task? _tickChecker;
@@ -974,9 +977,15 @@ public partial class GameZone : Updater
 
             if (player.Stats != null)
             {
-                var statInfo = _zoneData.MatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
-                    v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
-                var totalInfo = _zoneData.MatchCard.Stats?.Total;
+            var statInfo = _zoneData.MatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
+                v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
+            var totalInfo = _zoneData.MatchCard.Stats?.Total;
+
+            if (player.PlayerId is { } kickedPlayerId && statInfo is not null &&
+                _zoneData.PlayerStats.TryGetValue(kickedPlayerId, out var aggregatedStats))
+            {
+                statInfo[PlayerMatchStatType.Destroyed] = aggregatedStats.BlocksDestroyed;
+            }
                 Databases.PlayerDatabase.UpdateMatchStats(new EndMatchResults
                 {
                     PlayerId = playerId,
@@ -1203,6 +1212,12 @@ public partial class GameZone : Updater
         {
             _gameInitiator.SetBackfillReady(false);
             _zoneData.EndMatch(winner);
+            if (_attackStartTime.HasValue && _matchEndTime is null)
+            {
+                _matchEndTime = DateTimeOffset.Now;
+                _finalMatchDurationSeconds =
+                    (float)(_matchEndTime.Value - _attackStartTime.Value).TotalSeconds;
+            }
         });
 
         if (doWait)
@@ -1223,7 +1238,11 @@ public partial class GameZone : Updater
         _unbufferedZone.SendEndMatch(winner);
         var matchStats = new List<EndMatchPlayerData>();
         var gameEnd = DateTimeOffset.Now;
-        var gameLength = _attackStartTime.HasValue ? gameEnd - _attackStartTime.Value : TimeSpan.Zero;
+        var gameLength = _finalMatchDurationSeconds.HasValue
+            ? TimeSpan.FromSeconds(_finalMatchDurationSeconds.Value)
+            : _attackStartTime.HasValue
+                ? gameEnd - _attackStartTime.Value
+                : TimeSpan.Zero;
 
         var cardGlobalLogic = CatalogueHelper.GlobalLogic;
         var positiveMedals = cardGlobalLogic.Medals?.PositiveMedals
@@ -1253,6 +1272,12 @@ public partial class GameZone : Updater
             var statInfo = zoneDataMatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
                 v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
             var totalInfo = zoneDataMatchCard.Stats?.Total;
+
+            if (player.PlayerId is { } playerId && statInfo is not null &&
+                _zoneData.PlayerStats.TryGetValue(playerId, out var aggregatedStats))
+            {
+                statInfo[PlayerMatchStatType.Destroyed] = aggregatedStats.BlocksDestroyed;
+            }
             
             var playerInfo = _playerLobbyInfo.FirstOrDefault(u => u.PlayerId == player.PlayerId);
             matchStats.Add(new EndMatchPlayerData
@@ -2154,5 +2179,24 @@ public partial class GameZone : Updater
                 _supplyTimer = null;
             }
         }
+    }
+
+    public (Dictionary<uint, MatchPlayerStats> stats, DateTimeOffset? attackStartTime, float? finalDurationSeconds)
+        GetStatusSnapshot()
+    {
+        var stats = _zoneData.PlayerStats.ToDictionary(
+            player => player.Key,
+            player => new MatchPlayerStats
+            {
+                Team = player.Value.Team,
+                Kills = player.Value.Kills,
+                Deaths = player.Value.Deaths,
+                Assists = player.Value.Assists,
+                BlocksBuilt = player.Value.BlocksBuilt,
+                BlocksDestroyed = player.Value.BlocksDestroyed,
+                ResourcesEarned = player.Value.ResourcesEarned
+            });
+
+        return (stats, _attackStartTime, _finalMatchDurationSeconds);
     }
 }

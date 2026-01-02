@@ -1,0 +1,15 @@
+{
+  "category": "map",
+  "_id": "map_sr2_eco_city",
+  "scope": "public",
+  "name": {
+    "text": "Eco City",
+    "data": {}
+  },
+  "description": {
+    "text": "One base.",
+    "data": {}
+  },
+  "image": "Gui/Maps/map_sr2_eco_city",
+  "large_image": "Gui/Maps/map_sr2_eco_city"
+}

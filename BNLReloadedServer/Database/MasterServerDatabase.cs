@@ -23,6 +23,9 @@ public class MasterServerDatabase : IMasterServerDatabase
 
     public List<RegionInfo> GetRegionServers() => _regionServers;
 
+    public IServiceMasterServer? GetRegionServerService(string id) =>
+        _regionServerConnections.TryGetValue(id, out var service) ? service : null;
+
     public bool AddRegionServer(string id, string host, RegionGuiInfo regionGuiInfo, IServiceMasterServer? serviceMasterServer = null)
     {
         if (_regionServers.Any(x => x.Id == id)) return false;

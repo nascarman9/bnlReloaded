@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_new_mountain",
+  "scope": "public",
+  "name": {
+    "text": "New Mountain",
+    "data": {
+      "ru": {
+        "original": "New Mountain",
+        "translation": "New Mountain"
+      },
+      "es": {
+        "original": "New Mountain",
+        "translation": "New Mountain"
+      },
+      "de": {
+        "original": "New Mountain",
+        "translation": "New Mountain"
+      },
+      "pt": {
+        "original": "New Mountain",
+        "translation": "New Mountain"
+      },
+      "fr": {
+        "original": "New Mountain",
+        "translation": "New Mountain"
+      }
+    }
+  },
+  "description": {
+    "text": "Expedition grade. Two Cubes and a Base across varied terrain.",
+    "data": {
+      "ru": {
+        "original": "Expedition grade. Two Cubes and a Base across varied terrain.",
+        "translation": "Настоящая экспедиция. Два куба и база на территории с разнообразным рельефом."
+      },
+      "es": {
+        "original": "Expedition grade. Two Cubes and a Base across varied terrain.",
+        "translation": "Un terreno variado para exploradores entusiastas.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Expedition grade. Two Cubes and a Base across varied terrain.",
+        "translation": "Geht auf Entdeckungsreise! Zwei Generatoren und eine Basis in unterschiedlichen Terrains."
+      },
+      "pt": {
+        "original": "Expedition grade. Two Cubes and a Base across varied terrain.",
+        "translation": "Uma verdadeira expedição. Dois Cubos e uma Base em terrenos variados."
+      },
+      "fr": {
+        "original": "Expedition grade. Two Cubes and a Base across varied terrain.",
+        "translation": "Une arène qui relève de l'expédition. Deux cubes et une base avec des terrains variés."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/64cbf15cc9bf111bdc36a5ba102c7c63.jpg",
+  "large_image": "https://i.gyazo.com/64cbf15cc9bf111bdc36a5ba102c7c63.jpg"
+}

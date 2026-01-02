@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_onslaught",
+  "scope": "public",
+  "name": {
+    "text": "Onslaught!",
+    "data": {
+      "ru": {
+        "original": "Onslaught!",
+        "translation": "Onslaught!"
+      },
+      "es": {
+        "original": "Onslaught!",
+        "translation": "Onslaught!"
+      },
+      "de": {
+        "original": "Onslaught!",
+        "translation": "Onslaught!"
+      },
+      "fr": {
+        "original": "Onslaught!",
+        "translation": "Onslaught!"
+      },
+      "pt": {
+        "original": "Onslaught!",
+        "translation": "Onslaught!"
+      }
+    }
+  },
+  "description": {
+    "text": "Small forts for protecting a Base or royalty. One Base.",
+    "data": {
+      "ru": {
+        "original": "Small forts for protecting a Base or royalty. One Base.",
+        "translation": "Небольшие форты для защиты базы или знати. Одна база."
+      },
+      "es": {
+        "original": "Small forts for protecting a Base or royalty. One Base.",
+        "translation": "Un pequeño fortín protege cada núcleo.\nUn núcleo."
+      },
+      "de": {
+        "original": "Small forts for protecting a Base or royalty. One Base.",
+        "translation": "Kleine Festungen zum Schutz einer Basis oder königlichen Hoheit. Eine Basis."
+      },
+      "fr": {
+        "original": "Small forts for protecting a Base or royalty. One Base.",
+        "translation": "De petites forteresses idéales pour protéger votre base ou la princesse\u00A0! Une base."
+      },
+      "pt": {
+        "original": "Small forts for protecting a Base or royalty. One Base.",
+        "translation": "Pequenos fortes para proteger uma Base ou a realeza. Uma Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/6075f0d46a0899f658d75e13bf430d0f.jpg",
+  "large_image": "https://i.gyazo.com/6075f0d46a0899f658d75e13bf430d0f.jpg"
+}

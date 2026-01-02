@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_first_bastion",
+  "scope": "public",
+  "name": {
+    "text": "First Bastion",
+    "data": {
+      "ru": {
+        "original": "First Bastion",
+        "translation": "First Bastion"
+      },
+      "es": {
+        "original": "First Bastion",
+        "translation": "First Bastion"
+      },
+      "de": {
+        "original": "First Bastion",
+        "translation": "First Bastion"
+      },
+      "pt": {
+        "original": "First Bastion",
+        "translation": "First Bastion"
+      },
+      "fr": {
+        "original": "First Bastion",
+        "translation": "First Bastion"
+      }
+    }
+  },
+  "description": {
+    "text": "Never give up, never run away and desert the Last Bastion! Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Never give up, never run away and desert the Last Bastion! Two Cubes and a Base.",
+        "translation": "Никогда не сдавайся и не убегай, ведь это последний бастион! Два куба и база."
+      },
+      "es": {
+        "original": "Never give up, never run away and desert the Last Bastion! Two Cubes and a Base.",
+        "translation": "¡Defiende el último bastión!\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Never give up, never run away and desert the Last Bastion! Two Cubes and a Base.",
+        "translation": "Gebt niemals auf! Bei dieser letzten Bastion wird nicht desertiert! Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Never give up, never run away and desert the Last Bastion! Two Cubes and a Base.",
+        "translation": "O último dos bastiões! Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Never give up, never run away and desert the Last Bastion! Two Cubes and a Base.",
+        "translation": "N'abandonnez jamais\u00A0! Interdiction de fuir et de déserter ce bastion\u00A0! Deux cubes et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/319b2d0d6091b4255033ffeb44786d96.jpg",
+  "large_image": "https://i.gyazo.com/319b2d0d6091b4255033ffeb44786d96.jpg"
+}

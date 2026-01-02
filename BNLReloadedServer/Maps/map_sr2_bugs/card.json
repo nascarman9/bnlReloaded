@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_bugs",
+  "scope": "public",
+  "name": {
+    "text": "Bugz",
+    "data": {
+      "es": {
+        "original": "Bugz",
+        "translation": "Bugz"
+      },
+      "fr": {
+        "original": "Bugz",
+        "translation": "Bugz"
+      },
+      "de": {
+        "original": "Bugz",
+        "translation": "Bugz"
+      },
+      "pt": {
+        "original": "Bugz",
+        "translation": "Bugz"
+      },
+      "ru": {
+        "original": "Bugz",
+        "translation": "Bugz"
+      }
+    }
+  },
+  "description": {
+    "text": "Squash your foes like bugs. One Base.",
+    "data": {
+      "es": {
+        "original": "Squash your foes like bugs. One Base.",
+        "translation": "Aplasta a tus enemigos como bichos.\nUn núcleo."
+      },
+      "fr": {
+        "original": "Squash your foes like bugs. One Base.",
+        "translation": "Écrasez vos ennemis comme de vulgaires fourmis. Une base."
+      },
+      "de": {
+        "original": "Squash your foes like bugs. One Base.",
+        "translation": "Zerquetscht eure Feinde wie Käfer. Eine Basis."
+      },
+      "ru": {
+        "original": "Squash your foes like bugs. One Base.",
+        "translation": "Дави врагов, как тараканов. Одна база."
+      },
+      "pt": {
+        "original": "Squash your foes like bugs. One Base.",
+        "translation": "Esmague os inimigos como insetos. Uma Base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-bugz",
+  "large_image": "Gui/Maps/arena-bugz"
+}

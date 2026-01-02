@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_wilsons_edit",
+  "scope": "public",
+  "name": {
+    "text": "Wilson's Bay (Xtreme)",
+    "data": {
+      "ru": {
+        "original": "Wilson's Bay (Xtreme)",
+        "translation": "Wilson's Bay (Xtreme)"
+      },
+      "es": {
+        "original": "Wilson's Bay (Xtreme)",
+        "translation": "Wilson's Bay (Xtreme)"
+      },
+      "de": {
+        "original": "Wilson's Bay (Xtreme)",
+        "translation": "Wilson's Bay (Xtreme)"
+      },
+      "pt": {
+        "original": "Wilson's Bay (Xtreme)",
+        "translation": "Wilson's Bay (Xtreme)"
+      },
+      "fr": {
+        "original": "Wilson's Bay (Xtreme)",
+        "translation": "Wilson's Bay (Xtreme)"
+      }
+    }
+  },
+  "description": {
+    "text": "Ten shipwrecked Heroes marooned on this island to continue their battles. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "Ten shipwrecked Heroes marooned on this island to continue their battles. Two Cubes and a Base.",
+        "translation": "После кораблекрушения десять героев оказались на необитаемом острове. Настоящая битва только начинается. Два куба и база."
+      },
+      "es": {
+        "original": "Ten shipwrecked Heroes marooned on this island to continue their battles. Two Cubes and a Base.",
+        "translation": "Una isla desierta con diez náufragos beligerantes.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "Ten shipwrecked Heroes marooned on this island to continue their battles. Two Cubes and a Base.",
+        "translation": "Zehn gestrandete Helden führen auf dieser einsamen Insel ihren Kampf fort. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "Ten shipwrecked Heroes marooned on this island to continue their battles. Two Cubes and a Base.",
+        "translation": "Dez heróis náufragos foram abandonados nesta ilha para continuar suas batalhas. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "Ten shipwrecked Heroes marooned on this island to continue their battles. Two Cubes and a Base.",
+        "translation": "Dix héros naufragés sur une île\u00A0: le combat continue. Deux cubes et une base."
+      }
+    }
+  },
+  "image": "Gui/Maps/arena-wilsons-bay-thumb",
+  "large_image": "Gui/Maps/arena-wilsons-bay-full"
+}

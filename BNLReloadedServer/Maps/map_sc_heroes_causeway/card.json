@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sc_heroes_causeway",
+  "scope": "public",
+  "name": {
+    "text": "[SC] The Causeway",
+    "data": {
+      "ru": {
+        "original": "[SC] The Causeway",
+        "translation": "[SC] The Causeway"
+      },
+      "es": {
+        "original": "[SC] The Causeway",
+        "translation": "[SC] The Causeway"
+      },
+      "de": {
+        "original": "[SC] The Causeway",
+        "translation": "[SC] The Causeway"
+      },
+      "pt": {
+        "original": "[SC] The Causeway",
+        "translation": "[SC] The Causeway"
+      },
+      "fr": {
+        "original": "[SC] The Causeway",
+        "translation": "[SC] The Causeway"
+      }
+    }
+  },
+  "description": {
+    "text": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+    "data": {
+      "ru": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Сражайтесь на насыпи или пробивайся к башням. Один куб и база."
+      },
+      "es": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Cruza el viaducto o sube a las torres. \nUn generador y un núcleo."
+      },
+      "de": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Kämpft euch über den Damm oder nutzt die Türme. Ein Generator und eine Basis."
+      },
+      "pt": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Trave uma emocionante batalha neste clássico cenário. Um Cubo e uma Base."
+      },
+      "fr": {
+        "original": "Fight over the causeway or branch out to the towers. One Cube and a Base.",
+        "translation": "Affrontez-vous sur la chaussée ou partez à l'assaut des tours. Un cube et une base."
+      }
+    }
+  },
+  "image": "Gui/Maps/Heroes-Causeway",
+  "large_image": "Gui/Maps/Heroes-Causeway"
+}

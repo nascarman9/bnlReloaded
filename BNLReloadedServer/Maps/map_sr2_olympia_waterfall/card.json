@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_olympia_waterfall",
+  "scope": "public",
+  "name": {
+    "text": "Olympia Waterfall",
+    "data": {
+      "ru": {
+        "original": "Olympia Waterfall",
+        "translation": "Olympia Waterfall"
+      },
+      "es": {
+        "original": "Olympia Waterfall",
+        "translation": "Olympia Waterfall"
+      },
+      "de": {
+        "original": "Olympia Waterfall",
+        "translation": "Olympia Waterfall"
+      },
+      "fr": {
+        "original": "Olympia Waterfall",
+        "translation": "Olympia Waterfall"
+      },
+      "pt": {
+        "original": "Olympia Waterfall",
+        "translation": "Olympia Waterfall"
+      }
+    }
+  },
+  "description": {
+    "text": "No horse shows here, instead a battleground for Heroes. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "No horse shows here, instead a battleground for Heroes. Two Cubes and a Base.",
+        "translation": "Это не знаменитая выставка лошадей, это место, куда отправляются герои. Два куба и база."
+      },
+      "es": {
+        "original": "No horse shows here, instead a battleground for Heroes. Two Cubes and a Base.",
+        "translation": "Un campo de batalla digno de los dioses.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "No horse shows here, instead a battleground for Heroes. Two Cubes and a Base.",
+        "translation": "Ein Schlachtfeld für wahre Helden. Hier wird kein Fußball gespielt! Zwei Generatoren und eine Basis."
+      },
+      "fr": {
+        "original": "No horse shows here, instead a battleground for Heroes. Two Cubes and a Base.",
+        "translation": "Un vrai champ de bataille pour héros. Deux cubes et une base."
+      },
+      "pt": {
+        "original": "No horse shows here, instead a battleground for Heroes. Two Cubes and a Base.",
+        "translation": "Um lugar nada idílico, um campo de batalha para heróis. Dois Cubos e uma Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/c4c9fc2db3a00e25b8e24b855aaf4caa.jpg",
+  "large_image": "https://i.gyazo.com/c4c9fc2db3a00e25b8e24b855aaf4caa.jpg"
+}

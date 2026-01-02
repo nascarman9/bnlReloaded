@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_wilsons_lagoon",
+  "scope": "public",
+  "name": {
+    "text": "Wilson's Lagoon",
+    "data": {
+      "ru": {
+        "original": "Wilson's Lagoon",
+        "translation": "Wilson's Lagoon"
+      },
+      "es": {
+        "original": "Wilson's Lagoon",
+        "translation": "Wilson's Lagoon"
+      },
+      "de": {
+        "original": "Wilson's Lagoon",
+        "translation": "Wilson's Lagoon"
+      },
+      "pt": {
+        "original": "Wilson's Lagoon",
+        "translation": "Wilson's Lagoon"
+      },
+      "fr": {
+        "original": "Wilson's Lagoon",
+        "translation": "Wilson's Lagoon"
+      }
+    }
+  },
+  "description": {
+    "text": "A redesign of the alpha version of Wilson's Bay, this map features an upgraded mid, with all three cubes close to the action. Two Cubes and a Base.",
+    "data": {
+      "ru": {
+        "original": "A redesign of the alpha version of Wilson's Bay, this map features an upgraded mid, with all three cubes close to the action. Two Cubes and a Base.",
+        "translation": "После кораблекрушения десять героев оказались на необитаемом острове. Настоящая битва только начинается. Два куба и база."
+      },
+      "es": {
+        "original": "A redesign of the alpha version of Wilson's Bay, this map features an upgraded mid, with all three cubes close to the action. Two Cubes and a Base.",
+        "translation": "Una isla desierta con diez náufragos beligerantes.\nDos generadores y un núcleo."
+      },
+      "de": {
+        "original": "A redesign of the alpha version of Wilson's Bay, this map features an upgraded mid, with all three cubes close to the action. Two Cubes and a Base.",
+        "translation": "Zehn gestrandete Helden führen auf dieser einsamen Insel ihren Kampf fort. Zwei Generatoren und eine Basis."
+      },
+      "pt": {
+        "original": "A redesign of the alpha version of Wilson's Bay, this map features an upgraded mid, with all three cubes close to the action. Two Cubes and a Base.",
+        "translation": "Dez heróis náufragos foram abandonados nesta ilha para continuar suas batalhas. Dois Cubos e uma Base."
+      },
+      "fr": {
+        "original": "A redesign of the alpha version of Wilson's Bay, this map features an upgraded mid, with all three cubes close to the action. Two Cubes and a Base.",
+        "translation": "Dix héros naufragés sur une île\u00A0: le combat continue. Deux cubes et une base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/d0dc3b43ba8893ac2dd8a2879f52a44c.jpg",
+  "large_image": "https://i.gyazo.com/d0dc3b43ba8893ac2dd8a2879f52a44c.jpg"
+}

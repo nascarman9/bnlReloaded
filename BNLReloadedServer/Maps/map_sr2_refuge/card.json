@@ -1,0 +1,57 @@
+{
+  "category": "map",
+  "_id": "map_sr2_refuge",
+  "scope": "public",
+  "name": {
+    "text": "Refuge",
+    "data": {
+      "ru": {
+        "original": "Refuge",
+        "translation": "Refuge"
+      },
+      "es": {
+        "original": "Refuge",
+        "translation": "Refuge"
+      },
+      "de": {
+        "original": "Refuge",
+        "translation": "Refuge"
+      },
+      "pt": {
+        "original": "Refuge",
+        "translation": "Refuge"
+      },
+      "fr": {
+        "original": "Refuge",
+        "translation": "Refuge"
+      }
+    }
+  },
+  "description": {
+    "text": "A true masterpiece. One Base.",
+    "data": {
+      "ru": {
+        "original": "A true masterpiece. One Base.",
+        "translation": "A true masterpiece. One Base."
+      },
+      "es": {
+        "original": "A true masterpiece. One Base.",
+        "translation": "A true masterpiece. One Base."
+      },
+      "de": {
+        "original": "A true masterpiece. One Base.",
+        "translation": "A true masterpiece. One Base."
+      },
+      "pt": {
+        "original": "A true masterpiece. One Base.",
+        "translation": "A true masterpiece. One Base."
+      },
+      "fr": {
+        "original": "A true masterpiece. One Base.",
+        "translation": "A true masterpiece. One Base."
+      }
+    }
+  },
+  "image": "https://i.gyazo.com/85f7c1b9b08afb399b54f0259beee53f.jpg",
+  "large_image": "https://i.gyazo.com/85f7c1b9b08afb399b54f0259beee53f.jpg"
+}
