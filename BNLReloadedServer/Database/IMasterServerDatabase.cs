@@ -9,6 +9,8 @@ public interface IMasterServerDatabase
     public List<RegionInfo> GetRegionServers();
     public bool AddRegionServer(string id, string host, RegionGuiInfo regionGuiInfo, IServiceMasterServer? serviceMasterServer = null);
     public bool RemoveRegionServer(string id);
+    public bool UpdateRegionPlayerCount(string id, int playerCount);
+    public int GetRegionPlayerCount(string id);
     public RegionInfo? GetRegionServer(string id);
     public Task<PlayerData> AddPlayer(ulong steamId, string playerName, string region);
     public Task<PlayerData?> GetPlayer(ulong steamId);

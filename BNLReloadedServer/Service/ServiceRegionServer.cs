@@ -32,7 +32,8 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         MessageFriendRequest = 18,
         MessageFriendSearch = 19,
         MessageFriendSearchSteam = 20,
-        MessageGetLeaderboard = 21
+        MessageGetLeaderboard = 21,
+        MessagePlayerCount = 22
     }
 
     private ushort _currRpcId = 1;
@@ -344,6 +345,14 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         
         sender.Send(writer);
         return await tcs.Task as List<LeagueLeaderboardRecord>;
+    }
+
+    public void SendPlayerCount(int playerCount)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceRegionId.MessagePlayerCount);
+        writer.Write(playerCount);
+        sender.Send(writer);
     }
     
     public void ReceiveLeaderboard(BinaryReader reader)

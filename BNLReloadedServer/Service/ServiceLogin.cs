@@ -240,6 +240,14 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
         sender.Send(writer);
         
         var regionServers = _masterServerDatabase.GetRegionServers();
+        foreach (var region in regionServers)
+        {
+            if (region is { Info.Name: { } name })
+            {
+                name.Text += $"\n{_masterServerDatabase.GetRegionPlayerCount(region.Id ?? string.Empty)} online";
+            }
+        }
+        
         if (regionServers.Count == 1 && sender.AssociatedPlayerId.HasValue)
         {
             EnterRegion(sender.AssociatedPlayerId.Value, regionServers.Single());

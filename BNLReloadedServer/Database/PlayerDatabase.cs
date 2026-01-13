@@ -100,13 +100,17 @@ public class PlayerDatabase : IPlayerDatabase
             task.SetResult(player);
         }
 
+        _serviceRegionServer?.SendPlayerCount(_players.Count);
         return true;
     }
 
     public bool RemovePlayer(uint playerId)
     {
         _steamFriends.Remove(playerId, out _);
-        return _players.Remove(playerId, out _);
+        var removed = _players.Remove(playerId, out _);
+        if (removed)
+            _serviceRegionServer?.SendPlayerCount(_players.Count);
+        return removed;
     }
 
     public uint? GetPlayerId(ulong steamId) => _players.Values.FirstOrDefault(p => p.SteamId == steamId)?.PlayerId;
@@ -191,6 +195,7 @@ public class PlayerDatabase : IPlayerDatabase
     public void SetRegionServerService(IServiceRegionServer serviceRegionServer)
     {
         _serviceRegionServer = serviceRegionServer;
+        _serviceRegionServer.SendPlayerCount(_players.Count);
     }
 
     public string GetPlayerName(uint playerId) => _players.GetValueOrDefault(playerId)?.Nickname ?? string.Empty;

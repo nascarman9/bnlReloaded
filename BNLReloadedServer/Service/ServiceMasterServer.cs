@@ -31,7 +31,8 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         MessageFriendRequest = 18,
         MessageFriendSearch = 19,
         MessageFriendSearchSteam = 20,
-        MessageGetLeaderboard = 21
+        MessageGetLeaderboard = 21,
+        MessagePlayerCount = 22
     }
     
     private readonly IMasterServerDatabase _masterServerDatabase = Databases.MasterServerDatabase;
@@ -312,6 +313,18 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         
         SendLeaderboard(rpcId, _masterServerDatabase.GetLeaderboard().Result);
     }
+    public void ReceivePlayerCount(BinaryReader reader)
+    {
+        var playerCount = reader.ReadInt32();
+        if (sessionId == Guid.Empty)
+        {
+            _masterServerDatabase.UpdateRegionPlayerCount("master", playerCount);
+        }
+        else
+        {
+            _masterServerDatabase.UpdateRegionPlayerCount(sessionId.ToString(), playerCount);
+        }
+    }
 
     public bool Receive(BinaryReader reader)
     {
@@ -376,6 +389,9 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
                 break;
             case ServiceMasterId.MessageGetLeaderboard:
                 ReceiveLeaderboard(reader);
+                break;
+            case ServiceMasterId.MessagePlayerCount:
+                ReceivePlayerCount(reader);
                 break;
             default:
                 Console.WriteLine($"Master service received unsupported serviceId: {serviceMasterId}");

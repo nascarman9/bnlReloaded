@@ -11,6 +11,7 @@ public class MasterServerDatabase : IMasterServerDatabase
 {
     private readonly List<RegionInfo> _regionServers = [];
     private readonly ConcurrentDictionary<string, IServiceMasterServer> _regionServerConnections = new();
+    private readonly ConcurrentDictionary<string, int> _regionPlayerCounts = new();
     private readonly SQLiteAsyncConnection _playerDb;
     
     private readonly SemaphoreSlim _asyncLock = new(1, 1);
@@ -42,12 +43,25 @@ public class MasterServerDatabase : IMasterServerDatabase
 
     public bool RemoveRegionServer(string id)
     {
+        _regionPlayerCounts.TryRemove(id, out _);
         if (_regionServerConnections.Remove(id, out _))
         {
             return _regionServers.RemoveAll(r => r.Id == id) > 0;
         }
         
         return false;
+    }
+
+    public bool UpdateRegionPlayerCount(string id, int playerCount)
+    {
+        if (_regionServers.All(r => r.Id != id)) return false;
+        _regionPlayerCounts[id] = playerCount;
+        return true;
+    }
+
+    public int GetRegionPlayerCount(string id)
+    {
+        return _regionPlayerCounts.GetValueOrDefault(id, 0);
     }
 
     public RegionInfo? GetRegionServer(string id) => _regionServers.FirstOrDefault(x => x.Id == id);
