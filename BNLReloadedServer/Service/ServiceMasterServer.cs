@@ -36,7 +36,8 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
     }
     
     private readonly IMasterServerDatabase _masterServerDatabase = Databases.MasterServerDatabase;
-    
+    private string? _regionId;
+
     private static BinaryWriter CreateWriter()
     {
         var memStream = new MemoryStream();
@@ -181,20 +182,21 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         var regionInfo = RegionGuiInfo.ReadRecord(reader);
         if (host == Databases.ConfigDatabase.MasterPublicHost())
         {
-            _masterServerDatabase.AddRegionServer("master", host, regionInfo, this);
+            _regionId = "master";
         }
         else
         {
-            _masterServerDatabase.AddRegionServer(sessionId.ToString(), host, regionInfo, this);
+            _regionId = sessionId.ToString();
             SendMasterCdb(CatalogueCache.Load());
             foreach (var map in Databases.MapDatabase.GetMapCards())
             {
                 if (map.Id is null || Databases.MapDatabase.LoadMapData(Catalogue.Key(map.Id)) is not {} mapData)
                     continue;
-            
+
                 SendMap(map.Id, map, mapData);
             }
         }
+        _masterServerDatabase.AddRegionServer(_regionId, host, regionInfo, this);
         SendPublicKey(Databases.PlayerDatabase.GetPublicKey());
     }
     
@@ -316,13 +318,9 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
     public void ReceivePlayerCount(BinaryReader reader)
     {
         var playerCount = reader.ReadInt32();
-        if (sessionId == Guid.Empty)
+        if (_regionId != null)
         {
-            _masterServerDatabase.UpdateRegionPlayerCount("master", playerCount);
-        }
-        else
-        {
-            _masterServerDatabase.UpdateRegionPlayerCount(sessionId.ToString(), playerCount);
+            _masterServerDatabase.UpdateRegionPlayerCount(_regionId, playerCount);
         }
     }
 
