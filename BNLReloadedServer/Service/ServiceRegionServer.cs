@@ -347,14 +347,6 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         return await tcs.Task as List<LeagueLeaderboardRecord>;
     }
 
-    public void SendPlayerCount(int playerCount)
-    {
-        using var writer = CreateWriter();
-        writer.Write((byte)ServiceRegionId.MessagePlayerCount);
-        writer.Write(playerCount);
-        sender.Send(writer);
-    }
-    
     public void ReceiveLeaderboard(BinaryReader reader)
     {
         var rpcId = reader.ReadUInt16();
@@ -365,6 +357,14 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         {
             tcs.SetResult(results);
         }
+    }
+
+    public void SendPlayerCount(int playerCount)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceRegionId.MessagePlayerCount);
+        writer.Write(playerCount);
+        sender.Send(writer);
     }
 
     public bool Receive(BinaryReader reader)

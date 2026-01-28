@@ -52,17 +52,27 @@ public class MasterServerDatabase : IMasterServerDatabase
         return false;
     }
 
-    public bool UpdateRegionPlayerCount(string id, int playerCount)
+    public bool SetRegionPlayerCount(string id, int playerCount)
     {
-        if (_regionServers.All(r => r.Id != id)) return false;
+        if (GetRegionServer(id) == null)
+        {
+            // No region with such id found,
+            // If special "master" region exists threat it as master change, else fail
+            if (GetRegionServer("master") == null)
+            {
+                return false;
+            }
+            else
+            {
+                _regionPlayerCounts["master"] = playerCount;
+                return true;
+            }
+        }
         _regionPlayerCounts[id] = playerCount;
         return true;
     }
 
-    public int GetRegionPlayerCount(string id)
-    {
-        return _regionPlayerCounts.GetValueOrDefault(id, 0);
-    }
+    public int GetRegionPlayerCount(string id) => _regionPlayerCounts.GetValueOrDefault(id, 0);
 
     public RegionInfo? GetRegionServer(string id) => _regionServers.FirstOrDefault(x => x.Id == id);
 

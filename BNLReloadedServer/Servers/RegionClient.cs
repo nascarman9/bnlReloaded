@@ -10,7 +10,7 @@ public class RegionClient : TcpClient
     private readonly SessionReader _reader;
     private bool _connected;
 
-    public RegionClient(string address, int port) : base(address == "0.0.0.0" ? "127.0.0.1" : address, port)
+    public RegionClient(string address, int port) : base(address, port)
     {
         var sender = new ClientSender(this);
         _serviceDispatcher = new RegionClientServiceDispatcher(sender);
