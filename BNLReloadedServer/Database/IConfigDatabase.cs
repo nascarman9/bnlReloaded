@@ -25,6 +25,7 @@ public interface IConfigDatabase
     public bool UseCouchDb();
     public string CouchDbEndpoint();
     public BasicCredentials CouchDbCredentials();
+    public string CouchDbDatabaseName();
     public bool DebugMode();
     public bool DoReadline();
 }

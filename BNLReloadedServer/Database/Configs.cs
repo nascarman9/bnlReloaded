@@ -22,6 +22,7 @@ public class Configs
     public string? CouchDbEndpoint { get; init; }
     public string? CouchDbUsername { get; init; }
     public string? CouchDbPassword { get; init; }
+    public string? CouchDbDatabaseName { get; init; }
     public bool DebugMode { get; init; }
     public bool DoReadline { get; init; }
 }

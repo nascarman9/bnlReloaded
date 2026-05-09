@@ -5,7 +5,7 @@ namespace BNLReloadedServer.Database;
 
 public abstract class CatalogueStore
 {
-    protected void AddMaps(List<Card> cards, IEnumerable<CardMap> cardMaps, ExtraMaps? extraMaps)
+    protected void AddMaps(IList<Card> cards, IEnumerable<CardMap> cardMaps, ExtraMaps? extraMaps)
     {
         foreach (var map in cardMaps)
         {

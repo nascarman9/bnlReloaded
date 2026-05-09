@@ -60,6 +60,8 @@ public class DummyConfigDatabase : IConfigDatabase
 
     public BasicCredentials CouchDbCredentials() => new("admin", "admin");
 
+    public string CouchDbDatabaseName() => "test";
+    
     public bool DebugMode() => true;
     
     public bool DoReadline() => false;

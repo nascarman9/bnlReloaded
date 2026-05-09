@@ -23,6 +23,7 @@ CatalogueStore catalogueStore = useCouch
             {
                 JsonSerializerOptions = JsonHelper.DefaultSerializerSettings
             }),
+        configs.CouchDbDatabaseName(),
         toPath,
         deserializedPath,
         JsonHelper.DefaultSerializerSettings)
