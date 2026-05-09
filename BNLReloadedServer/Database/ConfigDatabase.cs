@@ -77,6 +77,8 @@ public class ConfigDatabase : IConfigDatabase
     public BasicCredentials CouchDbCredentials() =>
             new(_configs.CouchDbUsername ?? string.Empty, _configs.CouchDbPassword ?? string.Empty);
 
+    public string CouchDbDatabaseName() => _configs.CouchDbDatabaseName ?? string.Empty;
+
     public bool DebugMode() => _configs.DebugMode;
     
     public bool DoReadline() => _configs.DoReadline;

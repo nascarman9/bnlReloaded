@@ -4,11 +4,14 @@ using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.ServerTypes;
 using CouchDB.Driver;
+using CouchDB.Driver.Extensions;
+using CouchDB.Driver.Types;
 
 namespace BNLReloadedServer.Database;
 
 public partial class CouchCatalogueStore(
     CouchClient fromDb, 
+    string dbName,
     string toPath,
     string deserializedPath,
     JsonSerializerOptions serializerOptions): CatalogueStore
@@ -23,12 +26,13 @@ public partial class CouchCatalogueStore(
 
     public override void Load(IEnumerable<CardMap> maps, ExtraMaps? extraMaps)
     {
-        List<Card> cards = [];
-        foreach (var cardName in Enum.GetNames<CardCategory>().Select(e => SnakeRegex().Replace(e, "$1_$2").ToLower())
-                     .Where(e => !Exclude.Contains(e)))
-        {
-            cards.AddRange(fromDb.GetDatabase<Card>(cardName).ToList());
-        }
+        var database = fromDb.GetDatabase<Card>(dbName);
+
+        var entries = Enum.GetNames<CardCategory>().Select(e => SnakeRegex().Replace(e, "$1_$2").ToLower())
+            .Where(e => !Exclude.Contains(e)).ToList();
+
+        List<Card> cards =
+            [..database.Where(r => r.Id != null && entries.Any(e => r.Id.StartsWith(e))).ToListAsync().Result];
         
         // Add maps
         AddMaps(cards, maps, extraMaps);
