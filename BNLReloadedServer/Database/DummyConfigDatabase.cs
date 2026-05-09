@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using BNLReloadedServer.BaseTypes;
+using CouchDB.Driver;
 
 namespace BNLReloadedServer.Database;
 
@@ -53,6 +54,13 @@ public class DummyConfigDatabase : IConfigDatabase
 
     public string CdbName() => "cdb";
     
+    public bool UseCouchDb() => false;
+
+    public string CouchDbEndpoint() => "http://localhost:5984";
+
+    public BasicCredentials CouchDbCredentials() => new("admin", "admin");
+
     public bool DebugMode() => true;
+    
     public bool DoReadline() => false;
 }

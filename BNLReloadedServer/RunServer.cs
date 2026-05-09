@@ -1,124 +1,41 @@
-﻿using System.Text.Json;
-using BNLReloadedServer.BaseTypes;
-using BNLReloadedServer.Database;
+﻿using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 using BNLReloadedServer.Service;
+using CouchDB.Driver;
+using CouchDB.Driver.Options;
 
 var configs = Databases.ConfigDatabase;
 var masterMode = configs.IsMaster();
 var toJson = configs.DoToJson();
 var fromJson = configs.DoFromJson();
 var runServer = configs.DoRunServer();
+var useCouch = configs.UseCouchDb();
 
 const int bufferSize = 2000000;  // 2MB
 
-if (toJson || fromJson)
-{
-    var serializedPath = Path.Combine(Databases.CacheFolderPath, configs.FromJsonCdbName());
-    var serializedPath2 = Path.Combine(Databases.CacheFolderPath, configs.ToJsonCdbName());
-    var deserializedPath = Path.Combine(Databases.CacheFolderPath, configs.CdbName());
-    if (toJson)
-    {
-        var cards = Databases.Catalogue.All;
-        using var fs = new StreamWriter(File.Create(serializedPath2));
-        fs.Write(JsonSerializer.Serialize(cards, JsonHelper.DefaultSerializerSettings).Replace("\\u00A0", "\u00A0"));
-    }
-    if (fromJson)
-    {
-        using var fs = new StreamReader(File.OpenRead(serializedPath));
-        var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
-        if (deserializedCards is not null)
-        {
-            deserializedCards.RemoveAll(c => c is CardMap or CardMapData);
-            
-            // Add maps
-            foreach (var map in Databases.MapDatabase.GetMapCards())
+var toPath = Path.Combine(Databases.CacheFolderPath, configs.ToJsonCdbName());
+var deserializedPath = Path.Combine(Databases.CacheFolderPath, configs.CdbName());
+CatalogueStore catalogueStore = useCouch
+    ? new CouchCatalogueStore(
+        new CouchClient(configs.CouchDbEndpoint(), configs.CouchDbCredentials(),
+            new CouchClientOptions
             {
-                var exists = false;
-                foreach (var (_, idx) in deserializedCards.Select((x, idx) => (x, idx))
-                             .Where(x => x.x is CardMap && x.x.Id == map.Id).ToList())
-                {
-                    exists = true;
-                    deserializedCards[idx] = map;
-                }
+                JsonSerializerOptions = JsonHelper.DefaultSerializerSettings
+            }),
+        toPath,
+        deserializedPath,
+        JsonHelper.DefaultSerializerSettings)
+    : new JsonCatalogueStore(
+        Path.Combine(Databases.CacheFolderPath, configs.FromJsonCdbName()),
+        toPath,
+        deserializedPath,
+        JsonHelper.DefaultSerializerSettings);
 
-                if (!exists)
-                {
-                    deserializedCards.Add(map);
-                }
-            }
-
-            if (Databases.MapDatabase.GrabExtraMaps() is { } extraMaps)
-            {
-                foreach (var mapList in deserializedCards.OfType<CardMapList>())
-                {
-                    if (extraMaps.Custom is { Count: > 0 })
-                    {
-                        if (mapList.Custom is not null)
-                        {
-                            mapList.Custom.AddRange(extraMaps.Custom);
-                        }
-                        else
-                        {
-                            mapList.Custom = extraMaps.Custom;
-                        }
-                    }
-
-                    if (extraMaps.Friendly is { Count: > 0 })
-                    {
-                        if (mapList.Friendly is not null)
-                        {
-                            mapList.Friendly.AddRange(extraMaps.Friendly);
-                        }
-                        else
-                        {
-                            mapList.Friendly = extraMaps.Friendly;
-                        }
-                    }
-
-                    if (extraMaps.FriendlyNoob is { Count: > 0 })
-                    {
-                        if (mapList.FriendlyNoob is not null)
-                        {
-                            mapList.FriendlyNoob.AddRange(extraMaps.FriendlyNoob);
-                        }
-                        else
-                        {
-                            mapList.FriendlyNoob = extraMaps.FriendlyNoob;
-                        }
-                    }
-
-                    if (extraMaps.Ranked is { Count: > 0 })
-                    {
-                        if (mapList.Ranked is not null)
-                        {
-                            mapList.Ranked.AddRange(extraMaps.Ranked);
-                        }
-                        else
-                        {
-                            mapList.Ranked = extraMaps.Ranked;
-                        }
-                    }
-                }
-            }
-            
-            foreach (var t in deserializedCards)
-            {
-                t.Key = Catalogue.Key(t.Id ?? string.Empty);
-            }
-
-            var memStream = new MemoryStream();
-            var writer = new BinaryWriter(memStream);
-            using var fs2 = File.Create(deserializedPath);
-            writer.Write((byte)0);
-            writer.WriteList(deserializedCards, Card.WriteVariant);
-            var zipped = (writer.BaseStream as MemoryStream)?.GetBuffer().Zip(0);
-            zipped?.CopyTo(fs2);
-            zipped?.Close();
-        }
-    }
-}
+if (toJson)
+    catalogueStore.Store(Databases.Catalogue.All);
+if (fromJson)
+    catalogueStore.Load(Databases.MapDatabase.GetMapCards(), Databases.MapDatabase.GrabExtraMaps());
 
 if (runServer)
 {
@@ -153,7 +70,7 @@ if (runServer)
     matchServer.Start();
     
     Console.WriteLine("Press Enter to stop the server or '!' to restart the server...");
-    try 
+    try
     {
         // Perform text input
         while (true)
@@ -178,17 +95,20 @@ if (runServer)
                         Console.WriteLine("Done!");
                         break;
                     }
-                    case "refreshCdb":
-                        if (Databases.Catalogue is ServerCatalogue serverCatalogue)
+                    case "refreshCdb" or "refreshCdbLoad" when Databases.Catalogue is ServerCatalogue serverCatalogue:
+                    {
+                        if (line == "refreshCdbLoad")
                         {
-                            Console.Write("Refreshing cdb...");
-                            var newCardList = CatalogueCache.UpdateCatalogue(CatalogueCache.Load());
-                            serverCatalogue.Replicate(newCardList);
-                            var catalogueReplicator = new ServiceCatalogue(new ServerSender(regionServer));
-                            catalogueReplicator.SendReplicate(newCardList);
-                            Console.WriteLine("Done!");
+                            catalogueStore.Load(Databases.MapDatabase.GetMapCards(), Databases.MapDatabase.GrabExtraMaps());
                         }
+                        Console.Write("Refreshing cdb...");
+                        var newCardList = CatalogueCache.UpdateCatalogue(CatalogueCache.Load());
+                        serverCatalogue.Replicate(newCardList);
+                        var catalogueReplicator = new ServiceCatalogue(new ServerSender(regionServer));
+                        catalogueReplicator.SendReplicate(newCardList);
+                        Console.WriteLine("Done!");
                         break;
+                    }
                 }
             }
             else
