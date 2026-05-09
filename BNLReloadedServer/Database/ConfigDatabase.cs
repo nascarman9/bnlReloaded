@@ -2,6 +2,7 @@
 using System.Text.Json;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.ProtocolHelpers;
+using CouchDB.Driver;
 
 namespace BNLReloadedServer.Database;
 
@@ -14,7 +15,8 @@ public class ConfigDatabase : IConfigDatabase
     
     public ConfigDatabase()
     {
-        var configs = JsonSerializer.Deserialize<Configs>(File.ReadAllText(Databases.ConfigsFilePath), JsonHelper.DefaultSerializerSettings);
+        var configs = JsonSerializer.Deserialize<Configs>(File.ReadAllText(Databases.ConfigsFilePath),
+            JsonHelper.DefaultSerializerSettings);
         _configs = configs ?? throw new FileNotFoundException("Configs file not found");
         _masterIp = IPAddress.Parse(_configs.MasterHost);
         _regionIp = IPAddress.Parse(_configs.RegionHost);
@@ -68,6 +70,12 @@ public class ConfigDatabase : IConfigDatabase
     public string FromJsonCdbName() => _configs.FromJsonName ?? string.Empty;
 
     public string CdbName() => UseMasterCdb() && !IsMaster() ? "cdb" : _configs.CdbName ?? string.Empty;
+    public bool UseCouchDb() => _configs.UseCouchDb;
+
+    public string CouchDbEndpoint() => _configs.CouchDbEndpoint ?? string.Empty;
+
+    public BasicCredentials CouchDbCredentials() =>
+            new(_configs.CouchDbUsername ?? string.Empty, _configs.CouchDbPassword ?? string.Empty);
 
     public bool DebugMode() => _configs.DebugMode;
     

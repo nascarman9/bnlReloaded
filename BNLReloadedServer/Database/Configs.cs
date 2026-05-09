@@ -18,6 +18,10 @@ public class Configs
     public string? ToJsonName { get; init; }
     public bool FromJson { get; init; }
     public string? FromJsonName { get; init; }
+    public bool UseCouchDb { get; init; }
+    public string? CouchDbEndpoint { get; init; }
+    public string? CouchDbUsername { get; init; }
+    public string? CouchDbPassword { get; init; }
     public bool DebugMode { get; init; }
     public bool DoReadline { get; init; }
 }

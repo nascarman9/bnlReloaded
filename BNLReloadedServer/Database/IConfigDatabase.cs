@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using BNLReloadedServer.BaseTypes;
+using CouchDB.Driver;
 
 namespace BNLReloadedServer.Database;
 
@@ -21,6 +22,9 @@ public interface IConfigDatabase
     public string ToJsonCdbName();
     public string FromJsonCdbName();
     public string CdbName();
+    public bool UseCouchDb();
+    public string CouchDbEndpoint();
+    public BasicCredentials CouchDbCredentials();
     public bool DebugMode();
     public bool DoReadline();
 }
