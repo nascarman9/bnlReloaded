@@ -67,7 +67,7 @@ public class RegionClient : TcpClient
 
     protected override void OnError(SocketError error)
     {
-        Console.WriteLine($"Chat TCP client caught an error with code {error}");
+        Console.WriteLine($"Region TCP client caught an error with code {error}");
     }
 
     private bool _stop;

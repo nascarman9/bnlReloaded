@@ -238,8 +238,23 @@ public class ServiceLogin(ISender sender, Guid sessionId) : IServiceLogin
             writer.Write(error ?? string.Empty);
         }
         sender.Send(writer);
-        
-        var regionServers = _masterServerDatabase.GetRegionServers();
+
+        var regionServers = _masterServerDatabase.GetRegionServers().Select(region => new RegionInfo
+        {
+            Id = region.Id,
+            Host = region.Host,
+            Port = region.Port,
+            Info = region.Info == null ? null : new RegionGuiInfo
+            {
+                Icon = region.Info.Icon,
+                Name = region.Info.Name == null ? null : new LocalizedString
+                {
+                    Text = (region.Info.Name.Text ?? string.Empty) + $"\n{_masterServerDatabase.GetRegionPlayerCount(region.Id ?? string.Empty)} online",
+                    Data = region.Info.Name.Data
+                }
+            }
+        }).ToList();
+
         if (regionServers.Count == 1 && sender.AssociatedPlayerId.HasValue)
         {
             EnterRegion(sender.AssociatedPlayerId.Value, regionServers.Single());
