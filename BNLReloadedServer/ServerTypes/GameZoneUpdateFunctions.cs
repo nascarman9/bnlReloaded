@@ -1972,7 +1972,7 @@ public partial class GameZone
 
     private void OnPull(Unit unit, ManeuverPull maneuverPull)
     {
-        if (!unit.IsBuff(BuffType.Root))
+        if (!unit.IsBuff(BuffType.Root) || !maneuverPull.Enabled)
             _serviceZone.SendUnitManeuver(unit.Id, maneuverPull);
     }
 
